@@ -22,9 +22,9 @@ Plugin center for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 ## Install / 安装
 
 ```sh
-dsh plugin --profile web add github:Max-Null/dsh-plugin-center
-# or, once published to npm / 或通过 npm（发布后）
 dsh plugin --profile web add @max-null/dsh-plugin-center
+# or from the GitHub source / 或从 GitHub 源码安装
+dsh plugin --profile web add github:Max-Null/dsh-plugin-center
 ```
 
 Restart `dsh web`, then open the plugin center from the header button (top-right) or the Settings → 插件中心 section.
