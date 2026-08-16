@@ -1,0 +1,111 @@
+/**
+ * Installed-plugin metadata: resolve each Loader entry's specifier to a
+ * package.json, classify its provenance, and read version / description /
+ * DSH-compat range. Read-only projection — the Loader stays the authority.
+ */
+import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+/** Compact a module specifier into a display name without guessing Loader id shape. */
+export function displayName(specifier) {
+    const unscoped = specifier.startsWith('@')
+        ? specifier.slice(specifier.indexOf('/') + 1)
+        : specifier;
+    return unscoped
+        .replace(/^cordis:/, '')
+        .replace(/^cordis-plugin-/, '')
+        .replace(/^dsh-(?:host-|client-)?/, '');
+}
+/** The `@deepseek-ai/dsh*` peer-dependency range, or null when undeclared. */
+function dshCompatRange(pkg) {
+    const peers = pkg.peerDependencies ?? {};
+    for (const [name, range] of Object.entries(peers)) {
+        if (name.startsWith('@deepseek-ai/dsh'))
+            return range;
+    }
+    return null;
+}
+/** Classify provenance from the specifier shape alone (matches the §4.2 design). */
+function classifySource(specifier) {
+    if (specifier.startsWith('@deepseek-ai/dsh-'))
+        return 'official';
+    if (specifier.startsWith('file://') || specifier.startsWith('link:'))
+        return 'local';
+    if (specifier.startsWith('cordis:'))
+        return 'builtin';
+    return 'installed';
+}
+/** Process-local cache of resolved packages — stable per run, so resolve once. */
+const packageCache = new Map();
+/**
+ * Resolve one Loader entry to its package.json. `file://` specs walk upward to
+ * the nearest directory holding a package.json; `cordis:*` builtins have none.
+ * Results are cached per (baseUrl, specifier) — the resolution is a pure read
+ * and never changes within a process, so the file I/O happens only once.
+ * @param baseUrl - profile directory (the cordis.yml anchor, `ctx.baseUrl`).
+ * @param specifier - the Loader entry's module specifier.
+ * @returns the parsed package.json and its directory, or null when unresolvable.
+ */
+export function resolvePackage(baseUrl, specifier) {
+    const key = `${baseUrl}\u0000${specifier}`;
+    const cached = packageCache.get(key);
+    if (cached !== undefined)
+        return cached;
+    const pending = resolveUncached(baseUrl, specifier);
+    packageCache.set(key, pending);
+    return pending;
+}
+async function resolveUncached(baseUrl, specifier) {
+    if (specifier.startsWith('file://')) {
+        let dir = dirname(fileURLToPath(specifier));
+        for (let i = 0; i < 12; i++) {
+            const path = join(dir, 'package.json');
+            try {
+                return { pkg: JSON.parse(await readFile(path, 'utf8')), dir };
+            }
+            catch {
+                const parent = dirname(dir);
+                if (parent === dir)
+                    return null;
+                dir = parent;
+            }
+        }
+        return null;
+    }
+    if (specifier.startsWith('cordis:'))
+        return null;
+    try {
+        const require = createRequire(join(baseUrl, 'package.json'));
+        const path = require.resolve(`${specifier}/package.json`);
+        return { pkg: JSON.parse(await readFile(path, 'utf8')), dir: dirname(path) };
+    }
+    catch {
+        return null;
+    }
+}
+/** Build the Remote-ready metadata for one Loader entry. */
+export async function buildInstalledPlugin(baseUrl, entry) {
+    const resolved = await resolvePackage(baseUrl, entry.name);
+    const source = classifySource(entry.name);
+    return {
+        entryId: entry.id,
+        name: entry.name,
+        displayName: displayName(entry.name),
+        version: resolved?.pkg.version ?? null,
+        description: resolved?.pkg.description ?? null,
+        source,
+        enabled: !entry.disabled,
+        fiberPhase: entry.fiberPhase,
+        compatRange: resolved === null ? null : dshCompatRange(resolved.pkg),
+        repoUrl: resolved === null ? null : (() => {
+            const r = resolved.pkg.repository;
+            if (typeof r === 'string')
+                return r;
+            if (r !== null && typeof r === 'object' && typeof r.url === 'string')
+                return r.url;
+            return null;
+        })(),
+        categories: [],
+    };
+}
