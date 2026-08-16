@@ -1,0 +1,7 @@
+# dsh-plugin-center bundle patch: one insert over the profile root.
+# `loader`, `api-gateway`, and the client roster already live in the host; this
+# adds only the plugin-center host half. The browser half is picked up through
+# the package's dsh.client declaration, like the shipped ui-* packages.
+- insert:
+    - id: plugin-center
+      name: '@max-null/dsh-plugin-center'
