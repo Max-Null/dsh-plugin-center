@@ -13,6 +13,12 @@ Plugin center for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 - **DSH compatibility / 兼容性检查** — flags plugins whose peer range does not match the running DSH.
 - **Skin-compatible / 皮肤兼容** — every color uses `var(--dsw-*)` tokens, so skin plugins restyle this UI too.
 
+## Screenshots / 截图
+
+| Installed / 已安装 | Market / 市场 | Updates / 更新 |
+| :---: | :---: | :---: |
+| ![已安装插件](assets/screenshot-installed.png) | ![社区市场](assets/screenshot-market.png) | ![更新检测](assets/screenshot-updates.png) |
+
 ## Install / 安装
 
 ```sh

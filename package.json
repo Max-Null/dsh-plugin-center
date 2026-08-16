@@ -21,7 +21,8 @@
   "files": [
     "dist",
     "client.js",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "assets"
   ],
   "dsh": {
     "bundle": {
