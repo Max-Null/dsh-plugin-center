@@ -783,7 +783,7 @@ function WhatsNewDialog() {
 // ---- client plugin body ----
 const inject = ['slots', 'connection']
 
-function apply(ctx: { slots: any; connection: any; locale?: any; on?: (event: string, handler: (payload: any) => void) => void }): void {
+function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void }): void {
   injectCss()
   rpc = async (endpoint: string, payload: unknown = {}): Promise<unknown> => {
     const result = await ctx.connection.rpc.call('/plugin-center', endpoint, payload)
@@ -791,8 +791,12 @@ function apply(ctx: { slots: any; connection: any; locale?: any; on?: (event: st
     throw new Error(result.error?.message ?? `plugin-center: ${endpoint} failed`)
   }
 
-  // 双语：初始快照 + locale/change 事件（DSH 语言切换时组件经 useT 重渲染）
-  const initial = ctx.locale?.getLocale?.()?.active
+  // 双语：初始快照 + locale/change 事件（DSH 语言切换时组件经 useT 重渲染）。
+  // 用 ctx.get 软获取而非 inject 声明：cordis 对未声明依赖的属性访问直接拒绝
+  // （实测 "cannot get property locale without inject" 导致插件加载失败）；
+  // locale 服务缺失时静默降级为中文。
+  const locale = ctx.get?.('locale') as { getLocale?: () => { active?: string } } | undefined
+  const initial = locale?.getLocale?.()?.active
   if (typeof initial === 'string') adoptLocale(initial)
   ctx.on?.('locale/change', (snap: { active?: string } | undefined) => { adoptLocale(snap?.active) })
 

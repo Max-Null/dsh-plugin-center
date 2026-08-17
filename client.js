@@ -799,7 +799,8 @@ function apply(ctx) {
     if (result.ok) return result.value;
     throw new Error(result.error?.message ?? `plugin-center: ${endpoint} failed`);
   };
-  const initial = ctx.locale?.getLocale?.()?.active;
+  const locale = ctx.get?.("locale");
+  const initial = locale?.getLocale?.()?.active;
   if (typeof initial === "string") adoptLocale(initial);
   ctx.on?.("locale/change", (snap) => {
     adoptLocale(snap?.active);
