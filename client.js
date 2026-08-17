@@ -163,8 +163,8 @@ var installedCache = null;
 var marketCache = {};
 var toastState = null;
 var toastListeners = /* @__PURE__ */ new Set();
-function showToast(message, kind = "ok") {
-  toastState = { message, kind };
+function showToast(message, kind = "ok", duration = 3200) {
+  toastState = { message, kind, until: Date.now() + duration };
   toastListeners.forEach((l) => l());
 }
 var pendingInstall = /* @__PURE__ */ new Set();
@@ -184,7 +184,7 @@ function useToast() {
     const id = setTimeout(() => {
       toastState = null;
       toastListeners.forEach((l) => l());
-    }, 3200);
+    }, Math.max(0, t.until - Date.now()));
     return () => clearTimeout(id);
   }, [t]);
   return t;
@@ -451,11 +451,11 @@ function MarketView({ category, single, source, search, onCount }) {
           if (c !== void 0) c.plugins = c.plugins.map((p) => p.name === m.name ? { ...p, installed: true } : p);
         }
         setItems((prev) => prev.map((p) => p.name === m.name ? { ...p, installed: true } : p));
-        showToast(t("installQueued", { n: m.name }));
+        showToast(t("installQueued", { n: m.name }), "ok", 5e3);
       },
       (e) => {
         setBusy(null);
-        showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error");
+        showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 8e3);
       }
     );
   };
@@ -582,11 +582,11 @@ function CenterPanel({ variant = "section" }) {
       (v) => {
         if (v !== true) throw new Error(t("updateNotApplied"));
         setBusyUpdate(null);
-        showToast(t("updatedOne", { n: name }));
+        showToast(t("updatedOne", { n: name }), "ok", 5e3);
       },
       (e) => {
         setBusyUpdate(null);
-        showToast(t("updateFailed", { e: e instanceof Error ? e.message : String(e) }), "error");
+        showToast(t("updateFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 8e3);
       }
     );
   };
@@ -594,21 +594,23 @@ function CenterPanel({ variant = "section" }) {
     if (updates === null || updates.length === 0) return;
     setBusyUpdate("__all__");
     let okCount = 0;
+    const okNames = [];
     const failures = [];
     for (const u of updates) {
       try {
         const v = await rpc("update", { name: u.name });
         if (v !== true) throw new Error(t("updateNotApplied"));
         okCount++;
+        okNames.push(u.name);
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
       }
     }
     setBusyUpdate(null);
     if (failures.length === 0) {
-      showToast(t("updatedMany", { n: okCount }));
+      showToast(t("updatedMany", { n: okCount }) + `\uFF08${okNames.join("\u3001")}\uFF09`, "ok", 6e3);
     } else {
-      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error");
+      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 8e3);
     }
     refreshUpdates();
   };
@@ -758,10 +760,10 @@ function WhatsNewDialog() {
     }
     setBusy(false);
     if (failures.length === 0) {
-      showToast(t("updatedMany", { n: okCount }));
+      showToast(t("updatedMany", { n: okCount }), "ok", 6e3);
       closeWhatsNew();
     } else {
-      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error");
+      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 8e3);
     }
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", style: { width: "540px" }, role: "dialog", "aria-modal": "true", "aria-label": t("whatsNewTitle"), children: [

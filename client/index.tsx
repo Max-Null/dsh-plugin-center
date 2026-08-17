@@ -170,10 +170,10 @@ let installedCache: InstalledPlugin[] | null = null
 const marketCache: Record<string, { plugins: MarketPlugin[]; done: boolean }> = {}
 
 // ---- toast (replaces the native alert) ----
-let toastState: { message: string; kind: 'ok' | 'error' } | null = null
+let toastState: { message: string; kind: 'ok' | 'error'; until: number } | null = null
 const toastListeners = new Set<() => void>()
-function showToast(message: string, kind: 'ok' | 'error' = 'ok'): void {
-  toastState = { message, kind }
+function showToast(message: string, kind: 'ok' | 'error' = 'ok', duration = 3200): void {
+  toastState = { message, kind, until: Date.now() + duration }
   toastListeners.forEach(l => l())
 }
 
@@ -192,7 +192,7 @@ function useToast(): { message: string; kind: 'ok' | 'error' } | null {
     const id = setTimeout(() => {
       toastState = null
       toastListeners.forEach(l => l())
-    }, 3200)
+    }, Math.max(0, t.until - Date.now()))
     return () => clearTimeout(id)
   }, [t])
   return t
@@ -406,11 +406,11 @@ function MarketView({ category, single, source, search, onCount }: { category: s
           if (c !== undefined) c.plugins = c.plugins.map(p => p.name === m.name ? { ...p, installed: true } : p)
         }
         setItems(prev => prev.map(p => p.name === m.name ? { ...p, installed: true } : p))
-        showToast(t('installQueued', { n: m.name }))
+        showToast(t('installQueued', { n: m.name }), 'ok', 5000)
       },
       e => {
         setBusy(null)
-        showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error')
+        showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 8000)
       },
     )
   }
@@ -556,9 +556,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     void rpc('update', { name }).then(
       v => {
         if (v !== true) throw new Error(t('updateNotApplied'))
-        setBusyUpdate(null); showToast(t('updatedOne', { n: name }))
+        setBusyUpdate(null); showToast(t('updatedOne', { n: name }), 'ok', 5000)
       },
-      e => { setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error') },
+      e => { setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 8000) },
     )
   }
   // 串行逐个更新（2026-08-17 实测：并发 update 会同时 spawn 多个 pnpm，
@@ -567,21 +567,23 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     if (updates === null || updates.length === 0) return
     setBusyUpdate('__all__')
     let okCount = 0
+    const okNames: string[] = []
     const failures: string[] = []
     for (const u of updates) {
       try {
         const v = await rpc('update', { name: u.name }) as boolean
         if (v !== true) throw new Error(t('updateNotApplied'))
         okCount++
+        okNames.push(u.name)
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
       }
     }
     setBusyUpdate(null)
     if (failures.length === 0) {
-      showToast(t('updatedMany', { n: okCount }))
+      showToast(t('updatedMany', { n: okCount }) + `（${okNames.join('、')}）`, 'ok', 6000)
     } else {
-      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error')
+      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 8000)
     }
     refreshUpdates()
   }
@@ -738,10 +740,10 @@ function WhatsNewDialog() {
     }
     setBusy(false)
     if (failures.length === 0) {
-      showToast(t('updatedMany', { n: okCount }))
+      showToast(t('updatedMany', { n: okCount }), 'ok', 6000)
       closeWhatsNew()
     } else {
-      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error')
+      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 8000)
     }
   }
   return (

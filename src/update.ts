@@ -111,8 +111,9 @@ function runOne(command: string, args: readonly string[], cwd: string): Promise<
   return new Promise((resolve) => {
     let child
     try {
-      // shell: true —— Windows 下 .cmd shim 必须经 shell 才能 spawn。
-      child = spawn(command, [...args], { cwd, stdio: 'inherit', shell: true })
+      // shell: true —— Windows 下 .cmd shim 必须经 shell 才能 spawn；
+      // windowsHide —— GUI 宿主下不弹 cmd 窗口（2026-08-18 用户实测闪烁）。
+      child = spawn(command, [...args], { cwd, stdio: 'inherit', shell: true, windowsHide: true })
     } catch (e) {
       resolve({ ok: false, detail: e instanceof Error ? e.message : String(e) })
       return
