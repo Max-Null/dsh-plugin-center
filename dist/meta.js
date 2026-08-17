@@ -39,6 +39,16 @@ function classifySource(specifier) {
 /** Process-local cache of resolved packages — stable per run, so resolve once. */
 const packageCache = new Map();
 /**
+ * Drop every cached package.json resolution. Called after install/update:
+ * pnpm rewrites node_modules on disk, and the next `listInstalled` must see
+ * the new versions instead of the process-start snapshot (2026-08-18 — a
+ * stale cache reported the pre-update version forever, so the update looked
+ * perpetually available).
+ */
+export function clearPackageCache() {
+    packageCache.clear();
+}
+/**
  * Resolve one Loader entry to its package.json. `file://` specs walk upward to
  * the nearest directory holding a package.json; `cordis:*` builtins have none.
  * Results are cached per (baseUrl, specifier) — the resolution is a pure read

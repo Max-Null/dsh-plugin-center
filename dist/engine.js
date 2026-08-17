@@ -9,7 +9,7 @@ import { Service } from '@deepseek-ai/cordis';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { buildInstalledPlugin, resolvePackage } from "./meta.js";
+import { buildInstalledPlugin, clearPackageCache, resolvePackage } from "./meta.js";
 import { fetchAwesomePluginsJson, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins } from "./market.js";
 import { detectUpdate, installPlugin, updatePlugin } from "./update.js";
 /** Runtime mirror of cordis FiberState (a cross-package const enum). */
@@ -225,8 +225,9 @@ export class PluginCenterEngine extends Service {
     async install(spec) {
         return this.enqueuePnpm(() => installPlugin(spec, this.baseUrl));
     }
-    async update(name) {
-        return this.enqueuePnpm(() => updatePlugin(name, this.baseUrl));
+    /** Update one installed plugin to the detected target version (exact — see update.ts). */
+    async update(name, version) {
+        return this.enqueuePnpm(() => updatePlugin(name, version, this.baseUrl));
     }
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     enqueuePnpm(op) {
@@ -234,6 +235,9 @@ export class PluginCenterEngine extends Service {
             const result = await op();
             this.installedNamesCache = null;
             this.updatesCache = null;
+            // pnpm rewrote node_modules on disk: drop the process-local package.json
+            // snapshot so the next listInstalled reads the new versions.
+            clearPackageCache();
             return result;
         });
         this.pnpmChain = run.catch(() => { });

@@ -443,7 +443,7 @@ function MarketView({ category, single, source, search, onCount }: { category: s
 function UpdatesView({ updates, refresh, updateOne, busy }: {
   updates: UpdateDigest[] | null
   refresh: () => void
-  updateOne: (name: string) => void
+  updateOne: (name: string, version: string) => void
   busy: string | null
 }) {
   const t = useT()
@@ -465,7 +465,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name) }}>{busy === u.name || busy === '__all__' ? t('updating') : t('update')}</button>
+            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' ? t('updating') : t('update')}</button>
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
@@ -557,9 +557,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     return () => { alive = false; if (timer !== null) clearTimeout(timer) }
   }, [])
 
-  const updateOne = (name: string) => {
+  const updateOne = (name: string, version: string) => {
     setBusyUpdate(name)
-    void rpc('update', { name }).then(
+    void rpc('update', { name, version }).then(
       v => {
         if (v !== true) throw new Error(t('updateNotApplied'))
         setBusyUpdate(null); showToast(t('updatedOne', { n: name }), 'ok', 5000)
@@ -577,7 +577,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     const failures: string[] = []
     for (const u of updates) {
       try {
-        const v = await rpc('update', { name: u.name }) as boolean
+        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean
         if (v !== true) throw new Error(t('updateNotApplied'))
         okCount++
         okNames.push(u.name)
@@ -737,7 +737,7 @@ function WhatsNewDialog() {
     const failures: string[] = []
     for (const u of whatsNewDigests) {
       try {
-        const v = await rpc('update', { name: u.name }) as boolean
+        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean
         if (v !== true) throw new Error(t('updateNotApplied'))
         okCount++
       } catch (e) {

@@ -143,7 +143,14 @@ export async function installPlugin(packageSpec: string, profileDir: string): Pr
   return runPnpm(['add', '-w', packageSpec], profileDir)
 }
 
-/** Update a package to latest, mirroring `dsh plugin add <pkg>` (pnpm installs latest). */
-export async function updatePlugin(packageName: string, profileDir: string): Promise<PnpmResult> {
-  return runPnpm(['add', '-w', packageName], profileDir)
+/**
+ * Update a package to the given version, mirroring `dsh plugin add <pkg>`.
+ * The exact version is required: with a bare package name, pnpm 11's
+ * `minimumReleaseAge` supply-chain policy silently refuses a too-recent
+ * latest (exit 0, nothing installed) — a false-success update. An explicit
+ * `<name>@<version>` pins the target and pnpm records it in
+ * `minimumReleaseAgeExclude` itself (2026-08-18, reproduced in-process).
+ */
+export async function updatePlugin(packageName: string, version: string, profileDir: string): Promise<PnpmResult> {
+  return runPnpm(['add', '-w', `${packageName}@${version}`], profileDir)
 }

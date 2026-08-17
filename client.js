@@ -500,7 +500,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }) {
       u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
-        updateOne(u.name);
+        updateOne(u.name, u.toVersion);
       }, children: busy === u.name || busy === "__all__" ? t("updating") : t("update") })
     ] }),
     u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
@@ -580,9 +580,9 @@ function CenterPanel({ variant = "section" }) {
       if (timer !== null) clearTimeout(timer);
     };
   }, []);
-  const updateOne = (name) => {
+  const updateOne = (name, version) => {
     setBusyUpdate(name);
-    void rpc("update", { name }).then(
+    void rpc("update", { name, version }).then(
       (v) => {
         if (v !== true) throw new Error(t("updateNotApplied"));
         setBusyUpdate(null);
@@ -602,7 +602,7 @@ function CenterPanel({ variant = "section" }) {
     const failures = [];
     for (const u of updates) {
       try {
-        const v = await rpc("update", { name: u.name });
+        const v = await rpc("update", { name: u.name, version: u.toVersion });
         if (v !== true) throw new Error(t("updateNotApplied"));
         okCount++;
         okNames.push(u.name);
@@ -755,7 +755,7 @@ function WhatsNewDialog() {
     const failures = [];
     for (const u of whatsNewDigests) {
       try {
-        const v = await rpc("update", { name: u.name });
+        const v = await rpc("update", { name: u.name, version: u.toVersion });
         if (v !== true) throw new Error(t("updateNotApplied"));
         okCount++;
       } catch (e) {

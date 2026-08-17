@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { buildInstalledPlugin, resolvePackage, type InstalledPlugin, type PluginSource } from './meta.ts'
+import { buildInstalledPlugin, clearPackageCache, resolvePackage, type InstalledPlugin, type PluginSource } from './meta.ts'
 import { fetchAwesomePluginsJson, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins, type MarketPlugin } from './market.ts'
 import { detectUpdate, installPlugin, updatePlugin, type UpdateDigest } from './update.ts'
 
@@ -249,8 +249,9 @@ export class PluginCenterEngine extends Service {
     return this.enqueuePnpm(() => installPlugin(spec, this.baseUrl))
   }
 
-  async update(name: string): Promise<{ ok: boolean; detail: string }> {
-    return this.enqueuePnpm(() => updatePlugin(name, this.baseUrl))
+  /** Update one installed plugin to the detected target version (exact — see update.ts). */
+  async update(name: string, version: string): Promise<{ ok: boolean; detail: string }> {
+    return this.enqueuePnpm(() => updatePlugin(name, version, this.baseUrl))
   }
 
   /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
@@ -259,6 +260,9 @@ export class PluginCenterEngine extends Service {
       const result = await op()
       this.installedNamesCache = null
       this.updatesCache = null
+      // pnpm rewrote node_modules on disk: drop the process-local package.json
+      // snapshot so the next listInstalled reads the new versions.
+      clearPackageCache()
       return result
     })
     this.pnpmChain = run.catch(() => {})

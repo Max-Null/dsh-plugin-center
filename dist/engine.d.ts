@@ -69,7 +69,8 @@ export declare class PluginCenterEngine extends Service {
         ok: boolean;
         detail: string;
     }>;
-    update(name: string): Promise<{
+    /** Update one installed plugin to the detected target version (exact — see update.ts). */
+    update(name: string, version: string): Promise<{
         ok: boolean;
         detail: string;
     }>;

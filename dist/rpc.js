@@ -35,9 +35,12 @@ export class PluginCenterRpc extends Service {
                     }
                     case 'update': {
                         const name = payload?.name;
+                        const version = payload?.version;
                         if (typeof name !== 'string' || name === '')
                             return internal('update: name is required');
-                        const result = await ctx.pluginCenter.update(name);
+                        if (typeof version !== 'string' || version === '')
+                            return internal('update: version is required');
+                        const result = await ctx.pluginCenter.update(name, version);
                         if (!result.ok)
                             return internal(`update ${name} 失败：${result.detail}`);
                         return { ok: true, value: true };
