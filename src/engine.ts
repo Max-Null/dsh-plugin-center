@@ -245,21 +245,21 @@ export class PluginCenterEngine extends Service {
     return this.updatesCache.digests
   }
 
-  async install(spec: string): Promise<boolean> {
+  async install(spec: string): Promise<{ ok: boolean; detail: string }> {
     return this.enqueuePnpm(() => installPlugin(spec, this.baseUrl))
   }
 
-  async update(name: string): Promise<boolean> {
+  async update(name: string): Promise<{ ok: boolean; detail: string }> {
     return this.enqueuePnpm(() => updatePlugin(name, this.baseUrl))
   }
 
   /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
-  private enqueuePnpm(op: () => Promise<boolean>): Promise<boolean> {
+  private enqueuePnpm(op: () => Promise<{ ok: boolean; detail: string }>): Promise<{ ok: boolean; detail: string }> {
     const run = this.pnpmChain.then(async () => {
-      const ok = await op()
+      const result = await op()
       this.installedNamesCache = null
       this.updatesCache = null
-      return ok
+      return result
     })
     this.pnpmChain = run.catch(() => {})
     return run

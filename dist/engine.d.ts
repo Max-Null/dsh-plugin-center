@@ -65,8 +65,14 @@ export declare class PluginCenterEngine extends Service {
     listMarket(source?: MarketSource): Promise<MarketSnapshot>;
     /** Detect updates for every installed third-party/local plugin, TTL-cached. */
     checkUpdates(sinceIso: string): Promise<UpdateDigest[]>;
-    install(spec: string): Promise<boolean>;
-    update(name: string): Promise<boolean>;
+    install(spec: string): Promise<{
+        ok: boolean;
+        detail: string;
+    }>;
+    update(name: string): Promise<{
+        ok: boolean;
+        detail: string;
+    }>;
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     private enqueuePnpm;
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */

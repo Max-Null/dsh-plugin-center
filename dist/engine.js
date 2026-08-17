@@ -231,10 +231,10 @@ export class PluginCenterEngine extends Service {
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     enqueuePnpm(op) {
         const run = this.pnpmChain.then(async () => {
-            const ok = await op();
+            const result = await op();
             this.installedNamesCache = null;
             this.updatesCache = null;
-            return ok;
+            return result;
         });
         this.pnpmChain = run.catch(() => { });
         return run;

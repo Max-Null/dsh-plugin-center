@@ -4,6 +4,9 @@
  * first (many community repos ship no release/tag/CHANGELOG — verified §7.2).
  */
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { compareVersions, satisfies } from "./semver.js";
 const UA = { 'User-Agent': 'dsh-plugin-center' };
 /** Latest published version on the npm registry; null when unreachable/unpublished. */
@@ -67,34 +70,54 @@ export async function detectUpdate(name, localVersion, repoUrl, compatRange, loc
         compatRange,
     };
 }
-/**
- * Run pnpm in the profile directory. Output inherits the process stdio (no
- * pipe capture — the host sandbox forbids named-pipe stdio); the exit code is
- * the only result this layer needs.
- * @returns the child exit code, or 1 when spawn itself fails.
- */
-export function runPnpm(args, cwd) {
+/** pnpm 候选命令：GUI 进程 PATH 常缺用户级 npm 全局目录；且 Windows 上
+ *  CreateProcess 只找 pnpm.exe（.cmd/.ps1 必须经 shell）——2026-08-17 实测
+ *  spawn('pnpm', shell:false) 直接 ENOENT，更新永远假成功。 */
+export function pnpmCandidates() {
+    const commands = ['pnpm', 'pnpm.cmd'];
+    const userNpm = join(homedir(), 'AppData', 'Roaming', 'npm');
+    for (const name of ['pnpm.cmd', 'pnpm.exe', 'pnpm']) {
+        const candidate = join(userNpm, name);
+        if (existsSync(candidate))
+            commands.push(candidate);
+    }
+    return commands;
+}
+function runOne(command, args, cwd) {
     return new Promise((resolve) => {
         let child;
         try {
-            child = spawn('pnpm', [...args], { cwd, stdio: 'inherit', shell: false });
+            // shell: true —— Windows 下 .cmd shim 必须经 shell 才能 spawn。
+            child = spawn(command, [...args], { cwd, stdio: 'inherit', shell: true });
         }
-        catch {
-            resolve(1);
+        catch (e) {
+            resolve({ ok: false, detail: e instanceof Error ? e.message : String(e) });
             return;
         }
-        child.on('error', () => resolve(1));
-        child.on('close', code => resolve(code ?? 1));
+        child.on('error', e => resolve({ ok: false, detail: e.message }));
+        child.on('close', code => resolve(code === 0 ? { ok: true, detail: '' } : { ok: false, detail: `exit code ${code ?? 1}` }));
     });
+}
+/**
+ * Run pnpm in the profile directory, trying each candidate command in turn.
+ * Output inherits the process stdio (no pipe capture — the host sandbox
+ * forbids named-pipe stdio); the exit code is the only result this layer needs.
+ */
+export async function runPnpm(args, cwd) {
+    let last = { ok: false, detail: 'no pnpm candidate found' };
+    for (const command of pnpmCandidates()) {
+        last = await runOne(command, args, cwd);
+        if (last.ok)
+            return last;
+    }
+    return last;
 }
 /** Install a package into the web profile, mirroring `dsh plugin add` semantics. */
 export async function installPlugin(packageSpec, profileDir) {
     // `-w` is required: every profile ships a pnpm-workspace.yaml.
-    const code = await runPnpm(['add', '-w', packageSpec], profileDir);
-    return code === 0;
+    return runPnpm(['add', '-w', packageSpec], profileDir);
 }
 /** Update a package to latest, mirroring `dsh plugin add <pkg>` (pnpm installs latest). */
 export async function updatePlugin(packageName, profileDir) {
-    const code = await runPnpm(['add', '-w', packageName], profileDir);
-    return code === 0;
+    return runPnpm(['add', '-w', packageName], profileDir);
 }

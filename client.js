@@ -309,7 +309,8 @@ function MarketView({ category, single, source, search, onCount }) {
   const install = (m) => {
     setBusy(m.name);
     void rpc("install", { spec: m.spec }).then(
-      () => {
+      (v) => {
+        if (v !== true) throw new Error("\u5B89\u88C5\u672A\u751F\u6548");
         setBusy(null);
         pendingInstall.add(m.spec);
         for (const key of Object.keys(marketCache)) {
@@ -447,7 +448,8 @@ function CenterPanel({ variant = "section" }) {
   const updateOne = (name) => {
     setBusyUpdate(name);
     void rpc("update", { name }).then(
-      () => {
+      (v) => {
+        if (v !== true) throw new Error("\u66F4\u65B0\u672A\u751F\u6548");
         setBusyUpdate(null);
         showToast(`\u5DF2\u66F4\u65B0 ${name}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
       },
@@ -464,7 +466,8 @@ function CenterPanel({ variant = "section" }) {
     const failures = [];
     for (const u of updates) {
       try {
-        await rpc("update", { name: u.name });
+        const v = await rpc("update", { name: u.name });
+        if (v !== true) throw new Error("\u66F4\u65B0\u672A\u751F\u6548");
         okCount++;
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
@@ -623,7 +626,8 @@ function WhatsNewDialog() {
     const failures = [];
     for (const u of whatsNewDigests) {
       try {
-        await rpc("update", { name: u.name });
+        const v = await rpc("update", { name: u.name });
+        if (v !== true) throw new Error("\u66F4\u65B0\u672A\u751F\u6548");
         okCount++;
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);

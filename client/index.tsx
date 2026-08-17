@@ -311,7 +311,8 @@ function MarketView({ category, single, source, search, onCount }: { category: s
   const install = (m: MarketPlugin) => {
     setBusy(m.name)
     void rpc('install', { spec: m.spec }).then(
-      () => {
+      v => {
+        if (v !== true) throw new Error('安装未生效')
         setBusy(null)
         pendingInstall.add(m.spec)
         for (const key of Object.keys(marketCache)) {
@@ -465,7 +466,10 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const updateOne = (name: string) => {
     setBusyUpdate(name)
     void rpc('update', { name }).then(
-      () => { setBusyUpdate(null); showToast(`已更新 ${name}，重启 dsh web 后生效`) },
+      v => {
+        if (v !== true) throw new Error('更新未生效')
+        setBusyUpdate(null); showToast(`已更新 ${name}，重启 dsh web 后生效`)
+      },
       e => { setBusyUpdate(null); showToast(`更新失败：${e instanceof Error ? e.message : String(e)}`, 'error') },
     )
   }
@@ -478,7 +482,8 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     const failures: string[] = []
     for (const u of updates) {
       try {
-        await rpc('update', { name: u.name })
+        const v = await rpc('update', { name: u.name }) as boolean
+        if (v !== true) throw new Error('更新未生效')
         okCount++
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
@@ -633,7 +638,8 @@ function WhatsNewDialog() {
     const failures: string[] = []
     for (const u of whatsNewDigests) {
       try {
-        await rpc('update', { name: u.name })
+        const v = await rpc('update', { name: u.name }) as boolean
+        if (v !== true) throw new Error('更新未生效')
         okCount++
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
