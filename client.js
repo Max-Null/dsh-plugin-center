@@ -203,9 +203,143 @@ async function checkWhatNew() {
   } catch {
   }
 }
-var SOURCE_LABEL = { official: "\u5B98\u65B9", installed: "\u7528\u6237\u5B89\u88C5", local: "\u672C\u5730\u5F00\u53D1", builtin: "\u5185\u7F6E" };
 var CATEGORIES = ["ui", "usage", "theme", "model", "session", "memory", "tools", "vision", "skill", "workflow", "notify", "dev", "market", "fun"];
+var STRINGS = {
+  zh: {
+    title: "\u63D2\u4EF6\u4E2D\u5FC3",
+    tabInstalled: "\u5DF2\u5B89\u88C5",
+    tabMarket: "\u5E02\u573A",
+    tabUpdates: "\u66F4\u65B0",
+    headSummary: "\u5DF2\u5B89\u88C5 {a} \xB7 \u6709\u66F4\u65B0 {b} \xB7 \u5931\u6548 {c}",
+    check: "\u68C0\u67E5\u66F4\u65B0",
+    checking: "\u68C0\u67E5\u4E2D\u2026",
+    updateAll: "\u66F4\u65B0\u5168\u90E8\uFF08{n}\uFF09",
+    searchInstalled: "\u641C\u7D22\u5DF2\u5B89\u88C5\u63D2\u4EF6",
+    allSources: "\u5168\u90E8\u6765\u6E90",
+    srcOfficial: "\u5B98\u65B9",
+    srcInstalled: "\u7528\u6237\u5B89\u88C5",
+    srcLocal: "\u672C\u5730\u5F00\u53D1",
+    srcBuiltin: "\u5185\u7F6E",
+    all: "\u5168\u90E8",
+    searchMarket: "\u641C\u7D22\u793E\u533A\u63D2\u4EF6",
+    allMarkets: "\u5168\u90E8\u6E90",
+    gridDouble: "\u53CC\u5217\u7F51\u683C",
+    gridSingle: "\u5355\u5217\u5217\u8868",
+    loadFailed: "\u52A0\u8F7D\u5931\u8D25\uFF1A{e}",
+    loading: "\u52A0\u8F7D\u4E2D\u2026",
+    marketLoading: "\u52A0\u8F7D\u5E02\u573A\u76EE\u5F55\u4E2D\u2026",
+    loadMore: "\u6B63\u5728\u52A0\u8F7D\u66F4\u591A\u2026\uFF08\u5DF2\u52A0\u8F7D {n} \u4E2A\uFF09",
+    checkingUpdates: "\u68C0\u67E5\u66F4\u65B0\u4E2D\u2026",
+    noUpdates: "\u6CA1\u6709\u53EF\u7528\u7684\u66F4\u65B0\u3002",
+    recheck: "\u91CD\u65B0\u68C0\u67E5",
+    incompat: "\u4E0D\u517C\u5BB9\u5F53\u524D DSH",
+    update: "\u66F4\u65B0",
+    updating: "\u66F4\u65B0\u4E2D\u2026",
+    install: "\u5B89\u88C5",
+    installing: "\u5B89\u88C5\u4E2D\u2026",
+    pendingRestart: "\u5F85\u91CD\u542F\u751F\u6548",
+    installedTag: "\u5DF2\u5B89\u88C5",
+    disabledTag: "\u5DF2\u7981\u7528",
+    requiresDsh: "\u8981\u6C42 DSH {r}",
+    installQueued: "\u5DF2\u53D1\u8D77\u5B89\u88C5 {n}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548",
+    installFailed: "\u5B89\u88C5\u5931\u8D25\uFF1A{e}",
+    installNotApplied: "\u5B89\u88C5\u672A\u751F\u6548",
+    updatedOne: "\u5DF2\u66F4\u65B0 {n}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548",
+    updateFailed: "\u66F4\u65B0\u5931\u8D25\uFF1A{e}",
+    updateNotApplied: "\u66F4\u65B0\u672A\u751F\u6548",
+    updatedMany: "\u5DF2\u66F4\u65B0 {n} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548",
+    updateSummary: "\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F {a}\uFF0C\u5931\u8D25 {b}\uFF08{c}\uFF09",
+    whatsNewTitle: "\u63D2\u4EF6\u66F4\u65B0",
+    whatsNewSub: "{n} \u4E2A\u63D2\u4EF6\u6709\u65B0\u7248\u672C",
+    later: "\u7A0D\u540E",
+    markAllRead: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB",
+    updateNow: "\u7ACB\u5373\u66F4\u65B0",
+    close: "\u5173\u95ED",
+    checkFail: "\u68C0\u67E5\u66F4\u65B0\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
+    foundUpdates: "\u53D1\u73B0 {n} \u4E2A\u53EF\u66F4\u65B0\u63D2\u4EF6",
+    allUpToDate: "\u6240\u6709\u63D2\u4EF6\u5747\u4E3A\u6700\u65B0"
+  },
+  en: {
+    title: "Plugin Center",
+    tabInstalled: "Installed",
+    tabMarket: "Market",
+    tabUpdates: "Updates",
+    headSummary: "{a} installed \xB7 {b} updates \xB7 {c} failed",
+    check: "Check updates",
+    checking: "Checking\u2026",
+    updateAll: "Update all\uFF08{n}\uFF09",
+    searchInstalled: "Search installed plugins",
+    allSources: "All sources",
+    srcOfficial: "Official",
+    srcInstalled: "User installed",
+    srcLocal: "Local dev",
+    srcBuiltin: "Built-in",
+    all: "All",
+    searchMarket: "Search community plugins",
+    allMarkets: "All sources",
+    gridDouble: "Two-column grid",
+    gridSingle: "Single-column list",
+    loadFailed: "Failed to load: {e}",
+    loading: "Loading\u2026",
+    marketLoading: "Loading market catalog\u2026",
+    loadMore: "Loading more\u2026 ({n} loaded)",
+    checkingUpdates: "Checking for updates\u2026",
+    noUpdates: "No updates available.",
+    recheck: "Check again",
+    incompat: "Incompatible with current DSH",
+    update: "Update",
+    updating: "Updating\u2026",
+    install: "Install",
+    installing: "Installing\u2026",
+    pendingRestart: "Restart pending",
+    installedTag: "Installed",
+    disabledTag: "Disabled",
+    requiresDsh: "Requires DSH {r}",
+    installQueued: "Install of {n} started; restart dsh web to take effect",
+    installFailed: "Install failed: {e}",
+    installNotApplied: "Install did not take effect",
+    updatedOne: "Updated {n}; restart dsh web to take effect",
+    updateFailed: "Update failed: {e}",
+    updateNotApplied: "Update did not take effect",
+    updatedMany: "Updated {n} plugins; restart dsh web to take effect",
+    updateSummary: "Update done: {a} succeeded, {b} failed ({c})",
+    whatsNewTitle: "Plugin updates",
+    whatsNewSub: "{n} plugins have new versions",
+    later: "Later",
+    markAllRead: "Mark all read",
+    updateNow: "Update now",
+    close: "Close",
+    checkFail: "Failed to check updates, please retry later",
+    foundUpdates: "{n} updates found",
+    allUpToDate: "All plugins are up to date"
+  }
+};
+var localeId = "zh";
+var localeListeners = /* @__PURE__ */ new Set();
+function adoptLocale(id) {
+  const next = id === "en" ? "en" : "zh";
+  if (next === localeId) return;
+  localeId = next;
+  localeListeners.forEach((l) => l());
+}
+function fmt(tpl, vars = {}) {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+}
+function useT() {
+  const [id, setId] = (0, import_react.useState)(localeId);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setId(localeId);
+    };
+    localeListeners.add(l);
+    return () => {
+      localeListeners.delete(l);
+    };
+  }, []);
+  return (key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars);
+}
 function InstalledView({ search, category, source }) {
+  const t = useT();
   const [items, setItems] = (0, import_react.useState)(installedCache);
   const [error, setError] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
@@ -224,11 +358,14 @@ function InstalledView({ search, category, source }) {
       alive = false;
     };
   }, []);
-  if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "pc-sub", children: [
-    "\u52A0\u8F7D\u5931\u8D25\uFF1A",
-    error
-  ] });
-  if (items === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: "\u52A0\u8F7D\u4E2D\u2026" });
+  if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) });
+  if (items === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loading") });
+  const srcLabel = {
+    official: t("srcOfficial"),
+    installed: t("srcInstalled"),
+    local: t("srcLocal"),
+    builtin: t("srcBuiltin")
+  };
   const q = search.trim().toLowerCase();
   const filtered = items.filter((p) => {
     const matchSearch = q === "" || p.displayName.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
@@ -243,22 +380,20 @@ function InstalledView({ search, category, source }) {
         "v",
         p.version
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: SOURCE_LABEL[p.source] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-dot${p.fiberPhase === "failed" ? " failed" : ""}` })
     ] }),
     p.description !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: p.description }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
       p.categories.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
-      p.compatRange !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-tag", children: [
-        "\u8981\u6C42 DSH ",
-        p.compatRange
-      ] }),
-      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: "\u5DF2\u7981\u7528" })
+      p.compatRange !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("requiresDsh", { r: p.compatRange }) }),
+      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") })
     ] })
   ] }, p.entryId)) });
 }
 function MarketView({ category, single, source, search, onCount }) {
+  const t = useT();
   const [items, setItems] = (0, import_react.useState)(marketCache[source]?.plugins ?? []);
   const [done, setDone] = (0, import_react.useState)(marketCache[source]?.done ?? false);
   const [error, setError] = (0, import_react.useState)(null);
@@ -296,21 +431,19 @@ function MarketView({ category, single, source, search, onCount }) {
       if (timer !== void 0) clearTimeout(timer);
     };
   }, [source, onCount]);
-  if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "pc-sub", children: [
-    "\u52A0\u8F7D\u5931\u8D25\uFF1A",
-    error
-  ] });
-  if (items.length === 0 && !done) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: "\u52A0\u8F7D\u5E02\u573A\u76EE\u5F55\u4E2D\u2026" });
+  if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) });
+  if (items.length === 0 && !done) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("marketLoading") });
   const q = search.trim().toLowerCase();
   const filtered = items.filter((m) => {
     const matchSearch = q === "" || m.name.toLowerCase().includes(q) || (m.description.zh || m.description.en).toLowerCase().includes(q);
     return matchSearch && (category === null || m.categories.includes(category));
   });
+  const descOf = (m) => localeId === "en" ? m.description.en || m.description.zh : m.description.zh || m.description.en;
   const install = (m) => {
     setBusy(m.name);
     void rpc("install", { spec: m.spec }).then(
       (v) => {
-        if (v !== true) throw new Error("\u5B89\u88C5\u672A\u751F\u6548");
+        if (v !== true) throw new Error(t("installNotApplied"));
         setBusy(null);
         pendingInstall.add(m.spec);
         for (const key of Object.keys(marketCache)) {
@@ -318,11 +451,11 @@ function MarketView({ category, single, source, search, onCount }) {
           if (c !== void 0) c.plugins = c.plugins.map((p) => p.name === m.name ? { ...p, installed: true } : p);
         }
         setItems((prev) => prev.map((p) => p.name === m.name ? { ...p, installed: true } : p));
-        showToast(`\u5DF2\u53D1\u8D77\u5B89\u88C5 ${m.name}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
+        showToast(t("installQueued", { n: m.name }));
       },
       (e) => {
         setBusy(null);
-        showToast(`\u5B89\u88C5\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`, "error");
+        showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error");
       }
     );
   };
@@ -339,27 +472,24 @@ function MarketView({ category, single, source, search, onCount }) {
           m.version
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: m.description.zh || m.description.en }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: descOf(m) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
         m.categories.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-        m.installed || pendingInstall.has(m.spec) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: pendingInstall.has(m.spec) ? "\u5F85\u91CD\u542F\u751F\u6548" : "\u5DF2\u5B89\u88C5" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
+        m.installed || pendingInstall.has(m.spec) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: pendingInstall.has(m.spec) ? t("pendingRestart") : t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
           install(m);
-        }, children: busy === m.name ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5" })
+        }, children: busy === m.name ? t("installing") : t("install") })
       ] })
     ] }, m.name)) }),
-    !done && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "pc-sub", children: [
-      "\u6B63\u5728\u52A0\u8F7D\u66F4\u591A\u2026\uFF08\u5DF2\u52A0\u8F7D ",
-      items.length,
-      " \u4E2A\uFF09"
-    ] })
+    !done && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadMore", { n: items.length }) })
   ] });
 }
 function UpdatesView({ updates, refresh, updateOne, busy }) {
-  if (updates === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: "\u68C0\u67E5\u66F4\u65B0\u4E2D\u2026" });
+  const t = useT();
+  if (updates === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("checkingUpdates") });
   if (updates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: "\u6CA1\u6709\u53EF\u7528\u7684\u66F4\u65B0\u3002" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: refresh, children: "\u91CD\u65B0\u68C0\u67E5" })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("noUpdates") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: refresh, children: t("recheck") })
   ] });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
@@ -367,16 +497,17 @@ function UpdatesView({ updates, refresh, updateOne, busy }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
-      u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: "\u4E0D\u517C\u5BB9\u5F53\u524D DSH" }),
+      u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
         updateOne(u.name);
-      }, children: busy === u.name || busy === "__all__" ? "\u66F4\u65B0\u4E2D\u2026" : "\u66F4\u65B0" })
+      }, children: busy === u.name || busy === "__all__" ? t("updating") : t("update") })
     ] }),
     u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
   ] }, u.name)) });
 }
 function CenterPanel({ variant = "section" }) {
+  const t = useT();
   const [view, setView] = (0, import_react.useState)("installed");
   const [category, setCategory] = (0, import_react.useState)(null);
   const [single, setSingle] = (0, import_react.useState)(false);
@@ -399,15 +530,15 @@ function CenterPanel({ variant = "section" }) {
         setUpdates(digests);
         setChecking(false);
         if (!silent) {
-          showToast(digests.length > 0 ? `\u53D1\u73B0 ${digests.length} \u4E2A\u53EF\u66F4\u65B0\u63D2\u4EF6` : "\u6240\u6709\u63D2\u4EF6\u5747\u4E3A\u6700\u65B0");
+          showToast(digests.length > 0 ? t("foundUpdates", { n: digests.length }) : t("allUpToDate"));
         }
       },
       () => {
         setChecking(false);
-        if (!silent) showToast("\u68C0\u67E5\u66F4\u65B0\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5", "error");
+        if (!silent) showToast(t("checkFail"), "error");
       }
     );
-  }, []);
+  }, [t]);
   (0, import_react.useEffect)(() => {
     void rpc("listInstalled").then(
       (v) => {
@@ -449,13 +580,13 @@ function CenterPanel({ variant = "section" }) {
     setBusyUpdate(name);
     void rpc("update", { name }).then(
       (v) => {
-        if (v !== true) throw new Error("\u66F4\u65B0\u672A\u751F\u6548");
+        if (v !== true) throw new Error(t("updateNotApplied"));
         setBusyUpdate(null);
-        showToast(`\u5DF2\u66F4\u65B0 ${name}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
+        showToast(t("updatedOne", { n: name }));
       },
       (e) => {
         setBusyUpdate(null);
-        showToast(`\u66F4\u65B0\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`, "error");
+        showToast(t("updateFailed", { e: e instanceof Error ? e.message : String(e) }), "error");
       }
     );
   };
@@ -467,7 +598,7 @@ function CenterPanel({ variant = "section" }) {
     for (const u of updates) {
       try {
         const v = await rpc("update", { name: u.name });
-        if (v !== true) throw new Error("\u66F4\u65B0\u672A\u751F\u6548");
+        if (v !== true) throw new Error(t("updateNotApplied"));
         okCount++;
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
@@ -475,9 +606,9 @@ function CenterPanel({ variant = "section" }) {
     }
     setBusyUpdate(null);
     if (failures.length === 0) {
-      showToast(`\u5DF2\u66F4\u65B0 ${okCount} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
+      showToast(t("updatedMany", { n: okCount }));
     } else {
-      showToast(`\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F ${okCount}\uFF0C\u5931\u8D25 ${failures.length}\uFF08${failures.join("\uFF1B")}\uFF09`, "error");
+      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error");
     }
     refreshUpdates();
   };
@@ -488,48 +619,37 @@ function CenterPanel({ variant = "section" }) {
     count !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-count", children: count })
   ] }, v);
   const tabs = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-tabs", children: [
-    tab("installed", "\u5DF2\u5B89\u88C5", installedCount),
-    tab("market", "\u5E02\u573A", marketCount),
-    tab("updates", "\u66F4\u65B0", updates?.length ?? 0)
+    tab("installed", t("tabInstalled"), installedCount),
+    tab("market", t("tabMarket"), marketCount),
+    tab("updates", t("tabUpdates"), updates?.length ?? 0)
   ] });
   const head = (showTitle) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-head", children: [
-    showTitle && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: "\u63D2\u4EF6\u4E2D\u5FC3" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-sub", children: [
-      "\u5DF2\u5B89\u88C5 ",
-      installedCount,
-      " \xB7 \u6709\u66F4\u65B0 ",
-      updates?.length ?? 0,
-      " \xB7 \u5931\u6548 ",
-      failedCount
-    ] }),
+    showTitle && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", children: t("headSummary", { a: installedCount, b: updates?.length ?? 0, c: failedCount }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: checking, onClick: () => {
       refreshUpdates();
-    }, children: checking ? "\u68C0\u67E5\u4E2D\u2026" : "\u68C0\u67E5\u66F4\u65B0" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "pc-btn primary", disabled: !updates?.length || busyUpdate !== null, onClick: () => {
+    }, children: checking ? t("checking") : t("check") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: !updates?.length || busyUpdate !== null, onClick: () => {
       void updateAll();
-    }, children: [
-      "\u66F4\u65B0\u5168\u90E8\uFF08",
-      updates?.length ?? 0,
-      "\uFF09"
-    ] })
+    }, children: t("updateAll", { n: updates?.length ?? 0 }) })
   ] });
   const installedToolbar = view === "installed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: search, onChange: (e) => {
       setSearch(e.target.value);
-    }, placeholder: "\u641C\u7D22\u5DF2\u5B89\u88C5\u63D2\u4EF6" }),
+    }, placeholder: t("searchInstalled") }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: installedSource ?? "", onChange: (e) => {
       setInstalledSource(e.target.value === "" ? null : e.target.value);
     }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u5168\u90E8\u6765\u6E90" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "official", children: "\u5B98\u65B9" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "installed", children: "\u7528\u6237\u5B89\u88C5" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "local", children: "\u672C\u5730\u5F00\u53D1" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "builtin", children: "\u5185\u7F6E" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: t("allSources") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "official", children: t("srcOfficial") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "installed", children: t("srcInstalled") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "local", children: t("srcLocal") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "builtin", children: t("srcBuiltin") })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${installedCategory === null ? " active" : ""}`, onClick: () => {
       setInstalledCategory(null);
-    }, children: "\u5168\u90E8" }),
+    }, children: t("all") }),
     CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${installedCategory === c ? " active" : ""}`, onClick: () => {
       setInstalledCategory(c);
     }, children: c }, c))
@@ -537,23 +657,23 @@ function CenterPanel({ variant = "section" }) {
   const marketToolbar = view === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: marketSearch, onChange: (e) => {
       setMarketSearch(e.target.value);
-    }, placeholder: "\u641C\u7D22\u793E\u533A\u63D2\u4EF6" }),
+    }, placeholder: t("searchMarket") }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: source, onChange: (e) => {
       setSource(e.target.value);
       setCategory(null);
     }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "awesome", children: "awesome-dsh-plugin" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "oh-my-dsh", children: "Oh-My-DSH" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: "\u5168\u90E8\u6E90" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: t("allMarkets") })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === null ? " active" : ""}`, onClick: () => {
       setCategory(null);
-    }, children: "\u5168\u90E8" }),
+    }, children: t("all") }),
     CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === c ? " active" : ""}`, onClick: () => {
       setCategory(c);
     }, children: c }, c)),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: single ? "\u53CC\u5217\u7F51\u683C" : "\u5355\u5217\u5217\u8868", "aria-label": "\u5207\u6362\u5E03\u5C40", className: "pc-iconbtn", onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: single ? t("gridDouble") : t("gridSingle"), "aria-label": single ? t("gridDouble") : t("gridSingle"), className: "pc-iconbtn", onClick: () => {
       setSingle((v) => !v);
     }, children: single ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "5", height: "5", rx: "1" }),
@@ -592,7 +712,8 @@ function CenterPanel({ variant = "section" }) {
   ] });
 }
 function HeaderButton() {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: "\u63D2\u4EF6\u4E2D\u5FC3", "aria-label": "\u63D2\u4EF6\u4E2D\u5FC3", className: "pc-headerbtn", onClick: openOverlay, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
+  const t = useT();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: t("title"), "aria-label": t("title"), className: "pc-headerbtn", onClick: openOverlay, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "5", height: "5", rx: "1" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "9", y: "2", width: "5", height: "5", rx: "1" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "9", width: "5", height: "5", rx: "1" }),
@@ -600,13 +721,14 @@ function HeaderButton() {
   ] }) });
 }
 function OverlayPanel() {
+  const t = useT();
   const open = useOverlayOpen();
   if (!open) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", role: "dialog", "aria-modal": "true", "aria-label": "\u63D2\u4EF6\u4E2D\u5FC3", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", role: "dialog", "aria-modal": "true", "aria-label": t("title"), children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: "\u63D2\u4EF6\u4E2D\u5FC3" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeOverlay, "aria-label": "\u5173\u95ED", children: "\u2715" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeOverlay, "aria-label": t("close"), children: "\u2715" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CenterPanel, { variant: "overlay" }) })
   ] }) });
@@ -617,6 +739,7 @@ function Toast() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message });
 }
 function WhatsNewDialog() {
+  const t = useT();
   const open = useWhatsNewOpen();
   const [busy, setBusy] = (0, import_react.useState)(false);
   if (!open || whatsNewDigests.length === 0) return null;
@@ -627,7 +750,7 @@ function WhatsNewDialog() {
     for (const u of whatsNewDigests) {
       try {
         const v = await rpc("update", { name: u.name });
-        if (v !== true) throw new Error("\u66F4\u65B0\u672A\u751F\u6548");
+        if (v !== true) throw new Error(t("updateNotApplied"));
         okCount++;
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
@@ -635,21 +758,18 @@ function WhatsNewDialog() {
     }
     setBusy(false);
     if (failures.length === 0) {
-      showToast(`\u5DF2\u66F4\u65B0 ${okCount} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
+      showToast(t("updatedMany", { n: okCount }));
       closeWhatsNew();
     } else {
-      showToast(`\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F ${okCount}\uFF0C\u5931\u8D25 ${failures.length}\uFF08${failures.join("\uFF1B")}\uFF09`, "error");
+      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error");
     }
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", style: { width: "540px" }, role: "dialog", "aria-modal": "true", "aria-label": "\u63D2\u4EF6\u66F4\u65B0", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", style: { width: "540px" }, role: "dialog", "aria-modal": "true", "aria-label": t("whatsNewTitle"), children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: "\u63D2\u4EF6\u66F4\u65B0" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-sub", style: { marginTop: 0 }, children: [
-        whatsNewDigests.length,
-        " \u4E2A\u63D2\u4EF6\u6709\u65B0\u7248\u672C"
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("whatsNewTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", style: { marginTop: 0 }, children: t("whatsNewSub", { n: whatsNewDigests.length }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeWhatsNew, "aria-label": "\u5173\u95ED", children: "\u2715" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeWhatsNew, "aria-label": t("close"), children: "\u2715" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-body", style: { overflow: "auto" }, children: [
       whatsNewDigests.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-wn-item", children: [
@@ -662,11 +782,11 @@ function WhatsNewDialog() {
         u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
       ] }, u.name)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "16px" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: "\u7A0D\u540E" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("later") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("markAllRead") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy, onClick: () => {
           void updateNow();
-        }, children: busy ? "\u66F4\u65B0\u4E2D\u2026" : "\u7ACB\u5373\u66F4\u65B0" })
+        }, children: busy ? t("updating") : t("updateNow") })
       ] })
     ] })
   ] }) });
@@ -679,11 +799,16 @@ function apply(ctx) {
     if (result.ok) return result.value;
     throw new Error(result.error?.message ?? `plugin-center: ${endpoint} failed`);
   };
+  const initial = ctx.locale?.getLocale?.()?.active;
+  if (typeof initial === "string") adoptLocale(initial);
+  ctx.on?.("locale/change", (snap) => {
+    adoptLocale(snap?.active);
+  });
   ctx.slots.inject("settings.section", () => ctx.slots.register({
     name: "settings.section",
     id: "plugin-center",
     order: 50,
-    label: () => "\u63D2\u4EF6\u4E2D\u5FC3"
+    label: () => STRINGS[localeId].title
   }, CenterPanel));
   ctx.slots.inject("conversation.session.header.utilities", () => ctx.slots.register({
     name: "conversation.session.header.utilities",

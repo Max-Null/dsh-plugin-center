@@ -212,11 +212,92 @@ async function checkWhatNew(): Promise<void> {
   } catch { /* silent */ }
 }
 
-const SOURCE_LABEL: Record<PluginSource, string> = { official: '官方', installed: '用户安装', local: '本地开发', builtin: '内置' }
 const CATEGORIES = ['ui', 'usage', 'theme', 'model', 'session', 'memory', 'tools', 'vision', 'skill', 'workflow', 'notify', 'dev', 'market', 'fun']
+
+// ---- i18n（2026-08-17 用户反馈：未适配 DSH 双语切换）----------------------
+// DSH locale 机制：ctx.locale 服务 + `locale/change` 事件（快照 active: 'zh'|'en'）。
+// 模块级 localeId + 监听器（apply 时接线），组件经 useT 订阅切换重渲染。
+type LocaleId = 'zh' | 'en'
+const STRINGS = {
+  zh: {
+    title: '插件中心', tabInstalled: '已安装', tabMarket: '市场', tabUpdates: '更新',
+    headSummary: '已安装 {a} · 有更新 {b} · 失效 {c}',
+    check: '检查更新', checking: '检查中…', updateAll: '更新全部（{n}）',
+    searchInstalled: '搜索已安装插件', allSources: '全部来源',
+    srcOfficial: '官方', srcInstalled: '用户安装', srcLocal: '本地开发', srcBuiltin: '内置',
+    all: '全部', searchMarket: '搜索社区插件', allMarkets: '全部源',
+    gridDouble: '双列网格', gridSingle: '单列列表',
+    loadFailed: '加载失败：{e}', loading: '加载中…',
+    marketLoading: '加载市场目录中…', loadMore: '正在加载更多…（已加载 {n} 个）',
+    checkingUpdates: '检查更新中…', noUpdates: '没有可用的更新。', recheck: '重新检查',
+    incompat: '不兼容当前 DSH', update: '更新', updating: '更新中…',
+    install: '安装', installing: '安装中…',
+    pendingRestart: '待重启生效', installedTag: '已安装',
+    disabledTag: '已禁用', requiresDsh: '要求 DSH {r}',
+    installQueued: '已发起安装 {n}，重启 dsh web 后生效', installFailed: '安装失败：{e}',
+    installNotApplied: '安装未生效',
+    updatedOne: '已更新 {n}，重启 dsh web 后生效', updateFailed: '更新失败：{e}',
+    updateNotApplied: '更新未生效',
+    updatedMany: '已更新 {n} 个插件，重启 dsh web 后生效',
+    updateSummary: '更新完成：成功 {a}，失败 {b}（{c}）',
+    whatsNewTitle: '插件更新', whatsNewSub: '{n} 个插件有新版本',
+    later: '稍后', markAllRead: '全部标记已读', updateNow: '立即更新', close: '关闭',
+    checkFail: '检查更新失败，请稍后重试',
+    foundUpdates: '发现 {n} 个可更新插件', allUpToDate: '所有插件均为最新',
+  },
+  en: {
+    title: 'Plugin Center', tabInstalled: 'Installed', tabMarket: 'Market', tabUpdates: 'Updates',
+    headSummary: '{a} installed · {b} updates · {c} failed',
+    check: 'Check updates', checking: 'Checking…', updateAll: 'Update all（{n}）',
+    searchInstalled: 'Search installed plugins', allSources: 'All sources',
+    srcOfficial: 'Official', srcInstalled: 'User installed', srcLocal: 'Local dev', srcBuiltin: 'Built-in',
+    all: 'All', searchMarket: 'Search community plugins', allMarkets: 'All sources',
+    gridDouble: 'Two-column grid', gridSingle: 'Single-column list',
+    loadFailed: 'Failed to load: {e}', loading: 'Loading…',
+    marketLoading: 'Loading market catalog…', loadMore: 'Loading more… ({n} loaded)',
+    checkingUpdates: 'Checking for updates…', noUpdates: 'No updates available.', recheck: 'Check again',
+    incompat: 'Incompatible with current DSH', update: 'Update', updating: 'Updating…',
+    install: 'Install', installing: 'Installing…',
+    pendingRestart: 'Restart pending', installedTag: 'Installed',
+    disabledTag: 'Disabled', requiresDsh: 'Requires DSH {r}',
+    installQueued: 'Install of {n} started; restart dsh web to take effect', installFailed: 'Install failed: {e}',
+    installNotApplied: 'Install did not take effect',
+    updatedOne: 'Updated {n}; restart dsh web to take effect', updateFailed: 'Update failed: {e}',
+    updateNotApplied: 'Update did not take effect',
+    updatedMany: 'Updated {n} plugins; restart dsh web to take effect',
+    updateSummary: 'Update done: {a} succeeded, {b} failed ({c})',
+    whatsNewTitle: 'Plugin updates', whatsNewSub: '{n} plugins have new versions',
+    later: 'Later', markAllRead: 'Mark all read', updateNow: 'Update now', close: 'Close',
+    checkFail: 'Failed to check updates, please retry later',
+    foundUpdates: '{n} updates found', allUpToDate: 'All plugins are up to date',
+  },
+} as const
+type StringKey = keyof typeof STRINGS.zh
+let localeId: LocaleId = 'zh'
+const localeListeners = new Set<() => void>()
+function adoptLocale(id: string | undefined): void {
+  const next: LocaleId = id === 'en' ? 'en' : 'zh'
+  if (next === localeId) return
+  localeId = next
+  localeListeners.forEach(l => l())
+}
+function fmt(tpl: string, vars: Record<string, unknown> = {}): string {
+  return tpl.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ''))
+}
+/** 文案函数 + 语言订阅：DSH 切换语言时组件自动重渲染。 */
+function useT(): (key: StringKey, vars?: Record<string, unknown>) => string {
+  const [id, setId] = useState(localeId)
+  useEffect(() => {
+    const l = () => { setId(localeId) }
+    localeListeners.add(l)
+    return () => { localeListeners.delete(l) }
+  }, [])
+  return (key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars)
+}
 
 // ---- views ----
 function InstalledView({ search, category, source }: { search: string; category: string | null; source: PluginSource | null }) {
+  const t = useT()
   const [items, setItems] = useState<InstalledPlugin[] | null>(installedCache)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -228,8 +309,11 @@ function InstalledView({ search, category, source }: { search: string; category:
     )
     return () => { alive = false }
   }, [])
-  if (error !== null) return <p className="pc-sub">加载失败：{error}</p>
-  if (items === null) return <p className="pc-sub">加载中…</p>
+  if (error !== null) return <p className="pc-sub">{t('loadFailed', { e: error })}</p>
+  if (items === null) return <p className="pc-sub">{t('loading')}</p>
+  const srcLabel: Record<PluginSource, string> = {
+    official: t('srcOfficial'), installed: t('srcInstalled'), local: t('srcLocal'), builtin: t('srcBuiltin'),
+  }
   const q = search.trim().toLowerCase()
   const filtered = items.filter(p => {
     const matchSearch = q === ''
@@ -247,15 +331,15 @@ function InstalledView({ search, category, source }: { search: string; category:
           <div className="pc-row">
             <span className="pc-name">{p.displayName}</span>
             {p.version !== null && <span className="pc-ver">v{p.version}</span>}
-            <span className={`pc-badge ${p.source}`}>{SOURCE_LABEL[p.source]}</span>
+            <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
             <span className="pc-spacer" />
             <span className={`pc-dot${p.fiberPhase === 'failed' ? ' failed' : ''}`} />
           </div>
           {p.description !== null && <div className="pc-desc">{p.description}</div>}
           <div className="pc-meta">
             {p.categories.map(c => <span key={c} className="pc-tag">{c}</span>)}
-            {p.compatRange !== null && <span className="pc-tag">要求 DSH {p.compatRange}</span>}
-            {!p.enabled && <span className="pc-tag">已禁用</span>}
+            {p.compatRange !== null && <span className="pc-tag">{t('requiresDsh', { r: p.compatRange })}</span>}
+            {!p.enabled && <span className="pc-tag">{t('disabledTag')}</span>}
           </div>
         </div>
       ))}
@@ -264,6 +348,7 @@ function InstalledView({ search, category, source }: { search: string; category:
 }
 
 function MarketView({ category, single, source, search, onCount }: { category: string | null; single: boolean; source: string; search: string; onCount: (n: number) => void }) {
+  const t = useT()
   const [items, setItems] = useState<MarketPlugin[]>(marketCache[source]?.plugins ?? [])
   const [done, setDone] = useState(marketCache[source]?.done ?? false)
   const [error, setError] = useState<string | null>(null)
@@ -299,8 +384,8 @@ function MarketView({ category, single, source, search, onCount }: { category: s
     void poll()
     return () => { alive = false; if (timer !== undefined) clearTimeout(timer) }
   }, [source, onCount])
-  if (error !== null) return <p className="pc-sub">加载失败：{error}</p>
-  if (items.length === 0 && !done) return <p className="pc-sub">加载市场目录中…</p>
+  if (error !== null) return <p className="pc-sub">{t('loadFailed', { e: error })}</p>
+  if (items.length === 0 && !done) return <p className="pc-sub">{t('marketLoading')}</p>
   const q = search.trim().toLowerCase()
   const filtered = items.filter(m => {
     const matchSearch = q === ''
@@ -308,11 +393,12 @@ function MarketView({ category, single, source, search, onCount }: { category: s
       || (m.description.zh || m.description.en).toLowerCase().includes(q)
     return matchSearch && (category === null || m.categories.includes(category))
   })
+  const descOf = (m: MarketPlugin): string => localeId === 'en' ? (m.description.en || m.description.zh) : (m.description.zh || m.description.en)
   const install = (m: MarketPlugin) => {
     setBusy(m.name)
     void rpc('install', { spec: m.spec }).then(
       v => {
-        if (v !== true) throw new Error('安装未生效')
+        if (v !== true) throw new Error(t('installNotApplied'))
         setBusy(null)
         pendingInstall.add(m.spec)
         for (const key of Object.keys(marketCache)) {
@@ -320,11 +406,11 @@ function MarketView({ category, single, source, search, onCount }: { category: s
           if (c !== undefined) c.plugins = c.plugins.map(p => p.name === m.name ? { ...p, installed: true } : p)
         }
         setItems(prev => prev.map(p => p.name === m.name ? { ...p, installed: true } : p))
-        showToast(`已发起安装 ${m.name}，重启 dsh web 后生效`)
+        showToast(t('installQueued', { n: m.name }))
       },
       e => {
         setBusy(null)
-        showToast(`安装失败：${e instanceof Error ? e.message : String(e)}`, 'error')
+        showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error')
       },
     )
   }
@@ -338,18 +424,18 @@ function MarketView({ category, single, source, search, onCount }: { category: s
               {m.stars !== null && <span className="pc-ver">★ {m.stars}</span>}
               {m.version !== null && <span className="pc-ver">v{m.version}</span>}
             </div>
-            <div className="pc-desc">{m.description.zh || m.description.en}</div>
+            <div className="pc-desc">{descOf(m)}</div>
             <div className="pc-meta">
               {m.categories.map(c => <span key={c} className="pc-tag">{c}</span>)}
               <span className="pc-spacer" />
               {m.installed || pendingInstall.has(m.spec)
-                ? <span className="pc-tag">{pendingInstall.has(m.spec) ? '待重启生效' : '已安装'}</span>
-                : <button className="pc-btn primary" disabled={busy !== null} onClick={() => { install(m) }}>{busy === m.name ? '安装中…' : '安装'}</button>}
+                ? <span className="pc-tag">{pendingInstall.has(m.spec) ? t('pendingRestart') : t('installedTag')}</span>
+                : <button className="pc-btn primary" disabled={busy !== null} onClick={() => { install(m) }}>{busy === m.name ? t('installing') : t('install')}</button>}
             </div>
           </div>
         ))}
       </div>
-      {!done && <p className="pc-sub">正在加载更多…（已加载 {items.length} 个）</p>}
+      {!done && <p className="pc-sub">{t('loadMore', { n: items.length })}</p>}
     </div>
   )
 }
@@ -360,11 +446,12 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
   updateOne: (name: string) => void
   busy: string | null
 }) {
-  if (updates === null) return <p className="pc-sub">检查更新中…</p>
+  const t = useT()
+  if (updates === null) return <p className="pc-sub">{t('checkingUpdates')}</p>
   if (updates.length === 0) return (
     <div>
-      <p className="pc-sub">没有可用的更新。</p>
-      <button className="pc-btn" onClick={refresh}>重新检查</button>
+      <p className="pc-sub">{t('noUpdates')}</p>
+      <button className="pc-btn" onClick={refresh}>{t('recheck')}</button>
     </div>
   )
   return (
@@ -376,9 +463,9 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
-            {u.compat === 'incompatible' && <span className="pc-tag danger">不兼容当前 DSH</span>}
+            {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name) }}>{busy === u.name || busy === '__all__' ? '更新中…' : '更新'}</button>
+            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name) }}>{busy === u.name || busy === '__all__' ? t('updating') : t('update')}</button>
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
@@ -394,6 +481,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
 type View = 'installed' | 'market' | 'updates'
 
 function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' }) {
+  const t = useT()
   const [view, setView] = useState<View>('installed')
   const [category, setCategory] = useState<string | null>(null)
   const [single, setSingle] = useState(false)
@@ -420,15 +508,15 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         setUpdates(digests)
         setChecking(false)
         if (!silent) {
-          showToast(digests.length > 0 ? `发现 ${digests.length} 个可更新插件` : '所有插件均为最新')
+          showToast(digests.length > 0 ? t('foundUpdates', { n: digests.length }) : t('allUpToDate'))
         }
       },
       () => {
         setChecking(false)
-        if (!silent) showToast('检查更新失败，请稍后重试', 'error')
+        if (!silent) showToast(t('checkFail'), 'error')
       },
     )
-  }, [])
+  }, [t])
   useEffect(() => {
     void rpc('listInstalled').then(
       v => {
@@ -467,10 +555,10 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     setBusyUpdate(name)
     void rpc('update', { name }).then(
       v => {
-        if (v !== true) throw new Error('更新未生效')
-        setBusyUpdate(null); showToast(`已更新 ${name}，重启 dsh web 后生效`)
+        if (v !== true) throw new Error(t('updateNotApplied'))
+        setBusyUpdate(null); showToast(t('updatedOne', { n: name }))
       },
-      e => { setBusyUpdate(null); showToast(`更新失败：${e instanceof Error ? e.message : String(e)}`, 'error') },
+      e => { setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error') },
     )
   }
   // 串行逐个更新（2026-08-17 实测：并发 update 会同时 spawn 多个 pnpm，
@@ -483,7 +571,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     for (const u of updates) {
       try {
         const v = await rpc('update', { name: u.name }) as boolean
-        if (v !== true) throw new Error('更新未生效')
+        if (v !== true) throw new Error(t('updateNotApplied'))
         okCount++
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
@@ -491,9 +579,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     }
     setBusyUpdate(null)
     if (failures.length === 0) {
-      showToast(`已更新 ${okCount} 个插件，重启 dsh web 后生效`)
+      showToast(t('updatedMany', { n: okCount }))
     } else {
-      showToast(`更新完成：成功 ${okCount}，失败 ${failures.length}（${failures.join('；')}）`, 'error')
+      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error')
     }
     refreshUpdates()
   }
@@ -506,31 +594,31 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   )
   const tabs = (
     <div className="pc-tabs">
-      {tab('installed', '已安装', installedCount)}
-      {tab('market', '市场', marketCount)}
-      {tab('updates', '更新', updates?.length ?? 0)}
+      {tab('installed', t('tabInstalled'), installedCount)}
+      {tab('market', t('tabMarket'), marketCount)}
+      {tab('updates', t('tabUpdates'), updates?.length ?? 0)}
     </div>
   )
   const head = (showTitle: boolean) => (
     <div className="pc-head">
-      {showTitle && <span className="pc-title">插件中心</span>}
-      <span className="pc-sub">已安装 {installedCount} · 有更新 {updates?.length ?? 0} · 失效 {failedCount}</span>
+      {showTitle && <span className="pc-title">{t('title')}</span>}
+      <span className="pc-sub">{t('headSummary', { a: installedCount, b: updates?.length ?? 0, c: failedCount })}</span>
       <span className="pc-spacer" />
-      <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? '检查中…' : '检查更新'}</button>
-      <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>更新全部（{updates?.length ?? 0}）</button>
+      <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? t('checking') : t('check')}</button>
+      <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{t('updateAll', { n: updates?.length ?? 0 })}</button>
     </div>
   )
   const installedToolbar = view === 'installed' ? (
     <div className="pc-toolbar">
-      <input className="pc-search" value={search} onChange={e => { setSearch(e.target.value) }} placeholder="搜索已安装插件" />
+      <input className="pc-search" value={search} onChange={e => { setSearch(e.target.value) }} placeholder={t('searchInstalled')} />
       <select className="pc-select" value={installedSource ?? ''} onChange={e => { setInstalledSource(e.target.value === '' ? null : e.target.value as PluginSource) }}>
-        <option value="">全部来源</option>
-        <option value="official">官方</option>
-        <option value="installed">用户安装</option>
-        <option value="local">本地开发</option>
-        <option value="builtin">内置</option>
+        <option value="">{t('allSources')}</option>
+        <option value="official">{t('srcOfficial')}</option>
+        <option value="installed">{t('srcInstalled')}</option>
+        <option value="local">{t('srcLocal')}</option>
+        <option value="builtin">{t('srcBuiltin')}</option>
       </select>
-      <button className={`pc-chip${installedCategory === null ? ' active' : ''}`} onClick={() => { setInstalledCategory(null) }}>全部</button>
+      <button className={`pc-chip${installedCategory === null ? ' active' : ''}`} onClick={() => { setInstalledCategory(null) }}>{t('all')}</button>
       {CATEGORIES.map(c => (
         <button key={c} className={`pc-chip${installedCategory === c ? ' active' : ''}`} onClick={() => { setInstalledCategory(c) }}>{c}</button>
       ))}
@@ -538,18 +626,18 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   ) : null
   const marketToolbar = view === 'market' ? (
     <div className="pc-toolbar">
-      <input className="pc-search" value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder="搜索社区插件" />
+      <input className="pc-search" value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder={t('searchMarket')} />
       <select className="pc-select" value={source} onChange={e => { setSource(e.target.value); setCategory(null) }}>
         <option value="awesome">awesome-dsh-plugin</option>
         <option value="oh-my-dsh">Oh-My-DSH</option>
-        <option value="all">全部源</option>
+        <option value="all">{t('allMarkets')}</option>
       </select>
-      <button className={`pc-chip${category === null ? ' active' : ''}`} onClick={() => { setCategory(null) }}>全部</button>
+      <button className={`pc-chip${category === null ? ' active' : ''}`} onClick={() => { setCategory(null) }}>{t('all')}</button>
       {CATEGORIES.map(c => (
         <button key={c} className={`pc-chip${category === c ? ' active' : ''}`} onClick={() => { setCategory(c) }}>{c}</button>
       ))}
       <span className="pc-spacer" />
-      <button type="button" title={single ? '双列网格' : '单列列表'} aria-label="切换布局" className="pc-iconbtn" onClick={() => { setSingle(v => !v) }}>
+      <button type="button" title={single ? t('gridDouble') : t('gridSingle')} aria-label={single ? t('gridDouble') : t('gridSingle')} className="pc-iconbtn" onClick={() => { setSingle(v => !v) }}>
         {single ? (
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" />
@@ -592,8 +680,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
 }
 
 function HeaderButton() {
+  const t = useT()
   return (
-    <button type="button" title="插件中心" aria-label="插件中心" className="pc-headerbtn" onClick={openOverlay}>
+    <button type="button" title={t('title')} aria-label={t('title')} className="pc-headerbtn" onClick={openOverlay}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
         <rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" />
         <rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1" />
@@ -603,15 +692,16 @@ function HeaderButton() {
 }
 
 function OverlayPanel() {
+  const t = useT()
   const open = useOverlayOpen()
   if (!open) return null
   return (
     <div className="pc-overlay" role="presentation">
-      <div className="pc-panel" role="dialog" aria-modal="true" aria-label="插件中心">
+      <div className="pc-panel" role="dialog" aria-modal="true" aria-label={t('title')}>
         <div className="pc-panel-head">
-          <span className="pc-title">插件中心</span>
+          <span className="pc-title">{t('title')}</span>
           <span className="pc-spacer" />
-          <button type="button" className="pc-close" onClick={closeOverlay} aria-label="关闭">✕</button>
+          <button type="button" className="pc-close" onClick={closeOverlay} aria-label={t('close')}>✕</button>
         </div>
         <div className="pc-panel-body">
           <CenterPanel variant="overlay" />
@@ -628,6 +718,7 @@ function Toast() {
 }
 
 function WhatsNewDialog() {
+  const t = useT()
   const open = useWhatsNewOpen()
   const [busy, setBusy] = useState(false)
   if (!open || whatsNewDigests.length === 0) return null
@@ -639,7 +730,7 @@ function WhatsNewDialog() {
     for (const u of whatsNewDigests) {
       try {
         const v = await rpc('update', { name: u.name }) as boolean
-        if (v !== true) throw new Error('更新未生效')
+        if (v !== true) throw new Error(t('updateNotApplied'))
         okCount++
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
@@ -647,20 +738,20 @@ function WhatsNewDialog() {
     }
     setBusy(false)
     if (failures.length === 0) {
-      showToast(`已更新 ${okCount} 个插件，重启 dsh web 后生效`)
+      showToast(t('updatedMany', { n: okCount }))
       closeWhatsNew()
     } else {
-      showToast(`更新完成：成功 ${okCount}，失败 ${failures.length}（${failures.join('；')}）`, 'error')
+      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error')
     }
   }
   return (
     <div className="pc-overlay" role="presentation">
-      <div className="pc-panel" style={{ width: '540px' }} role="dialog" aria-modal="true" aria-label="插件更新">
+      <div className="pc-panel" style={{ width: '540px' }} role="dialog" aria-modal="true" aria-label={t('whatsNewTitle')}>
         <div className="pc-panel-head">
-          <span className="pc-title">插件更新</span>
-          <span className="pc-sub" style={{ marginTop: 0 }}>{whatsNewDigests.length} 个插件有新版本</span>
+          <span className="pc-title">{t('whatsNewTitle')}</span>
+          <span className="pc-sub" style={{ marginTop: 0 }}>{t('whatsNewSub', { n: whatsNewDigests.length })}</span>
           <span className="pc-spacer" />
-          <button type="button" className="pc-close" onClick={closeWhatsNew} aria-label="关闭">✕</button>
+          <button type="button" className="pc-close" onClick={closeWhatsNew} aria-label={t('close')}>✕</button>
         </div>
         <div className="pc-panel-body" style={{ overflow: 'auto' }}>
           {whatsNewDigests.map(u => (
@@ -679,9 +770,9 @@ function WhatsNewDialog() {
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-            <button className="pc-btn" onClick={closeWhatsNew}>稍后</button>
-            <button className="pc-btn" onClick={closeWhatsNew}>全部标记已读</button>
-            <button className="pc-btn primary" disabled={busy} onClick={() => { void updateNow() }}>{busy ? '更新中…' : '立即更新'}</button>
+            <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>
+            <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
+            <button className="pc-btn primary" disabled={busy} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
           </div>
         </div>
       </div>
@@ -692,7 +783,7 @@ function WhatsNewDialog() {
 // ---- client plugin body ----
 const inject = ['slots', 'connection']
 
-function apply(ctx: { slots: any; connection: any }): void {
+function apply(ctx: { slots: any; connection: any; locale?: any; on?: (event: string, handler: (payload: any) => void) => void }): void {
   injectCss()
   rpc = async (endpoint: string, payload: unknown = {}): Promise<unknown> => {
     const result = await ctx.connection.rpc.call('/plugin-center', endpoint, payload)
@@ -700,8 +791,13 @@ function apply(ctx: { slots: any; connection: any }): void {
     throw new Error(result.error?.message ?? `plugin-center: ${endpoint} failed`)
   }
 
+  // 双语：初始快照 + locale/change 事件（DSH 语言切换时组件经 useT 重渲染）
+  const initial = ctx.locale?.getLocale?.()?.active
+  if (typeof initial === 'string') adoptLocale(initial)
+  ctx.on?.('locale/change', (snap: { active?: string } | undefined) => { adoptLocale(snap?.active) })
+
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'plugin-center', order: 50, label: () => '插件中心',
+    name: 'settings.section', id: 'plugin-center', order: 50, label: () => STRINGS[localeId].title,
   }, CenterPanel))
 
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
