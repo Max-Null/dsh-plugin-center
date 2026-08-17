@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DSH 插件管理中心 — UI 草案</title>
+<style>
+  /* =====================================================================
+     下面这段「:root / [data-theme=dark] 定义 --dsw-* token」只是为了让
+     独立 demo 能渲染 —— 真实实现里这些 token 由 ui-theme 的
+     design-platform.css 提供，插件中心组件【绝不】自己定义或硬编码颜色，
+     只用 var(--dsw-*)。皮肤插件（如 dsh-skin）通过 ctx.theme.overrideTokens
+     覆盖这些 token 时，组件颜色会自动跟随。
+     ===================================================================== */
+  :root {
+    --dsw-alias-bg-base: #ffffff;
+    --dsw-alias-bg-layer-1: #ffffff;
+    --dsw-alias-bg-layer-2: #ffffff;
+    --dsw-alias-bg-module-platform: #f5f6f7;
+    --dsw-alias-bg-overlay: #e9ecf2;
+    --dsw-alias-bg-mask-1: rgba(0,0,0,0.24);
+    --dsw-alias-border-l1: rgba(0,0,0,0.04);
+    --dsw-alias-border-l2: rgba(0,0,0,0.10);
+    --dsw-alias-border-l3: rgba(0,0,0,0.12);
+    --dsw-alias-label-primary: #0f1115;
+    --dsw-alias-label-secondary: #616667;
+    --dsw-alias-label-tertiary: #81858c;
+    --dsw-alias-label-caption: #adb2b8;
+    --dsw-alias-brand-primary: #0f1115;
+    --dsw-alias-brand-text: #0f1115;
+    --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
+    --dsw-alias-button-primary-hover: #2c2c2e;
+    --dsw-alias-state-business-primary: #4176e6;
+    --dsw-alias-state-business-tertiary: #e4edfd;
+    --dsw-alias-state-error-primary: #ec1313;
+    --dsw-alias-state-success-primary: #22c55e;
+    --dsw-alias-state-success-tertiary: #e6faed;
+    --dsw-alias-state-warn-primary: #f59e0b;
+    --dsw-alias-state-warn-tertiary: #fef5e7;
+    --dsw-alias-interactive-bg-hover: rgba(38,49,72,0.06);
+    --dsw-alias-interactive-bg-active: rgba(38,49,72,0.10);
+    --dsw-alias-interactive-bg-hover-danger: rgba(236,19,19,0.05);
+    --dsw-specific-sidebar-fill: #f9fafb;
+  }
+  [data-theme="dark"] {
+    --dsw-alias-bg-base: #151517;
+    --dsw-alias-bg-layer-1: #232324;
+    --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-bg-module-platform: #353638;
+    --dsw-alias-bg-overlay: #616667;
+    --dsw-alias-bg-mask-1: rgba(0,0,0,0.5);
+    --dsw-alias-border-l1: rgba(255,255,255,0.06);
+    --dsw-alias-border-l2: rgba(255,255,255,0.12);
+    --dsw-alias-border-l3: rgba(255,255,255,0.16);
+    --dsw-alias-label-primary: #f9fafb;
+    --dsw-alias-label-secondary: #cfd3d6;
+    --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-label-caption: #81858c;
+    --dsw-alias-brand-primary: #f9fafb;
+    --dsw-alias-brand-text: #f9fafb;
+    --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
+    --dsw-alias-button-primary-hover: #cfd3d6;
+    --dsw-alias-state-business-primary: #679efe;
+    --dsw-alias-state-business-tertiary: #18212f;
+    --dsw-alias-state-error-primary: #f25a5a;
+    --dsw-alias-state-success-primary: #22c55e;
+    --dsw-alias-state-success-tertiary: #1b2a20;
+    --dsw-alias-state-warn-primary: #f59e0b;
+    --dsw-alias-state-warn-tertiary: #33270f;
+    --dsw-alias-interactive-bg-hover: rgba(255,255,255,0.08);
+    --dsw-alias-interactive-bg-active: rgba(255,255,255,0.14);
+    --dsw-alias-interactive-bg-hover-danger: rgba(242,90,90,0.15);
+    --dsw-specific-sidebar-fill: #1b1b1c;
+  }
+
+  /* =====================================================================
+     组件样式：从这里开始【只允许 var(--dsw-*)】，无任何字面量颜色。
+     ===================================================================== */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    font-size:14px; line-height:22px; color:var(--dsw-alias-label-primary);
+    background:var(--dsw-alias-bg-base);
+    -webkit-font-smoothing:antialiased;
+  }
+  button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+
+  .demo-toolbar {
+    display:flex; align-items:center; gap:12px; padding:10px 20px;
+    border-bottom:1px solid var(--dsw-alias-border-l2); background:var(--dsw-alias-bg-base);
+  }
+  .demo-toolbar .title { font-weight:600; }
+  .demo-toolbar .hint { color:var(--dsw-alias-label-tertiary); font-size:12px; }
+  .demo-toolbar .spacer { flex:1; }
+  .switch {
+    height:30px; padding:0 12px; border-radius:8px;
+    border:1px solid var(--dsw-alias-border-l2); background:var(--dsw-alias-bg-module-platform);
+    font-size:13px; color:var(--dsw-alias-label-secondary);
+  }
+  .switch:hover { background:var(--dsw-alias-interactive-bg-hover); }
+  .switch.on { color:var(--dsw-alias-label-primary); border-color:var(--dsw-alias-state-business-primary); }
+
+  .settings {
+    display:grid; grid-template-columns:232px 1fr;
+    max-width:1080px; margin:20px auto; border:1px solid var(--dsw-alias-border-l2);
+    border-radius:10px; overflow:hidden; background:var(--dsw-alias-bg-base);
+  }
+  .nav {
+    background:var(--dsw-specific-sidebar-fill); border-right:1px solid var(--dsw-alias-border-l2);
+    padding:12px 8px; display:flex; flex-direction:column; gap:2px;
+  }
+  .nav-item {
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-radius:8px; color:var(--dsw-alias-label-secondary); text-align:left;
+  }
+  .nav-item:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+  .nav-item.active { background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
+  .nav-item .dot { width:6px; height:6px; border-radius:50%; background:var(--dsw-alias-label-caption); }
+  .nav-item.active .dot { background:var(--dsw-alias-state-business-primary); }
+
+  .content { padding:24px 28px; min-height:640px; }
+  .page-head { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .page-head h1 { font-size:18px; font-weight:600; }
+  .page-head .sub { color:var(--dsw-alias-label-tertiary); font-size:13px; }
+  .page-head .spacer { flex:1; }
+  .btn {
+    height:32px; padding:0 14px; border-radius:8px;
+    border:1px solid var(--dsw-alias-border-l2); background:var(--dsw-alias-bg-module-platform);
+    font-size:13px; color:var(--dsw-alias-label-primary);
+  }
+  .btn:hover { background:var(--dsw-alias-interactive-bg-hover); }
+  .btn.primary { background:var(--dsw-alias-button-primary-fill); color:var(--dsw-alias-bg-base); border:none; }
+  .btn.primary:hover { background:var(--dsw-alias-button-primary-hover); }
+
+  .tabs { display:flex; gap:4px; margin:16px 0 20px; border-bottom:1px solid var(--dsw-alias-border-l2); }
+  .tab {
+    padding:8px 14px; color:var(--dsw-alias-label-tertiary);
+    border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .tab:hover { color:var(--dsw-alias-label-secondary); }
+  .tab.active { color:var(--dsw-alias-label-primary); border-bottom-color:var(--dsw-alias-state-business-primary); }
+  .tab .count { margin-left:6px; font-size:12px; color:var(--dsw-alias-label-caption); }
+
+  .search {
+    display:flex; align-items:center; gap:8px; height:36px; padding:0 12px;
+    border:1px solid var(--dsw-alias-border-l2); border-radius:8px;
+    background:var(--dsw-alias-bg-base); margin-bottom:16px; color:var(--dsw-alias-label-tertiary);
+  }
+  .search input { flex:1; border:none; outline:none; background:none; font:inherit; color:var(--dsw-alias-label-primary); }
+
+  .badge {
+    display:inline-flex; align-items:center; height:20px; padding:0 8px;
+    border-radius:6px; font-size:12px; line-height:1;
+  }
+  .badge.official { background:var(--dsw-alias-state-business-tertiary); color:var(--dsw-alias-state-business-primary); }
+  .badge.installed { background:var(--dsw-alias-state-warn-tertiary); color:var(--dsw-alias-state-warn-primary); }
+  .badge.local { background:var(--dsw-alias-bg-module-platform); color:var(--dsw-alias-label-tertiary); }
+
+  .card {
+    border:1px solid var(--dsw-alias-border-l2); border-radius:10px;
+    padding:14px 16px; margin-bottom:10px; background:var(--dsw-alias-bg-layer-1);
+    transition:border-color .15s;
+  }
+  .card:hover { border-color:var(--dsw-alias-border-l3); }
+  .card.failed { border-color:var(--dsw-alias-state-error-primary); }
+  .card-head { display:flex; align-items:center; gap:10px; }
+  .card-name { font-weight:500; }
+  .card-ver { color:var(--dsw-alias-label-caption); font-size:12px; }
+  .card-head .spacer { flex:1; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--dsw-alias-state-success-primary); }
+  .status-dot.failed { background:var(--dsw-alias-state-error-primary); }
+  .status-dot.pending { background:var(--dsw-alias-label-caption); }
+  .card-desc { color:var(--dsw-alias-label-secondary); font-size:13px; margin:6px 0 10px; }
+  .card-meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .tag {
+    display:inline-flex; align-items:center; height:20px; padding:0 8px;
+    border-radius:6px; font-size:12px; line-height:1;
+    background:var(--dsw-alias-bg-module-platform); color:var(--dsw-alias-label-secondary);
+  }
+  .tag.compat { background:var(--dsw-alias-state-warn-tertiary); color:var(--dsw-alias-state-warn-primary); }
+  .tag.danger { background:var(--dsw-alias-interactive-bg-hover-danger); color:var(--dsw-alias-state-error-primary); }
+  .card-actions { display:flex; gap:8px; margin-top:12px; }
+  .card.collapsed .card-desc, .card.collapsed .card-meta, .card.collapsed .card-actions { display:none; }
+  .btn.small { height:26px; padding:0 10px; font-size:12px; }
+  .icon-btn {
+    width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center;
+    border:1px solid var(--dsw-alias-border-l2); border-radius:8px;
+    background:var(--dsw-alias-bg-module-platform); color:var(--dsw-alias-label-secondary);
+    flex:none;
+  }
+  .icon-btn:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+  .chip {
+    height:28px; padding:0 12px; border-radius:18px;
+    border:1px solid var(--dsw-alias-border-l2); background:var(--dsw-alias-bg-base);
+    color:var(--dsw-alias-label-secondary); font-size:13px;
+  }
+  .chip:hover { background:var(--dsw-alias-interactive-bg-hover); }
+  .chip.active { background:var(--dsw-alias-state-business-primary); border-color:var(--dsw-alias-state-business-primary); color:var(--dsw-alias-bg-base); }
+
+  .market-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .market-grid.single { grid-template-columns:1fr; }
+  .market-card {
+    border:1px solid var(--dsw-alias-border-l2); border-radius:10px;
+    padding:14px 16px; background:var(--dsw-alias-bg-layer-1);
+  }
+  .market-card .m-head { display:flex; align-items:center; gap:8px; }
+  .market-card .m-name { font-weight:500; }
+  .market-card .m-star { margin-left:auto; color:var(--dsw-alias-label-caption); font-size:12px; }
+  .market-card .m-desc { color:var(--dsw-alias-label-secondary); font-size:13px; margin:6px 0 12px; }
+  .market-card .m-foot { display:flex; align-items:center; gap:8px; }
+
+  .update-card { border:1px solid var(--dsw-alias-border-l2); border-radius:10px; padding:16px; margin-bottom:12px; }
+  .update-head { display:flex; align-items:center; gap:10px; }
+  .ver-arrow { color:var(--dsw-alias-label-caption); }
+  .ver-new { color:var(--dsw-alias-state-business-primary); font-weight:500; }
+  .update-log { margin:10px 0 0; padding:10px 12px; background:var(--dsw-alias-bg-module-platform); border-radius:8px; color:var(--dsw-alias-label-secondary); font-size:13px; }
+  .update-log li { margin-left:16px; margin-bottom:4px; }
+  .compat-warn {
+    margin-top:10px; padding:8px 12px; border-radius:8px;
+    background:var(--dsw-alias-interactive-bg-hover-danger); color:var(--dsw-alias-state-error-primary); font-size:13px;
+  }
+
+  .overlay {
+    position:fixed; inset:0; background:var(--dsw-alias-bg-mask-1);
+    display:flex; align-items:center; justify-content:center; z-index:100;
+  }
+  .overlay.hidden { display:none; }
+  .wn-dialog {
+    width:520px; max-height:80vh; overflow:auto; background:var(--dsw-alias-bg-base);
+    border-radius:12px; box-shadow:0 24px 64px rgba(0,0,0,.24);
+  }
+  .wn-head { display:flex; align-items:center; gap:10px; padding:20px 24px 0; }
+  .wn-head h2 { font-size:17px; font-weight:600; }
+  .wn-head .sub { color:var(--dsw-alias-label-tertiary); font-size:13px; }
+  .wn-head .spacer { flex:1; }
+  .wn-close { color:var(--dsw-alias-label-tertiary); font-size:20px; padding:4px 8px; border-radius:6px; }
+  .wn-close:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+  .wn-body { padding:12px 24px 8px; }
+  .wn-item { border-bottom:1px solid var(--dsw-alias-border-l1); padding:16px 0; }
+  .wn-item:last-child { border-bottom:none; }
+  .wn-item-head { display:flex; align-items:center; gap:8px; }
+  .wn-item-name { font-weight:500; }
+  .wn-item .ver-arrow { margin:0 4px; }
+  .wn-item-log { color:var(--dsw-alias-label-secondary); font-size:13px; margin-top:8px; }
+  .wn-item-log li { margin-left:16px; margin-bottom:3px; }
+  .wn-foot { padding:16px 24px 20px; display:flex; justify-content:flex-end; gap:8px; }
+</style>
+</head>
+<body data-theme="light">
+
+  <div class="demo-toolbar">
+    <span class="title">DSH 插件管理中心 · UI 草案</span>
+    <span class="hint">组件全用 var(--dsw-*)，兼容 skin 插件</span>
+    <span class="spacer"></span>
+    <button class="switch on" data-theme-switch="light">浅色</button>
+    <button class="switch" data-theme-switch="dark">深色</button>
+  </div>
+
+  <div class="settings">
+    <aside class="nav">
+      <button class="nav-item"><span class="dot"></span>通用</button>
+      <button class="nav-item"><span class="dot"></span>模型</button>
+      <button class="nav-item active"><span class="dot"></span>插件中心</button>
+      <button class="nav-item"><span class="dot"></span>关于</button>
+    </aside>
+
+    <main class="content">
+      <div class="page-head">
+        <div>
+          <h1>插件中心</h1>
+          <span class="sub">已安装 24 · 有更新 3 · 失效 1</span>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn" onclick="openWN()">检查更新</button>
+        <button class="btn primary">Update All（3）</button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-view="installed">已安装 <span class="count">24</span></button>
+        <button class="tab" data-view="market">市场 <span class="count">880</span></button>
+        <button class="tab" data-view="updates">更新 <span class="count">3</span></button>
+      </div>
+
+      <section data-panel="installed">
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <label class="search" style="flex:1;margin-bottom:0;"><span>⌕</span><input placeholder="搜索已安装插件" /></label>
+          <button class="icon-btn" id="collapse-btn" title="收起详情" aria-label="收起详情" onclick="toggleCollapse()">
+            <svg id="collapse-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>
+          </button>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-name">dsh-skin</span><span class="card-ver">v0.3.1</span>
+            <span class="badge installed">用户安装</span><span class="spacer"></span><span class="status-dot"></span>
+          </div>
+          <div class="card-desc">Skin switcher + custom wallpaper for DeepSeek Harness: curated palettes, translucent wallpaper, video wallpapers.</div>
+          <div class="card-meta">
+            <span class="tag">theme</span><span class="tag">ui</span><span class="tag compat">要求 DSH ^0.1.0-rc.6</span>
+          </div>
+          <div class="card-actions"><button class="btn small">详情</button><button class="btn small primary">更新到 0.3.1</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-name">dsh-memory</span><span class="card-ver">v0.1.1</span>
+            <span class="badge local">本地开发</span><span class="spacer"></span><span class="status-dot"></span>
+          </div>
+          <div class="card-desc">Cross-session plaintext memory: deterministic BM25 keyword recall, memory_save/list/search/confirm/forget tools behind a human-confirm gate.</div>
+          <div class="card-meta"><span class="tag">memory</span><span class="tag">tools</span><span class="tag">无更新源（file://）</span></div>
+        </div>
+        <div class="card failed">
+          <div class="card-head">
+            <span class="card-name">dsh-chinese-thinking</span><span class="card-ver">v0.2.0</span>
+            <span class="badge local">本地开发</span><span class="spacer"></span><span class="status-dot failed"></span>
+          </div>
+          <div class="card-desc">Injects one fixed system-prompt section so the agent thinks and replies in Chinese.</div>
+          <div class="card-meta"><span class="tag">session</span><span class="tag danger">加载失败</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-name">dsh-system-prompt</span><span class="card-ver">v0.1.0-rc.5</span>
+            <span class="badge official">官方</span><span class="spacer"></span><span class="status-dot"></span>
+          </div>
+          <div class="card-desc">System prompt assembly registry: ordered sections, tool schemas, and named variables.</div>
+          <div class="card-meta"><span class="tag">core</span><span class="tag">随 DSH 更新</span></div>
+        </div>
+      </section>
+
+      <section data-panel="market" hidden>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <label class="search" style="flex:1;margin-bottom:0;"><span>⌕</span><input placeholder="搜索社区插件" /></label>
+          <button class="icon-btn" id="layout-btn" title="单列列表" aria-label="切换布局" onclick="toggleMarketLayout()">
+            <svg id="layout-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="5" rx="1"/><rect x="2" y="9" width="12" height="5" rx="1"/></svg>
+          </button>
+        </div>
+        <div class="chips">
+          <button class="chip active">全部</button><button class="chip">ui</button><button class="chip">tools</button>
+          <button class="chip">memory</button><button class="chip">session</button><button class="chip">skill</button>
+          <button class="chip">theme</button><button class="chip">workflow</button><button class="chip">dev</button><button class="chip">fun</button>
+        </div>
+        <div class="market-grid">
+          <div class="market-card">
+            <div class="m-head"><span class="m-name">dsh-market</span><span class="m-star">★ 543</span></div>
+            <div class="m-desc">The plugin market inside DeepSeek Harness — browse, search, one-click install.</div>
+            <div class="m-foot"><span class="tag">market</span><button class="btn small primary">安装</button></div>
+          </div>
+          <div class="market-card">
+            <div class="m-head"><span class="m-name">dsh-better-sidebar</span><span class="m-star">★ 1.6k</span></div>
+            <div class="m-desc">开放式侧边栏底座：文件渲染编辑 / 终端 / Git / 子代理页面。</div>
+            <div class="m-foot"><span class="tag">ui</span><span class="tag">dev</span><button class="btn small">已安装</button></div>
+          </div>
+          <div class="market-card">
+            <div class="m-head"><span class="m-name">dsh-skin</span><span class="m-star">★ 54</span></div>
+            <div class="m-desc">Skin switcher + wallpaper：皮肤、壁纸、视频壁纸。</div>
+            <div class="m-foot"><span class="tag">theme</span><span class="tag">ui</span><button class="btn small">已安装</button></div>
+          </div>
+          <div class="market-card">
+            <div class="m-head"><span class="m-name">dsh-think-any-lang</span><span class="m-star">★ 3</span></div>
+            <div class="m-desc">思考语言选择器：Settings → General 下拉选 13 种语言。</div>
+            <div class="m-foot"><span class="tag">session</span><button class="btn small primary">安装</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="updates" hidden>
+        <div class="update-card">
+          <div class="update-head">
+            <span class="card-name">dsh-skin</span><span class="card-ver">v0.2.0</span><span class="ver-arrow">→</span><span class="ver-new">v0.3.1</span>
+            <span class="spacer" style="flex:1"></span><button class="btn small primary">更新</button>
+          </div>
+          <ul class="update-log">
+            <li>fix: break theme/change → applyWallpaper infinite recursion</li>
+            <li>feat: video wallpapers, wallpaper quality tiers, URL wallpaper</li>
+          </ul>
+          <div class="compat-warn">⚠ 该版本要求 DSH ^0.1.0-rc.6，当前 rc.5 —— 可能不兼容</div>
+        </div>
+        <div class="update-card">
+          <div class="update-head">
+            <span class="card-name">dsh-market</span><span class="card-ver">v1.1.0</span><span class="ver-arrow">→</span><span class="ver-new">v1.2.0</span>
+            <span class="spacer" style="flex:1"></span><button class="btn small primary">更新</button>
+          </div>
+          <ul class="update-log"><li>feat: category browse + installed view merged</li></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay hidden" id="wn-overlay">
+    <div class="wn-dialog" role="dialog" aria-label="插件更新">
+      <div class="wn-head">
+        <h2>插件更新</h2><span class="sub">3 个插件有新版本</span><span class="spacer"></span>
+        <button class="wn-close" onclick="closeWN()">✕</button>
+      </div>
+      <div class="wn-body">
+        <div class="wn-item">
+          <div class="wn-item-head"><span class="wn-item-name">dsh-skin</span><span class="card-ver">0.2.0</span><span class="ver-arrow">→</span><span class="ver-new">0.3.1</span></div>
+          <ul class="wn-item-log">
+            <li>修复：设置壁纸时无限递归导致设置行崩溃</li>
+            <li>新增：视频壁纸、壁纸质量分级、URL 壁纸</li>
+          </ul>
+        </div>
+        <div class="wn-item">
+          <div class="wn-item-head"><span class="wn-item-name">dsh-market</span><span class="card-ver">1.1.0</span><span class="ver-arrow">→</span><span class="ver-new">1.2.0</span></div>
+          <ul class="wn-item-log"><li>新增：分类浏览 + 已安装视图合并</li></ul>
+        </div>
+      </div>
+      <div class="wn-foot">
+        <button class="btn" onclick="closeWN()">稍后</button>
+        <button class="btn primary" onclick="closeWN()">全部标记已读</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const view = tab.dataset.view;
+      document.querySelectorAll('[data-panel]').forEach(p => p.hidden = (p.dataset.panel !== view));
+    });
+  });
+  document.querySelectorAll('[data-theme-switch]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.body.dataset.theme = btn.dataset.themeSwitch;
+      document.querySelectorAll('[data-theme-switch]').forEach(b => b.classList.toggle('on', b === btn));
+    });
+  });
+  function openWN(){ document.getElementById('wn-overlay').classList.remove('hidden'); }
+  function closeWN(){ document.getElementById('wn-overlay').classList.add('hidden'); }
+  // 已安装：收起/展开 —— 单按钮，图标 chevron 上下变换
+  let collapsed = false;
+  function toggleCollapse(){
+    collapsed = !collapsed;
+    document.querySelectorAll('[data-panel="installed"] .card').forEach(c => c.classList.toggle('collapsed', collapsed));
+    document.getElementById('collapse-icon').innerHTML = collapsed ? '<path d="M4 6l4 4 4-4"/>' : '<path d="M4 10l4-4 4 4"/>';
+    document.getElementById('collapse-btn').title = collapsed ? '展开详情' : '收起详情';
+  }
+  // 市场：双列网格/单列列表 —— 单按钮，图标田字↔两横条变换
+  const GRID = '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>';
+  const LIST = '<rect x="2" y="2" width="12" height="5" rx="1"/><rect x="2" y="9" width="12" height="5" rx="1"/>';
+  let marketSingle = false;
+  function toggleMarketLayout(){
+    marketSingle = !marketSingle;
+    document.querySelector('[data-panel="market"] .market-grid').classList.toggle('single', marketSingle);
+    document.getElementById('layout-icon').innerHTML = marketSingle ? GRID : LIST;
+    document.getElementById('layout-btn').title = marketSingle ? '双列网格' : '单列列表';
+  }
+</script>
+</body>
+</html>
