@@ -13,6 +13,12 @@ Plugin center for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 - **DSH compatibility / 兼容性检查** — flags plugins whose peer range does not match the running DSH.
 - **Skin-compatible / 皮肤兼容** — every color uses `var(--dsw-*)` tokens, so skin plugins restyle this UI too.
 
+## Part of the SSID family / SSID 系列成员
+
+This plugin belongs to the **`@max-null/*` family** — a set of plugins that together form the **[SSID (思灵 · Seek Soul in Darkness)](https://github.com/Max-Null/seek-soul-in-darkness)** desktop experience. SSID is the box that bundles them all: `dsh-plugin-center` · `dsh-memory` · `dsh-chinese-thinking` · `dsh-guardian` · `dsh-habit`.
+
+本插件属于 **`@max-null/*` 插件系列**——这一系列共同构成 **[SSID（思灵 · Seek Soul in Darkness）](https://github.com/Max-Null/seek-soul-in-darkness)** 桌面体验。SSID 是整合它们的盒：`dsh-plugin-center` · `dsh-memory` · `dsh-chinese-thinking` · `dsh-guardian` · `dsh-habit`。
+
 ## Screenshots / 截图
 
 | Installed / 已安装 | Market / 市场 | Updates / 更新 |
