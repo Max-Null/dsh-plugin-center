@@ -406,11 +406,26 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [marketCount, setMarketCount] = useState(0)
   const [updates, setUpdates] = useState<UpdateDigest[] | null>(null)
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
 
-  const refreshUpdates = useCallback(() => {
+  // silent：挂载自动检查不弹 toast；用户点按钮（silent=false）给明确反馈
+  // （2026-08-17 用户反馈：按了「检查更新」没啥变化——原来只有 tab 徽标/列表
+  // 变化，人在其他 tab 时完全无感）。
+  const refreshUpdates = useCallback((silent = false) => {
+    setChecking(true)
     void rpc('checkUpdates', { since: new Date(Date.now() - 30 * 86400_000).toISOString() }).then(
-      v => { setUpdates(v as UpdateDigest[]) },
-      () => { /* keep previous digests on failure */ },
+      v => {
+        const digests = v as UpdateDigest[]
+        setUpdates(digests)
+        setChecking(false)
+        if (!silent) {
+          showToast(digests.length > 0 ? `发现 ${digests.length} 个可更新插件` : '所有插件均为最新')
+        }
+      },
+      () => {
+        setChecking(false)
+        if (!silent) showToast('检查更新失败，请稍后重试', 'error')
+      },
     )
   }, [])
   useEffect(() => {
@@ -422,7 +437,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       },
       () => { /* leave counts at 0 */ },
     )
-    refreshUpdates()
+    refreshUpdates(true)
   }, [refreshUpdates])
 
   // 市场计数预载（2026-08-17 实测缺陷：tab 未打开过时徽标恒 0——MarketView
@@ -496,7 +511,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       {showTitle && <span className="pc-title">插件中心</span>}
       <span className="pc-sub">已安装 {installedCount} · 有更新 {updates?.length ?? 0} · 失效 {failedCount}</span>
       <span className="pc-spacer" />
-      <button className="pc-btn" onClick={refreshUpdates}>检查更新</button>
+      <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? '检查中…' : '检查更新'}</button>
       <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>更新全部（{updates?.length ?? 0}）</button>
     </div>
   )

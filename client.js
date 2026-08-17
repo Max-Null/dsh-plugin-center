@@ -389,12 +389,21 @@ function CenterPanel({ variant = "section" }) {
   const [marketCount, setMarketCount] = (0, import_react.useState)(0);
   const [updates, setUpdates] = (0, import_react.useState)(null);
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
-  const refreshUpdates = (0, import_react.useCallback)(() => {
+  const [checking, setChecking] = (0, import_react.useState)(false);
+  const refreshUpdates = (0, import_react.useCallback)((silent = false) => {
+    setChecking(true);
     void rpc("checkUpdates", { since: new Date(Date.now() - 30 * 864e5).toISOString() }).then(
       (v) => {
-        setUpdates(v);
+        const digests = v;
+        setUpdates(digests);
+        setChecking(false);
+        if (!silent) {
+          showToast(digests.length > 0 ? `\u53D1\u73B0 ${digests.length} \u4E2A\u53EF\u66F4\u65B0\u63D2\u4EF6` : "\u6240\u6709\u63D2\u4EF6\u5747\u4E3A\u6700\u65B0");
+        }
       },
       () => {
+        setChecking(false);
+        if (!silent) showToast("\u68C0\u67E5\u66F4\u65B0\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5", "error");
       }
     );
   }, []);
@@ -408,7 +417,7 @@ function CenterPanel({ variant = "section" }) {
       () => {
       }
     );
-    refreshUpdates();
+    refreshUpdates(true);
   }, [refreshUpdates]);
   (0, import_react.useEffect)(() => {
     let alive = true;
@@ -491,7 +500,9 @@ function CenterPanel({ variant = "section" }) {
       failedCount
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: refreshUpdates, children: "\u68C0\u67E5\u66F4\u65B0" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: checking, onClick: () => {
+      refreshUpdates();
+    }, children: checking ? "\u68C0\u67E5\u4E2D\u2026" : "\u68C0\u67E5\u66F4\u65B0" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "pc-btn primary", disabled: !updates?.length || busyUpdate !== null, onClick: () => {
       void updateAll();
     }, children: [
