@@ -410,6 +410,31 @@ function CenterPanel({ variant = "section" }) {
     );
     refreshUpdates();
   }, [refreshUpdates]);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    let timer = null;
+    const poll = async () => {
+      if (!alive) return;
+      try {
+        const r = await rpc("listMarket", { source: "all" });
+        if (!alive) return;
+        marketCache.all = { plugins: r.plugins, done: r.done };
+        setMarketCount(r.plugins.length);
+        if (!r.done) timer = setTimeout(() => {
+          void poll();
+        }, 5e3);
+      } catch {
+        if (alive) timer = setTimeout(() => {
+          void poll();
+        }, 15e3);
+      }
+    };
+    void poll();
+    return () => {
+      alive = false;
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, []);
   const updateOne = (name) => {
     setBusyUpdate(name);
     void rpc("update", { name }).then(

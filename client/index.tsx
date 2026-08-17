@@ -425,6 +425,28 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     refreshUpdates()
   }, [refreshUpdates])
 
+  // 市场计数预载（2026-08-17 实测缺陷：tab 未打开过时徽标恒 0——MarketView
+  // 不挂载就没有 onCount 回调）。挂载即拉取；服务端缓存未就绪（done=false）
+  // 时每 5s 轮询直到完成，失败 15s 重试。
+  useEffect(() => {
+    let alive = true
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const poll = async () => {
+      if (!alive) return
+      try {
+        const r = await rpc('listMarket', { source: 'all' }) as { plugins: MarketPlugin[]; done: boolean }
+        if (!alive) return
+        marketCache.all = { plugins: r.plugins, done: r.done }
+        setMarketCount(r.plugins.length)
+        if (!r.done) timer = setTimeout(() => { void poll() }, 5000)
+      } catch {
+        if (alive) timer = setTimeout(() => { void poll() }, 15000)
+      }
+    }
+    void poll()
+    return () => { alive = false; if (timer !== null) clearTimeout(timer) }
+  }, [])
+
   const updateOne = (name: string) => {
     setBusyUpdate(name)
     void rpc('update', { name }).then(
