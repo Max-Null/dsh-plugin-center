@@ -527,7 +527,11 @@ function CenterPanel({ variant = "section" }) {
     void rpc("checkUpdates", { since: new Date(Date.now() - 30 * 864e5).toISOString() }).then(
       (v) => {
         const digests = v;
-        setUpdates(digests);
+        setUpdates((prev) => digests.map((d) => {
+          if (d.changelog.length > 0) return d;
+          const old = prev?.find((p) => p.name === d.name);
+          return old !== void 0 && old.changelog.length > 0 ? { ...d, changelog: old.changelog } : d;
+        }));
         setChecking(false);
         if (!silent) {
           showToast(digests.length > 0 ? t("foundUpdates", { n: digests.length }) : t("allUpToDate"));

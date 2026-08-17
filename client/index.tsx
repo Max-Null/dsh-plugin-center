@@ -505,7 +505,13 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     void rpc('checkUpdates', { since: new Date(Date.now() - 30 * 86400_000).toISOString() }).then(
       v => {
         const digests = v as UpdateDigest[]
-        setUpdates(digests)
+        // changelog 拉空时保留上次内容（GitHub API 限流/网络抖动会拉空——
+        // 2026-08-18 用户实测更新后卡片介绍消失）。
+        setUpdates(prev => digests.map(d => {
+          if (d.changelog.length > 0) return d
+          const old = prev?.find(p => p.name === d.name)
+          return old !== undefined && old.changelog.length > 0 ? { ...d, changelog: old.changelog } : d
+        }))
         setChecking(false)
         if (!silent) {
           showToast(digests.length > 0 ? t('foundUpdates', { n: digests.length }) : t('allUpToDate'))
