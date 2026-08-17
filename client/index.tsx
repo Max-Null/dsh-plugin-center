@@ -377,7 +377,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">不兼容当前 DSH</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name) }}>{busy === u.name ? '更新中…' : '更新'}</button>
+            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name) }}>{busy === u.name || busy === '__all__' ? '更新中…' : '更新'}</button>
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
@@ -432,7 +432,29 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       e => { setBusyUpdate(null); showToast(`更新失败：${e instanceof Error ? e.message : String(e)}`, 'error') },
     )
   }
-  const updateAll = () => { if (updates !== null) { for (const u of updates) { void updateOne(u.name) } } }
+  // 串行逐个更新（2026-08-17 实测：并发 update 会同时 spawn 多个 pnpm，
+  // 同 profile 并发写导致多数失败 + busy 状态互相覆盖闪烁 = 页面闪一下没下文）。
+  const updateAll = async () => {
+    if (updates === null || updates.length === 0) return
+    setBusyUpdate('__all__')
+    let okCount = 0
+    const failures: string[] = []
+    for (const u of updates) {
+      try {
+        await rpc('update', { name: u.name })
+        okCount++
+      } catch (e) {
+        failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    setBusyUpdate(null)
+    if (failures.length === 0) {
+      showToast(`已更新 ${okCount} 个插件，重启 dsh web 后生效`)
+    } else {
+      showToast(`更新完成：成功 ${okCount}，失败 ${failures.length}（${failures.join('；')}）`, 'error')
+    }
+    refreshUpdates()
+  }
 
   const tab = (v: View, label: string, count: number | null) => (
     <button key={v} type="button" className={`pc-tab${view === v ? ' active' : ''}`} onClick={() => { setView(v) }}>
@@ -453,7 +475,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       <span className="pc-sub">已安装 {installedCount} · 有更新 {updates?.length ?? 0} · 失效 {failedCount}</span>
       <span className="pc-spacer" />
       <button className="pc-btn" onClick={refreshUpdates}>检查更新</button>
-      <button className="pc-btn primary" disabled={!(updates?.length)} onClick={updateAll}>Update All（{updates?.length ?? 0}）</button>
+      <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>更新全部（{updates?.length ?? 0}）</button>
     </div>
   )
   const installedToolbar = view === 'installed' ? (
@@ -565,7 +587,29 @@ function Toast() {
 
 function WhatsNewDialog() {
   const open = useWhatsNewOpen()
+  const [busy, setBusy] = useState(false)
   if (!open || whatsNewDigests.length === 0) return null
+  // 弹窗内串行更新全部（2026-08-17 用户反馈弹窗缺更新入口；串行防 pnpm 并发）
+  const updateNow = async () => {
+    setBusy(true)
+    let okCount = 0
+    const failures: string[] = []
+    for (const u of whatsNewDigests) {
+      try {
+        await rpc('update', { name: u.name })
+        okCount++
+      } catch (e) {
+        failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    setBusy(false)
+    if (failures.length === 0) {
+      showToast(`已更新 ${okCount} 个插件，重启 dsh web 后生效`)
+      closeWhatsNew()
+    } else {
+      showToast(`更新完成：成功 ${okCount}，失败 ${failures.length}（${failures.join('；')}）`, 'error')
+    }
+  }
   return (
     <div className="pc-overlay" role="presentation">
       <div className="pc-panel" style={{ width: '540px' }} role="dialog" aria-modal="true" aria-label="插件更新">
@@ -593,7 +637,8 @@ function WhatsNewDialog() {
           ))}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
             <button className="pc-btn" onClick={closeWhatsNew}>稍后</button>
-            <button className="pc-btn primary" onClick={closeWhatsNew}>全部标记已读</button>
+            <button className="pc-btn" onClick={closeWhatsNew}>全部标记已读</button>
+            <button className="pc-btn primary" disabled={busy} onClick={() => { void updateNow() }}>{busy ? '更新中…' : '立即更新'}</button>
           </div>
         </div>
       </div>

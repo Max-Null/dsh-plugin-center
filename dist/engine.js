@@ -34,6 +34,8 @@ export class PluginCenterEngine extends Service {
     installedNamesCache = null;
     updatesCache = null;
     updatesTtlMs = 5 * 60_000;
+    /** 串行链：同 profile 的 pnpm 调用禁止并发（并发 add 会撞 store 锁/写坏 lock）。 */
+    pnpmChain = Promise.resolve();
     constructor(ctx) {
         super(ctx, 'pluginCenter');
         // Warm caches in the background once the host is up, so opening the panel
@@ -221,16 +223,21 @@ export class PluginCenterEngine extends Service {
         return this.updatesCache.digests;
     }
     async install(spec) {
-        const ok = await installPlugin(spec, this.baseUrl);
-        this.installedNamesCache = null;
-        this.updatesCache = null;
-        return ok;
+        return this.enqueuePnpm(() => installPlugin(spec, this.baseUrl));
     }
     async update(name) {
-        const ok = await updatePlugin(name, this.baseUrl);
-        this.installedNamesCache = null;
-        this.updatesCache = null;
-        return ok;
+        return this.enqueuePnpm(() => updatePlugin(name, this.baseUrl));
+    }
+    /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
+    enqueuePnpm(op) {
+        const run = this.pnpmChain.then(async () => {
+            const ok = await op();
+            this.installedNamesCache = null;
+            this.updatesCache = null;
+            return ok;
+        });
+        this.pnpmChain = run.catch(() => { });
+        return run;
     }
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */
     async debug() {

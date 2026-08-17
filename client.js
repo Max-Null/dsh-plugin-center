@@ -370,7 +370,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
         updateOne(u.name);
-      }, children: busy === u.name ? "\u66F4\u65B0\u4E2D\u2026" : "\u66F4\u65B0" })
+      }, children: busy === u.name || busy === "__all__" ? "\u66F4\u65B0\u4E2D\u2026" : "\u66F4\u65B0" })
     ] }),
     u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
   ] }, u.name)) });
@@ -423,12 +423,26 @@ function CenterPanel({ variant = "section" }) {
       }
     );
   };
-  const updateAll = () => {
-    if (updates !== null) {
-      for (const u of updates) {
-        void updateOne(u.name);
+  const updateAll = async () => {
+    if (updates === null || updates.length === 0) return;
+    setBusyUpdate("__all__");
+    let okCount = 0;
+    const failures = [];
+    for (const u of updates) {
+      try {
+        await rpc("update", { name: u.name });
+        okCount++;
+      } catch (e) {
+        failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
       }
     }
+    setBusyUpdate(null);
+    if (failures.length === 0) {
+      showToast(`\u5DF2\u66F4\u65B0 ${okCount} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
+    } else {
+      showToast(`\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F ${okCount}\uFF0C\u5931\u8D25 ${failures.length}\uFF08${failures.join("\uFF1B")}\uFF09`, "error");
+    }
+    refreshUpdates();
   };
   const tab = (v, label, count) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", className: `pc-tab${view === v ? " active" : ""}`, onClick: () => {
     setView(v);
@@ -453,8 +467,10 @@ function CenterPanel({ variant = "section" }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: refreshUpdates, children: "\u68C0\u67E5\u66F4\u65B0" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "pc-btn primary", disabled: !updates?.length, onClick: updateAll, children: [
-      "Update All\uFF08",
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "pc-btn primary", disabled: !updates?.length || busyUpdate !== null, onClick: () => {
+      void updateAll();
+    }, children: [
+      "\u66F4\u65B0\u5168\u90E8\uFF08",
       updates?.length ?? 0,
       "\uFF09"
     ] })
@@ -563,7 +579,28 @@ function Toast() {
 }
 function WhatsNewDialog() {
   const open = useWhatsNewOpen();
+  const [busy, setBusy] = (0, import_react.useState)(false);
   if (!open || whatsNewDigests.length === 0) return null;
+  const updateNow = async () => {
+    setBusy(true);
+    let okCount = 0;
+    const failures = [];
+    for (const u of whatsNewDigests) {
+      try {
+        await rpc("update", { name: u.name });
+        okCount++;
+      } catch (e) {
+        failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    setBusy(false);
+    if (failures.length === 0) {
+      showToast(`\u5DF2\u66F4\u65B0 ${okCount} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548`);
+      closeWhatsNew();
+    } else {
+      showToast(`\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F ${okCount}\uFF0C\u5931\u8D25 ${failures.length}\uFF08${failures.join("\uFF1B")}\uFF09`, "error");
+    }
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", style: { width: "540px" }, role: "dialog", "aria-modal": "true", "aria-label": "\u63D2\u4EF6\u66F4\u65B0", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: "\u63D2\u4EF6\u66F4\u65B0" }),
@@ -586,7 +623,10 @@ function WhatsNewDialog() {
       ] }, u.name)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "16px" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: "\u7A0D\u540E" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", onClick: closeWhatsNew, children: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy, onClick: () => {
+          void updateNow();
+        }, children: busy ? "\u66F4\u65B0\u4E2D\u2026" : "\u7ACB\u5373\u66F4\u65B0" })
       ] })
     ] })
   ] }) });
