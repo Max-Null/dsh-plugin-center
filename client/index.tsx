@@ -137,6 +137,8 @@ const whatsNewListeners = new Set<() => void>()
 
 function openOverlay(): void { overlayOpen = true; overlayListeners.forEach(l => l()) }
 function closeOverlay(): void { overlayOpen = false; overlayListeners.forEach(l => l()) }
+/** 0.1.7：切换开/关（SSiD 标题栏插件中心按钮再点关闭——dsh-header-unify 优先调用）。 */
+function toggleOverlay(): void { overlayOpen ? closeOverlay() : openOverlay() }
 function closeWhatsNew(): void {
   whatsNewOpen = false
   for (const d of whatsNewDigests) readCache[d.name] = d.toVersion
@@ -704,8 +706,10 @@ function OverlayPanel() {
   const open = useOverlayOpen()
   if (!open) return null
   return (
-    <div className="pc-overlay" role="presentation">
-      <div className="pc-panel" role="dialog" aria-modal="true" aria-label={t('title')}>
+    // 0.1.7：点遮罩关闭——overlay 背景点击即 closeOverlay；面板内点击
+    // stopPropagation 不冒泡到遮罩（面板内部交互不受影响）。
+    <div className="pc-overlay" role="presentation" onClick={closeOverlay}>
+      <div className="pc-panel" role="dialog" aria-modal="true" aria-label={t('title')} onClick={(e) => { e.stopPropagation() }}>
         <div className="pc-panel-head">
           <span className="pc-title">{t('title')}</span>
           <span className="pc-spacer" />
@@ -791,8 +795,31 @@ function WhatsNewDialog() {
 // ---- client plugin body ----
 const inject = ['slots', 'connection']
 
+// ---- 0.1.7：SSiD 标题栏统一按钮组全局控制器 ----
+// SSiD 内置插件 dsh-header-unify 监听壳派发的 `ssid:titlebar` CustomEvent，
+// 经这三个全局函数驱动插件中心（优先 toggle——再点关闭；开侧栏/底栏前
+// 先 close 互斥）。页面卸载时清理，防页面重载/插件重载后残留旧引用。
+const GLOBAL_KEYS = ['__pluginCenterOpen', '__pluginCenterToggle', '__pluginCenterClose'] as const
+function installGlobals(): void {
+  const w = window as unknown as Record<string, unknown>
+  w.__pluginCenterOpen = openOverlay
+  w.__pluginCenterToggle = toggleOverlay
+  w.__pluginCenterClose = closeOverlay
+  w.__pluginCenterGlobalsInstalled = true
+}
+function cleanupGlobals(): void {
+  const w = window as unknown as Record<string, unknown>
+  for (const key of GLOBAL_KEYS) delete w[key]
+  delete w.__pluginCenterGlobalsInstalled
+}
+
 function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void }): void {
   injectCss()
+  // 0.1.7：暴露全局控制器（防重复安装：已安装则不重复挂监听）。
+  if ((window as unknown as Record<string, unknown>).__pluginCenterGlobalsInstalled !== true) {
+    installGlobals()
+    window.addEventListener('unload', cleanupGlobals)
+  }
   rpc = async (endpoint: string, payload: unknown = {}): Promise<unknown> => {
     const result = await ctx.connection.rpc.call('/plugin-center', endpoint, payload)
     if (result.ok) return result.value
