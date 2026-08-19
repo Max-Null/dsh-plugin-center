@@ -126,6 +126,9 @@ function closeOverlay() {
   overlayOpen = false;
   overlayListeners.forEach((l) => l());
 }
+function toggleOverlay() {
+  overlayOpen ? closeOverlay() : openOverlay();
+}
 function closeWhatsNew() {
   whatsNewOpen = false;
   for (const d of whatsNewDigests) readCache[d.name] = d.toVersion;
@@ -730,14 +733,20 @@ function OverlayPanel() {
   const t = useT();
   const open = useOverlayOpen();
   if (!open) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", role: "dialog", "aria-modal": "true", "aria-label": t("title"), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeOverlay, "aria-label": t("close"), children: "\u2715" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CenterPanel, { variant: "overlay" }) })
-  ] }) });
+  return (
+    // 0.1.7：点遮罩关闭——overlay 背景点击即 closeOverlay；面板内点击
+    // stopPropagation 不冒泡到遮罩（面板内部交互不受影响）。
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", onClick: closeOverlay, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", role: "dialog", "aria-modal": "true", "aria-label": t("title"), onClick: (e) => {
+      e.stopPropagation();
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeOverlay, "aria-label": t("close"), children: "\u2715" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CenterPanel, { variant: "overlay" }) })
+    ] }) })
+  );
 }
 function Toast() {
   const t = useToast();
@@ -798,8 +807,25 @@ function WhatsNewDialog() {
   ] }) });
 }
 var inject = ["slots", "connection"];
+var GLOBAL_KEYS = ["__pluginCenterOpen", "__pluginCenterToggle", "__pluginCenterClose"];
+function installGlobals() {
+  const w = window;
+  w.__pluginCenterOpen = openOverlay;
+  w.__pluginCenterToggle = toggleOverlay;
+  w.__pluginCenterClose = closeOverlay;
+  w.__pluginCenterGlobalsInstalled = true;
+}
+function cleanupGlobals() {
+  const w = window;
+  for (const key of GLOBAL_KEYS) delete w[key];
+  delete w.__pluginCenterGlobalsInstalled;
+}
 function apply(ctx) {
   injectCss();
+  if (window.__pluginCenterGlobalsInstalled !== true) {
+    installGlobals();
+    window.addEventListener("unload", cleanupGlobals);
+  }
   rpc = async (endpoint, payload = {}) => {
     const result = await ctx.connection.rpc.call("/plugin-center", endpoint, payload);
     if (result.ok) return result.value;
