@@ -100,6 +100,19 @@ var CSS = `
 .pc-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 13px; box-shadow: 0 8px 32px rgba(0,0,0,.18); z-index: 200; max-width: 80vw; }
 .pc-toast.ok { border-color: var(--dsw-alias-state-success-primary); }
 .pc-toast.error { border-color: var(--dsw-alias-state-error-primary); }
+/* DSH 0.1.x \u8BBE\u7F6E\u5BFC\u822A\u65E0 icon \u5951\u7EA6\uFF08external section \u4E00\u5F8B\u9ED8\u8BA4\u9F7F\u8F6E\uFF09\u3002settings-nav-icon
+   \u6807\u8BB0\u672C\u63D2\u4EF6\u884C\u540E\uFF1A\u9690\u85CF\u58F3\u6E32\u67D3\u7684\u9F7F\u8F6E SVG\uFF0C\u7528 Lucide puzzle \u7684 currentColor mask \u66FF\u6362\uFF0C
+   \u8DDF\u968F\u539F\u751F\u5BFC\u822A hover/active \u989C\u8272\u4E14\u4E0D\u6539\u53D8\u58F3\u7684 16px \u56FE\u6807\u8282\u594F\u3002 */
+[data-dsh-plugin-center-settings-nav] > svg:first-child { display: none; }
+[data-dsh-plugin-center-settings-nav]::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 `;
 var cssInjected = false;
 function injectCss() {
@@ -109,6 +122,30 @@ function injectCss() {
   style.setAttribute("data-plugin", "@max-null/dsh-plugin-center");
   style.textContent = CSS;
   document.head.append(style);
+}
+var SETTINGS_NAV_MARKER = "data-dsh-plugin-center-settings-nav";
+function registerSettingsNavIcon(label) {
+  let disposed = false;
+  const sync = () => {
+    if (disposed) return;
+    const currentLabel = label().trim();
+    const buttons = document.querySelectorAll('[role="dialog"] nav button');
+    for (const button of buttons) {
+      const matches = currentLabel.length > 0 && button.textContent?.trim() === currentLabel;
+      if (matches) button.setAttribute(SETTINGS_NAV_MARKER, "");
+      else button.removeAttribute(SETTINGS_NAV_MARKER);
+    }
+  };
+  sync();
+  const observer = new MutationObserver(sync);
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  return () => {
+    disposed = true;
+    observer.disconnect();
+    document.querySelectorAll(`[${SETTINGS_NAV_MARKER}]`).forEach((element) => {
+      element.removeAttribute(SETTINGS_NAV_MARKER);
+    });
+  };
 }
 var rpc = async () => {
   throw new Error("plugin-center: rpc not wired");
@@ -822,6 +859,7 @@ function cleanupGlobals() {
 }
 function apply(ctx) {
   injectCss();
+  ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), "dsh-plugin-center: settings navigation icon");
   if (window.__pluginCenterGlobalsInstalled !== true) {
     installGlobals();
     window.addEventListener("unload", cleanupGlobals);

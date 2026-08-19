@@ -75,6 +75,19 @@ const CSS = `
 .pc-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 13px; box-shadow: 0 8px 32px rgba(0,0,0,.18); z-index: 200; max-width: 80vw; }
 .pc-toast.ok { border-color: var(--dsw-alias-state-success-primary); }
 .pc-toast.error { border-color: var(--dsw-alias-state-error-primary); }
+/* DSH 0.1.x 设置导航无 icon 契约（external section 一律默认齿轮）。settings-nav-icon
+   标记本插件行后：隐藏壳渲染的齿轮 SVG，用 Lucide puzzle 的 currentColor mask 替换，
+   跟随原生导航 hover/active 颜色且不改变壳的 16px 图标节奏。 */
+[data-dsh-plugin-center-settings-nav] > svg:first-child { display: none; }
+[data-dsh-plugin-center-settings-nav]::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 `
 let cssInjected = false
 function injectCss(): void {
@@ -84,6 +97,35 @@ function injectCss(): void {
   style.setAttribute('data-plugin', '@max-null/dsh-plugin-center')
   style.textContent = CSS
   document.head.append(style)
+}
+
+// ---- settings nav icon ----
+// DSH 0.1.x 的 settings.section 注册只投影 id/order/label，设置壳对外部 section
+// 一律渲染默认齿轮（无 icon 契约字段）。照 dsh-better-sidebar 的 settings-nav-icon
+// 模式：MutationObserver 按当前本地化 label 标记设置对话框里本插件那一行，
+// 由上面的 CSS 把齿轮替换成拼图。标记不拥有壳结构，disposer 移除标记，HMR-safe。
+const SETTINGS_NAV_MARKER = 'data-dsh-plugin-center-settings-nav'
+function registerSettingsNavIcon(label: () => string): () => void {
+  let disposed = false
+  const sync = (): void => {
+    if (disposed) return
+    const currentLabel = label().trim()
+    const buttons = document.querySelectorAll<HTMLButtonElement>('[role="dialog"] nav button')
+    for (const button of buttons) {
+      const matches = currentLabel.length > 0 && button.textContent?.trim() === currentLabel
+      if (matches) button.setAttribute(SETTINGS_NAV_MARKER, '')
+      else button.removeAttribute(SETTINGS_NAV_MARKER)
+    }
+  }
+  sync()
+  const observer = new MutationObserver(sync)
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  return () => {
+    disposed = true
+    observer.disconnect()
+    document.querySelectorAll(`[${SETTINGS_NAV_MARKER}]`)
+      .forEach((element) => { element.removeAttribute(SETTINGS_NAV_MARKER) })
+  }
 }
 
 // ---- types (mirror the host wire shapes) ----
@@ -813,8 +855,10 @@ function cleanupGlobals(): void {
   delete w.__pluginCenterGlobalsInstalled
 }
 
-function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void }): void {
+function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void; effect?: (fn: () => (() => void) | void, name?: string) => void }): void {
   injectCss()
+  // 设置导航图标：标记本插件行后由 CSS 把默认齿轮替换为拼图（HMR-safe）。
+  ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), 'dsh-plugin-center: settings navigation icon')
   // 0.1.7：暴露全局控制器（防重复安装：已安装则不重复挂监听）。
   if ((window as unknown as Record<string, unknown>).__pluginCenterGlobalsInstalled !== true) {
     installGlobals()
