@@ -9,9 +9,11 @@ import { Service } from '@deepseek-ai/cordis';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { buildInstalledPlugin, clearPackageCache, resolvePackage } from "./meta.js";
-import { fetchAwesomePluginsJson, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins } from "./market.js";
+import { fetchAwesomePluginsJson, fetchDshMarketPlugins, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins, } from "./market.js";
 import { detectUpdate, installPlugin, updatePlugin } from "./update.js";
+import { readDisabledState, setDisabled } from "./toggle.js";
 /** Runtime mirror of cordis FiberState (a cross-package const enum). */
 const FIBER_PHASE = {
     0: 'pending',
@@ -23,6 +25,38 @@ const FIBER_PHASE = {
 };
 /** Sources that participate in update detection (official/builtin follow DSH itself). */
 const UPDATABLE = new Set(['installed', 'local']);
+/**
+ * Extract the first image URL from a plugin's README (P2 screenshots):
+ * markdown or HTML image syntax, relative paths resolved against the raw
+ * branch root; only GitHub-hosted images are accepted.
+ */
+async function extractFirstImage(repo) {
+    for (const branch of ['HEAD', 'master', 'main']) {
+        try {
+            const res = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/README.md`, {
+                signal: AbortSignal.timeout(12000),
+            });
+            if (!res.ok)
+                continue;
+            const text = await res.text();
+            const markdown = /!\[[^\]]*\]\(([^)]+)\)/u.exec(text);
+            const html = /<img[^>]+src=["']([^"']+)["']/iu.exec(text);
+            const raw = markdown?.[1] ?? html?.[1];
+            if (raw === undefined || raw === '')
+                continue;
+            const url = /^https?:\/\//u.test(raw)
+                ? raw
+                : `https://raw.githubusercontent.com/${repo}/${branch}/${raw.replace(/^\.?\//u, '')}`;
+            if (/^https:\/\/(raw\.)?githubusercontent\.com\//u.test(url))
+                return url;
+            if (/^https:\/\/github\.com\//u.test(url)) {
+                return url.replace(/^https:\/\/github\.com\/(.+?)\/blob\//u, 'https://raw.githubusercontent.com/$1/');
+            }
+        }
+        catch { /* try next branch */ }
+    }
+    return null;
+}
 export class PluginCenterEngine extends Service {
     static inject = ['loader'];
     awesomeCache = [];
@@ -31,6 +65,11 @@ export class PluginCenterEngine extends Service {
     ohMyDshCache = [];
     ohMyDshDone = false;
     ohMyDshFetching = false;
+    dshMarketCache = [];
+    dshMarketDone = false;
+    dshMarketFetching = false;
+    /** README-extracted screenshot URL per plugin name (lazy, P2). */
+    screenshotCache = new Map();
     installedNamesCache = null;
     updatesCache = null;
     updatesTtlMs = 5 * 60_000;
@@ -51,6 +90,7 @@ export class PluginCenterEngine extends Service {
         catch { /* listInstalled is re-run on demand */ }
         this.prefetchAwesome();
         this.prefetchOhMyDsh();
+        this.prefetchDshMarket();
     }
     /** The profile directory (cordis.yml anchor) — the resolution and install cwd. */
     get baseUrl() {
@@ -179,6 +219,20 @@ export class PluginCenterEngine extends Service {
             this.ohMyDshFetching = false;
         })();
     }
+    /** Start the dsh-market fetch once (2BingLing/dsh-market, ~3900 plugins, trimmed). */
+    prefetchDshMarket() {
+        if (this.dshMarketFetching || this.dshMarketDone)
+            return;
+        this.dshMarketFetching = true;
+        void (async () => {
+            try {
+                this.dshMarketCache = mergePlugins([await fetchDshMarketPlugins()]);
+            }
+            catch { /* empty on failure */ }
+            this.dshMarketDone = true;
+            this.dshMarketFetching = false;
+        })();
+    }
     /** Installed plugin names (no file IO) — cached so market polling stays cheap. */
     async installedNames() {
         if (this.installedNamesCache !== null)
@@ -194,7 +248,7 @@ export class PluginCenterEngine extends Service {
     /** Market snapshot for one source: what is cached so far, plus whether done. */
     async listMarket(source = 'all') {
         const installedNames = await this.installedNames();
-        const decorate = (plugins) => plugins.map(p => ({ ...p, installed: installedNames.has(p.name) }));
+        const decorate = (plugins) => plugins.map(p => ({ ...p, installed: installedNames.has(p.name) || installedNames.has(p.spec) }));
         if (source === 'awesome') {
             this.prefetchAwesome();
             return { plugins: decorate(this.awesomeCache), done: this.awesomeDone };
@@ -203,11 +257,20 @@ export class PluginCenterEngine extends Service {
             this.prefetchOhMyDsh();
             return { plugins: decorate(this.ohMyDshCache), done: this.ohMyDshDone };
         }
+        if (source === 'dsh-market') {
+            this.prefetchDshMarket();
+            // Score-first order (best first) so the big catalog reads usefully.
+            return {
+                plugins: decorate(this.dshMarketCache).sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0)),
+                done: this.dshMarketDone,
+            };
+        }
         this.prefetchAwesome();
         this.prefetchOhMyDsh();
+        this.prefetchDshMarket();
         return {
-            plugins: decorate(mergePlugins([this.awesomeCache, this.ohMyDshCache])),
-            done: this.awesomeDone && this.ohMyDshDone,
+            plugins: decorate(mergePlugins([this.awesomeCache, this.ohMyDshCache, this.dshMarketCache])),
+            done: this.awesomeDone && this.ohMyDshDone && this.dshMarketDone,
         };
     }
     /** Detect updates for every installed third-party/local plugin, TTL-cached. */
@@ -249,5 +312,112 @@ export class PluginCenterEngine extends Service {
             baseUrl: this.baseUrl,
             installed: (await this.listInstalled()).map(p => ({ name: p.name, version: p.version, source: p.source })),
         };
+    }
+    /** Disable/enable one loader entry through the profile patch layer. */
+    async toggle(id, disabled) {
+        const result = await setDisabled(this.baseUrl, id, disabled);
+        this.installedNamesCache = null;
+        return result;
+    }
+    /** One-shot diagnostics: environment, installed surface, patch stance, pnpm log tail. */
+    async diagnostics() {
+        const [installed, dshVersion] = await Promise.all([this.listInstalled(), this.dshVersion()]);
+        let pnpmLogTail = '';
+        try {
+            const logPath = join(this.baseUrl, 'plugin-center-pnpm.log');
+            if (existsSync(logPath)) {
+                const text = readFileSync(logPath, 'utf8');
+                pnpmLogTail = text.slice(-4000);
+            }
+        }
+        catch { /* best-effort */ }
+        return {
+            dshVersion,
+            baseUrl: this.baseUrl,
+            node: process.version,
+            installed,
+            disabled: Object.fromEntries(readDisabledState(join(this.baseUrl, 'cordis.patch.yml'))),
+            pnpmLogTail,
+        };
+    }
+    /** Screenshot URL for one dsh-market plugin, lazily extracted from its README. */
+    async screenshot(name) {
+        const cached = this.screenshotCache.get(name);
+        if (cached !== undefined)
+            return cached;
+        this.screenshotCache.set(name, null); // placeholder against concurrent dup fetches
+        const repo = this.dshMarketCache.find(p => p.name === name || p.spec === name)?.name ?? name;
+        const url = await extractFirstImage(repo);
+        this.screenshotCache.set(name, url);
+        return url;
+    }
+    /** AI recommendation: keyword-filtered candidates ranked by the model. */
+    async suggest(query) {
+        const q = query.trim();
+        if (q === '')
+            return [];
+        await this.waitDshMarket();
+        const llm = this.ctx.get('llm');
+        if (llm?.stream === undefined) {
+            throw new Error('llm 服务不可用（当前 profile 未提供 dsh-llm）');
+        }
+        const tokens = q.toLowerCase().split(/[\s,，、;；]+/u).filter(Boolean);
+        const scored = this.dshMarketCache
+            .map(p => ({
+            p,
+            hits: tokens.reduce((n, tok) => n + (p.name.toLowerCase().includes(tok)
+                || p.description.zh.toLowerCase().includes(tok)
+                || p.description.en.toLowerCase().includes(tok)
+                || p.categories.some(c => c.includes(tok)) ? 1 : 0), 0),
+        }))
+            .sort((a, b) => (b.hits - a.hits) || (b.p.stars ?? 0) - (a.p.stars ?? 0))
+            .slice(0, 25);
+        if (scored.length === 0)
+            return [];
+        const list = scored.map(({ p }) => `- ${p.name} | ${p.stars ?? 0}★ | ${p.description.zh.slice(0, 60)}`).join('\n');
+        const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块）：[{"name":"插件名","reason":"一句话中文推荐理由"}]';
+        const chunks = llm.stream({
+            provider: 'deepseek-official',
+            model: 'deepseek-v4-flash',
+            messages: [{ role: 'user', content: `用户需求：${q}\n\n候选插件列表（名称 | 星标 | 简介）：\n${list}` }],
+            system,
+            maxTokens: 800,
+            signal: AbortSignal.timeout(40000),
+        });
+        let text = '';
+        let failed = false;
+        for await (const chunk of chunks) {
+            if (chunk.type === 'text-delta')
+                text += chunk.text ?? '';
+            else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted'))
+                failed = true;
+        }
+        if (failed || text.trim() === '')
+            throw new Error('模型推荐失败，请重试');
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
+        if (start < 0 || end <= start)
+            throw new Error(`模型输出无法解析：${text.slice(0, 200)}`);
+        try {
+            const parsed = JSON.parse(text.slice(start, end + 1));
+            if (!Array.isArray(parsed))
+                throw new Error('bad shape');
+            return parsed
+                .filter((item) => item !== null && typeof item === 'object'
+                && typeof item.name === 'string'
+                && typeof item.reason === 'string')
+                .slice(0, 5);
+        }
+        catch {
+            throw new Error(`模型输出无法解析：${text.slice(0, 200)}`);
+        }
+    }
+    /** Wait for the dsh-market catalog (fetch or failure), with a hard deadline. */
+    async waitDshMarket() {
+        this.prefetchDshMarket();
+        const deadline = Date.now() + 65_000;
+        while (!this.dshMarketDone && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
     }
 }

@@ -41,6 +41,7 @@ export async function fetchAwesomePluginsJson() {
         description: { en: p.description?.en ?? '', zh: p.description?.zh ?? '' },
         stars: typeof p.stars === 'number' ? p.stars : null,
         npm: typeof p.npm === 'string' && p.npm !== '' ? p.npm : null,
+        score: null,
     }));
 }
 /** Fetch Oh-My-DSH's curated overrides (min_stars filter + category/note overrides). */
@@ -57,6 +58,74 @@ export async function fetchOhMyDshOverrides() {
     catch {
         return {};
     }
+}
+/** Category keywords for dsh-market tag → CATEGORIES mapping (prefix match). */
+const CATEGORY_KEYWORDS = [
+    ['ui', ['ui', 'interface', 'sidebar', 'panel', 'widget', '界面', '面板', '侧栏', '导航']],
+    ['theme', ['theme', 'skin', '主题', '皮肤', '壁纸']],
+    ['tools', ['tool', 'terminal', 'bash', '工具', '终端', '命令']],
+    ['model', ['model', 'llm', 'api', '模型', 'provider']],
+    ['session', ['session', '会话', 'history', '记忆回']],
+    ['memory', ['memory', '记忆']],
+    ['vision', ['vision', 'image', '图片', '视觉', 'screenshot']],
+    ['skill', ['skill', '技能', 'agent']],
+    ['workflow', ['workflow', 'workflow', '流程', 'automation', '自动化']],
+    ['notify', ['notify', '通知', 'toast', 'push']],
+    ['dev', ['dev', 'git', 'code', '开发', '代码', 'debug', '测试']],
+    ['fun', ['fun', '趣味', 'pet', '宠物', '游戏']],
+];
+function categorizeTags(tags) {
+    const out = new Set();
+    for (const tag of tags ?? []) {
+        const low = tag.toLowerCase();
+        for (const [category, keywords] of CATEGORY_KEYWORDS) {
+            if (keywords.some(keyword => low.includes(keyword)))
+                out.add(category);
+        }
+    }
+    return [...out];
+}
+/**
+ * Fetch dsh-market's aggregated catalog (2BingLing/dsh-market plugins.json,
+ * ~3900 plugins with five-dimension scores and bilingual descriptions) in
+ * one request, then trim each entry to the market surface shape. The raw
+ * file is ~10 MB, so the trimmed result (~1.5 MB) is what the engine caches.
+ */
+export async function fetchDshMarketPlugins() {
+    const res = await fetch('https://raw.githubusercontent.com/2BingLing/dsh-market/master/data/plugins.json', {
+        headers: UA,
+        signal: AbortSignal.timeout(60000),
+    });
+    if (!res.ok)
+        throw new Error(`dsh-market plugins.json: HTTP ${res.status}`);
+    const json = await res.json();
+    const out = [];
+    for (const p of json.plugins ?? []) {
+        const name = typeof p.name === 'string' && p.name !== '' ? p.name : '';
+        const full = typeof p.fullName === 'string' && p.fullName !== '' ? p.fullName : name;
+        if (full === '')
+            continue;
+        const descEn = typeof p.description === 'string' ? p.description : '';
+        const descZh = typeof p.descriptionZh === 'string' && p.descriptionZh !== '' ? p.descriptionZh : descEn;
+        out.push({
+            // Merge key / display name: owner/repo (matches the awesome source).
+            name: full,
+            url: `https://github.com/${full}`,
+            spec: name, // npm package name is the install spec
+            categories: categorizeTags(p.tags),
+            description: { en: descEn, zh: descZh },
+            stars: typeof p.stars === 'number' ? p.stars : null,
+            npm: name === '' ? null : name,
+            score: p.score !== null && typeof p.score === 'object'
+                ? {
+                    total: typeof p.score.total === 'number' ? p.score.total : 0,
+                    breakdown: p.score.breakdown ?? {},
+                    explanation: typeof p.score.explanation === 'string' ? p.score.explanation : '',
+                }
+                : null,
+        });
+    }
+    return out;
 }
 /** Parse Oh-My-DSH's PLUGINS.md (markdown table, sectioned by category). */
 export async function fetchOhMyDshPlugins() {
@@ -85,6 +154,7 @@ export async function fetchOhMyDshPlugins() {
                 description: { en: '', zh: cells[6] },
                 stars: Number.isFinite(stars) ? stars : null,
                 npm: null,
+                score: null,
             });
         }
         return plugins;
@@ -108,6 +178,7 @@ export function mergePlugins(sources) {
                 npm: null,
                 version: null,
                 installed: false,
+                score: null,
             };
             cur.categories = [...new Set([...cur.categories, ...item.categories])];
             if (item.description.en !== '')
@@ -118,6 +189,8 @@ export function mergePlugins(sources) {
                 cur.stars = item.stars;
             if (item.npm !== null)
                 cur.npm = item.npm;
+            if (item.score !== null)
+                cur.score = item.score;
             map.set(item.name, cur);
         }
     }

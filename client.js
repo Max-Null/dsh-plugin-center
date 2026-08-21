@@ -340,7 +340,31 @@ var STRINGS = {
     close: "\u5173\u95ED",
     checkFail: "\u68C0\u67E5\u66F4\u65B0\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
     foundUpdates: "\u53D1\u73B0 {n} \u4E2A\u53EF\u66F4\u65B0\u63D2\u4EF6",
-    allUpToDate: "\u6240\u6709\u63D2\u4EF6\u5747\u4E3A\u6700\u65B0"
+    allUpToDate: "\u6240\u6709\u63D2\u4EF6\u5747\u4E3A\u6700\u65B0",
+    disable: "\u7981\u7528",
+    enable: "\u542F\u7528",
+    toggling: "\u5904\u7406\u4E2D\u2026",
+    disabledOk: "\u5DF2\u7981\u7528 {n}\uFF0C\u91CD\u542F\u540E\u751F\u6548",
+    enabledOk: "\u5DF2\u542F\u7528 {n}\uFF0C\u91CD\u542F\u540E\u751F\u6548",
+    toggleFailed: "\u64CD\u4F5C\u5931\u8D25\uFF1A{e}",
+    tabDiagnose: "\u8BCA\u65AD",
+    diagExport: "\u5BFC\u51FA\u8BCA\u65AD\u65E5\u5FD7",
+    diagCopied: "\u8BCA\u65AD\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F",
+    diagTitle: "\u73AF\u5883\u4E0E\u63D2\u4EF6\u8BCA\u65AD",
+    diagInstalled: "\u5DF2\u5B89\u88C5\u63D2\u4EF6\uFF08{n}\uFF09",
+    diagDisabled: "\u7981\u7528\u72B6\u6001",
+    diagPnpmLog: "pnpm \u65E5\u5FD7\uFF08\u5C3E\u90E8\uFF09",
+    aiTitle: "AI \u63A8\u8350",
+    aiPlaceholder: "\u63CF\u8FF0\u4F60\u7684\u9700\u6C42\uFF0C\u8BA9 AI \u63A8\u8350\u63D2\u4EF6\u2026",
+    aiAsk: "\u63A8\u8350",
+    aiAsking: "AI \u601D\u8003\u4E2D\u2026",
+    aiFail: "AI \u63A8\u8350\u5931\u8D25\uFF1A{e}",
+    aiHint: "\u4F8B\u5982\uFF1A\u6211\u60F3\u8981\u4E00\u4E2A\u80FD\u9884\u89C8 Markdown \u7684\u63D2\u4EF6",
+    scoreLabel: "\u8BC4\u5206",
+    screenshot: "\u622A\u56FE",
+    noScreenshot: "\u65E0\u622A\u56FE",
+    screenshotFail: "\u622A\u56FE\u83B7\u53D6\u5931\u8D25",
+    marketTooMany: "\u4EC5\u663E\u793A\u524D {n} \u4E2A\uFF08\u5171 {m}\uFF09\uFF0C\u641C\u7D22\u53EF\u7F29\u5C0F\u8303\u56F4"
   },
   en: {
     title: "Plugin Center",
@@ -394,7 +418,31 @@ var STRINGS = {
     close: "Close",
     checkFail: "Failed to check updates, please retry later",
     foundUpdates: "{n} updates found",
-    allUpToDate: "All plugins are up to date"
+    allUpToDate: "All plugins are up to date",
+    disable: "Disable",
+    enable: "Enable",
+    toggling: "Working\u2026",
+    disabledOk: "Disabled {n}; restart to take effect",
+    enabledOk: "Enabled {n}; restart to take effect",
+    toggleFailed: "Failed: {e}",
+    tabDiagnose: "Diagnostics",
+    diagExport: "Export diagnostics",
+    diagCopied: "Diagnostics copied to clipboard",
+    diagTitle: "Environment & plugin diagnostics",
+    diagInstalled: "Installed plugins ({n})",
+    diagDisabled: "Disabled state",
+    diagPnpmLog: "pnpm log (tail)",
+    aiTitle: "AI recommendation",
+    aiPlaceholder: "Describe what you need\u2026",
+    aiAsk: "Recommend",
+    aiAsking: "AI is thinking\u2026",
+    aiFail: "AI recommendation failed: {e}",
+    aiHint: "e.g. a plugin that previews Markdown",
+    scoreLabel: "Score",
+    screenshot: "Screenshot",
+    noScreenshot: "No screenshot",
+    screenshotFail: "Screenshot fetch failed",
+    marketTooMany: "Showing first {n} of {m}; search to narrow down"
   }
 };
 var localeId = "zh";
@@ -421,7 +469,7 @@ function useT() {
   }, []);
   return (0, import_react.useCallback)((key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars), [id]);
 }
-function InstalledView({ search, category, source }) {
+function InstalledView({ search, category, source, onToggle, togglingId }) {
   const t = useT();
   const [items, setItems] = (0, import_react.useState)(installedCache);
   const [error, setError] = (0, import_react.useState)(null);
@@ -471,7 +519,11 @@ function InstalledView({ search, category, source }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
       p.categories.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
       p.compatRange !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("requiresDsh", { r: p.compatRange }) }),
-      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") })
+      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: togglingId !== null, onClick: () => {
+        onToggle(p);
+      }, children: togglingId === p.name ? t("toggling") : p.enabled ? t("disable") : t("enable") })
     ] })
   ] }, p.entryId)) });
 }
@@ -481,6 +533,9 @@ function MarketView({ category, single, source, search, onCount }) {
   const [done, setDone] = (0, import_react.useState)(marketCache[source]?.done ?? marketCache.all?.done ?? false);
   const [error, setError] = (0, import_react.useState)(null);
   const [busy, setBusy] = (0, import_react.useState)(null);
+  const [shotBusy, setShotBusy] = (0, import_react.useState)(null);
+  const [shotUrl, setShotUrl] = (0, import_react.useState)(null);
+  const [shotName, setShotName] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     let alive = true;
     let timer;
@@ -522,6 +577,7 @@ function MarketView({ category, single, source, search, onCount }) {
     const matchSearch = q === "" || m.name.toLowerCase().includes(q) || (m.description.zh || m.description.en).toLowerCase().includes(q);
     return matchSearch && (category === null || m.categories.includes(category));
   });
+  const shown = filtered.slice(0, 200);
   const descOf = (m) => localeId === "en" ? m.description.en || m.description.zh : m.description.zh || m.description.en;
   const install = (m) => {
     setBusy(m.name);
@@ -544,10 +600,35 @@ function MarketView({ category, single, source, search, onCount }) {
       }
     );
   };
+  const showScreenshot = (m) => {
+    if (shotBusy !== null) return;
+    setShotBusy(m.name);
+    void rpc("screenshot", { name: m.name }).then(
+      (url) => {
+        setShotBusy(null);
+        if (typeof url !== "string" || url === "") {
+          showToast(t("noScreenshot"), "error", 4e3);
+          return;
+        }
+        setShotName(m.name);
+        setShotUrl(url);
+      },
+      () => {
+        setShotBusy(null);
+        showToast(t("screenshotFail"), "error", 4e3);
+      }
+    );
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-grid ${single ? "single" : "double"}`, children: filtered.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
+    filtered.length > 200 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("marketTooMany", { n: shown.length, m: filtered.length }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-grid ${single ? "single" : "double"}`, children: shown.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: m.name }),
+        m.score !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-tag", title: `${m.score.total}${m.score.explanation !== "" ? `\uFF1A${m.score.explanation}` : ""}`, children: [
+          t("scoreLabel"),
+          " ",
+          m.score.total
+        ] }),
         m.stars !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
           "\u2605 ",
           m.stars
@@ -559,14 +640,33 @@ function MarketView({ category, single, source, search, onCount }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: descOf(m) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
-        m.categories.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
+        m.categories.slice(0, 4).map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-iconbtn", title: t("screenshot"), "aria-label": t("screenshot"), disabled: shotBusy !== null, onClick: () => {
+          showScreenshot(m);
+        }, children: shotBusy === m.name ? "\u2026" : "\u{1F4F7}" }),
         m.installed || pendingInstall.has(m.spec) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: pendingInstall.has(m.spec) ? t("pendingRestart") : t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
           install(m);
         }, children: busy === m.name ? t("installing") : t("install") })
       ] })
     ] }, m.name)) }),
-    !done && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadMore", { n: items.length }) })
+    !done && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadMore", { n: items.length }) }),
+    shotUrl !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", onClick: () => {
+      setShotUrl(null);
+      setShotName(null);
+    }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", role: "dialog", "aria-modal": "true", onClick: (e) => {
+      e.stopPropagation();
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: shotName ?? "" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: () => {
+          setShotUrl(null);
+          setShotName(null);
+        }, "aria-label": t("close"), children: "\u2715" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", style: { alignItems: "center" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: shotUrl, alt: shotName ?? "", style: { maxWidth: "100%", maxHeight: "70vh", borderRadius: 8, objectFit: "contain" } }) })
+    ] }) })
   ] });
 }
 function UpdatesView({ updates, refresh, updateOne, busy }) {
@@ -592,6 +692,96 @@ function UpdatesView({ updates, refresh, updateOne, busy }) {
     u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
   ] }, u.name)) });
 }
+function DiagnoseView() {
+  const t = useT();
+  const [report, setReport] = (0, import_react.useState)(null);
+  const [error, setError] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    void rpc("diagnostics").then(
+      (v) => {
+        if (alive) setReport(v);
+      },
+      (e) => {
+        if (alive) setError(e instanceof Error ? e.message : String(e));
+      }
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const textOf = () => {
+    if (report === null) return "no diagnostics";
+    const lines = [
+      "=== dsh-plugin-center diagnostics ===",
+      `dsh: ${report.dshVersion}`,
+      `node: ${report.node}`,
+      `profile: ${report.baseUrl}`,
+      `installed (${report.installed.length}):`,
+      ...report.installed.map((p) => `  ${p.enabled ? "" : "[disabled] "}${p.name}@${p.version ?? "?"} (${p.source}, ${p.fiberPhase ?? "?"})`),
+      "patch disabled:",
+      ...Object.entries(report.disabled).map(([id, v]) => `  ${id}: ${v ? "disabled" : "force-enabled"}`),
+      "pnpm log tail:",
+      report.pnpmLogTail
+    ];
+    return lines.join("\n");
+  };
+  const exportLog = () => {
+    const blob = new Blob([textOf()], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `plugin-center-diagnostics-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 19).replace(/[:T]/gu, "-")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const copy = () => {
+    void navigator.clipboard?.writeText(textOf()).then(() => {
+      showToast(t("diagCopied"), "ok", 3e3);
+    }).catch(() => {
+    });
+  };
+  if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) });
+  if (report === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loading") });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: exportLog, children: t("diagExport") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: copy, children: t("diagCopied") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("diagTitle") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: "dsh" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: report.dshVersion })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: "node" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: report.node })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: "profile" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", style: { wordBreak: "break-all" }, children: report.baseUrl })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("diagInstalled", { n: report.installed.length }) }),
+    report.installed.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: p.name }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
+        "v",
+        p.version ?? "?"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: p.source }),
+      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") })
+    ] }) }, p.name)),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("diagDisabled") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: Object.keys(report.disabled).length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2014" }) : Object.entries(report.disabled).map(([id, v]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: id }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: v ? "disabled" : "enabled" })
+    ] }, id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("diagPnpmLog") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: "pc-desc", style: { whiteSpace: "pre-wrap", fontSize: 11 }, children: report.pnpmLogTail === "" ? "\u2014" : report.pnpmLogTail })
+  ] });
+}
 function CenterPanel({ variant = "section" }) {
   const t = useT();
   const [view, setView] = (0, import_react.useState)("installed");
@@ -606,6 +796,46 @@ function CenterPanel({ variant = "section" }) {
   const [updates, setUpdates] = (0, import_react.useState)(null);
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
   const [checking, setChecking] = (0, import_react.useState)(false);
+  const [togglingId, setTogglingId] = (0, import_react.useState)(null);
+  const [aiQuery, setAiQuery] = (0, import_react.useState)("");
+  const [aiBusy, setAiBusy] = (0, import_react.useState)(false);
+  const [aiResult, setAiResult] = (0, import_react.useState)(null);
+  const [aiError, setAiError] = (0, import_react.useState)(null);
+  const handleToggle = (p) => {
+    if (togglingId !== null) return;
+    setTogglingId(p.name);
+    void rpc("toggle", { id: p.name, disabled: p.enabled }).then(
+      (v) => {
+        setTogglingId(null);
+        const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;
+        showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
+        if (installedCache !== null) {
+          installedCache = installedCache.map((item) => item.name === p.name ? { ...item, enabled: !p.enabled } : item);
+        }
+      },
+      (e) => {
+        setTogglingId(null);
+        showToast(t("toggleFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3);
+      }
+    );
+  };
+  const askAi = () => {
+    const q = aiQuery.trim();
+    if (q === "" || aiBusy) return;
+    setAiBusy(true);
+    setAiResult(null);
+    setAiError(null);
+    void rpc("suggest", { query: q }).then(
+      (v) => {
+        setAiBusy(false);
+        setAiResult(v);
+      },
+      (e) => {
+        setAiBusy(false);
+        setAiError(e instanceof Error ? e.message : String(e));
+      }
+    );
+  };
   const refreshUpdates = (0, import_react.useCallback)((silent = false) => {
     setChecking(true);
     void rpc("checkUpdates", { since: new Date(Date.now() - 30 * 864e5).toISOString() }).then(
@@ -725,7 +955,8 @@ function CenterPanel({ variant = "section" }) {
   const tabs = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-tabs", children: [
     tab("installed", t("tabInstalled"), counts.installed),
     tab("market", t("tabMarket"), counts.market),
-    tab("updates", t("tabUpdates"), updates?.length ?? 0)
+    tab("updates", t("tabUpdates"), updates?.length ?? 0),
+    tab("diagnose", t("tabDiagnose"), null)
   ] });
   const head = (showTitle) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-head", children: [
     showTitle && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
@@ -768,6 +999,11 @@ function CenterPanel({ variant = "section" }) {
     }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "awesome", children: "awesome-dsh-plugin" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "oh-my-dsh", children: "Oh-My-DSH" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: "dsh-market", children: [
+        "dsh-market\uFF08",
+        counts.market,
+        "\uFF09"
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: t("allMarkets") })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === null ? " active" : ""}`, onClick: () => {
@@ -790,9 +1026,70 @@ function CenterPanel({ variant = "section" }) {
     ] }) })
   ] }) : null;
   const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-    view === "installed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstalledView, { search, category: installedCategory, source: installedSource }),
-    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: handleMarketCount }),
-    view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate })
+    view === "installed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstalledView, { search, category: installedCategory, source: installedSource, onToggle: handleToggle, togglingId }),
+    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ai-title", children: t("aiTitle") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              className: "pc-search",
+              style: { flex: 1 },
+              value: aiQuery,
+              onChange: (e) => {
+                setAiQuery(e.target.value);
+              },
+              onKeyDown: (e) => {
+                if (e.key === "Enter") askAi();
+              },
+              placeholder: t("aiPlaceholder")
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: aiBusy || aiQuery.trim() === "", onClick: askAi, children: aiBusy ? t("aiAsking") : t("aiAsk") })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("aiHint") }),
+        aiError !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("aiFail", { e: aiError }) }),
+        aiResult !== null && aiResult.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-grid single", children: aiResult.map((item) => {
+          const plugin = marketCache.all?.plugins.find((p) => p.spec === item.name || p.name === item.name);
+          const installed = plugin?.installed === true || (installedCache ?? []).some((p) => p.name === item.name);
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: item.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+              plugin !== void 0 && plugin.stars !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
+                "\u2605 ",
+                plugin.stars
+              ] }),
+              installed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  className: "pc-btn primary",
+                  onClick: () => {
+                    if (plugin === void 0) {
+                      showToast(t("installFailed", { e: "\u672A\u5728\u5E02\u573A\u76EE\u5F55\u4E2D\u627E\u5230\u8BE5\u63D2\u4EF6\uFF0C\u8BF7\u624B\u52A8\u5B89\u88C5" }), "error", 8e3);
+                      return;
+                    }
+                    void rpc("install", { spec: plugin.spec }).then(
+                      () => {
+                        pendingInstall.add(plugin.spec);
+                        showToast(t("installQueued", { n: item.name }), "ok", 5e3);
+                      },
+                      (e) => showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3)
+                    );
+                  },
+                  children: t("install")
+                }
+              )
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: item.reason })
+          ] }, item.name);
+        }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: handleMarketCount })
+    ] }),
+    view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate }),
+    view === "diagnose" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnoseView, {})
   ] });
   if (variant === "overlay") {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }, children: [

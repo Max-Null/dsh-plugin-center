@@ -46,6 +46,26 @@ export class PluginCenterRpc extends Service {
             if (!result.ok) return internal(`update ${name} 失败：${result.detail}`)
             return { ok: true, value: { durationMs: result.durationMs } }
           }
+          case 'toggle': {
+            const id = (payload as { id?: string; disabled?: boolean } | null)?.id
+            const disabled = (payload as { id?: string; disabled?: boolean } | null)?.disabled
+            if (typeof id !== 'string' || id === '') return internal('toggle: id is required')
+            const result = await ctx.pluginCenter.toggle(id, disabled === true)
+            if (!result.ok) return internal(`toggle ${id} 失败：${result.detail}`)
+            return { ok: true, value: { nowDisabled: result.nowDisabled } }
+          }
+          case 'diagnostics':
+            return { ok: true, value: await ctx.pluginCenter.diagnostics() }
+          case 'screenshot': {
+            const name = (payload as { name?: string } | null)?.name
+            if (typeof name !== 'string' || name === '') return internal('screenshot: name is required')
+            return { ok: true, value: await ctx.pluginCenter.screenshot(name) }
+          }
+          case 'suggest': {
+            const query = (payload as { query?: string } | null)?.query
+            if (typeof query !== 'string') return internal('suggest: query is required')
+            return { ok: true, value: await ctx.pluginCenter.suggest(query) }
+          }
           case 'debug':
             return { ok: true, value: await ctx.pluginCenter.debug() }
           case 'readVersions':

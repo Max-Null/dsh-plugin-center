@@ -16,11 +16,25 @@ declare module '@deepseek-ai/cordis' {
     }
 }
 /** Which market directory the client wants to browse. */
-export type MarketSource = 'all' | 'awesome' | 'oh-my-dsh';
+export type MarketSource = 'all' | 'awesome' | 'oh-my-dsh' | 'dsh-market';
 /** What's New read-mark result, returned by listMarket so the client waterfalls. */
 export interface MarketSnapshot {
     plugins: MarketPlugin[];
     done: boolean;
+}
+/** One AI recommendation (suggest). */
+export interface Suggestion {
+    name: string;
+    reason: string;
+}
+/** One-shot diagnostics report (diagnostics). */
+export interface DiagnosticsReport {
+    dshVersion: string;
+    baseUrl: string;
+    node: string;
+    installed: InstalledPlugin[];
+    disabled: Record<string, boolean>;
+    pnpmLogTail: string;
 }
 export declare class PluginCenterEngine extends Service {
     static inject: string[];
@@ -30,6 +44,11 @@ export declare class PluginCenterEngine extends Service {
     private ohMyDshCache;
     private ohMyDshDone;
     private ohMyDshFetching;
+    private dshMarketCache;
+    private dshMarketDone;
+    private dshMarketFetching;
+    /** README-extracted screenshot URL per plugin name (lazy, P2). */
+    private readonly screenshotCache;
     private installedNamesCache;
     private updatesCache;
     private readonly updatesTtlMs;
@@ -59,6 +78,8 @@ export declare class PluginCenterEngine extends Service {
     private fastNpmVersion;
     /** Start the Oh-My-DSH fetch once (single PLUGINS.md parse). */
     private prefetchOhMyDsh;
+    /** Start the dsh-market fetch once (2BingLing/dsh-market, ~3900 plugins, trimmed). */
+    private prefetchDshMarket;
     /** Installed plugin names (no file IO) — cached so market polling stays cheap. */
     private installedNames;
     /** Market snapshot for one source: what is cached so far, plus whether done. */
@@ -79,4 +100,18 @@ export declare class PluginCenterEngine extends Service {
             source: string;
         }[];
     }>;
+    /** Disable/enable one loader entry through the profile patch layer. */
+    toggle(id: string, disabled: boolean): Promise<{
+        ok: boolean;
+        detail: string;
+        nowDisabled: boolean | null;
+    }>;
+    /** One-shot diagnostics: environment, installed surface, patch stance, pnpm log tail. */
+    diagnostics(): Promise<DiagnosticsReport>;
+    /** Screenshot URL for one dsh-market plugin, lazily extracted from its README. */
+    screenshot(name: string): Promise<string | null>;
+    /** AI recommendation: keyword-filtered candidates ranked by the model. */
+    suggest(query: string): Promise<Suggestion[]>;
+    /** Wait for the dsh-market catalog (fetch or failure), with a hard deadline. */
+    private waitDshMarket;
 }
