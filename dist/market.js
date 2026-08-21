@@ -122,6 +122,12 @@ export async function fetchDshMarketPlugins() {
         // are excluded from the catalog rather than offered with a broken spec.
         if (p.type === 'skill' || p.install?.method === 'skills-add')
             continue;
+        // Entries without README install commands are usually desktop apps or
+        // config repos, not installable plugins (2026-08-22: 4299 条里 943 条
+        // 无 commands——如 Deepseek-Harness-EAC「一键启动桌面端」被当插件
+        // 推荐，装完不可用；installSpecOf 只能 fallback 一个假 spec）。
+        if (!Array.isArray(p.install?.commands) || p.install.commands.length === 0)
+            continue;
         const name = typeof p.name === 'string' && p.name !== '' ? p.name : '';
         const full = typeof p.fullName === 'string' && p.fullName !== '' ? p.fullName : name;
         if (full === '')
@@ -167,10 +173,15 @@ export async function fetchOhMyDshPlugins() {
             if (link === null)
                 continue;
             const stars = Number(cells[5]);
+            // spec 必须用 URL 的 owner/repo——链接文本常只是包名（如
+            // [open-design](https://github.com/nexu-io/open-design)），
+            // github:open-design 是无效 spec（2026-08-22 实测：Oh-My-DSH
+            // 全部条目 spec 错，open-design 装不上）。
+            const repo = /github\.com\/([^/]+\/[^/]+)/u.exec(link[2]);
             plugins.push({
                 name: link[1],
                 url: link[2],
-                spec: `github:${link[1]}`,
+                spec: `github:${repo?.[1] ?? link[1]}`,
                 categories: category !== '' ? [category] : [],
                 description: { en: '', zh: cells[6] },
                 stars: Number.isFinite(stars) ? stars : null,

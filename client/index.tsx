@@ -411,8 +411,7 @@ const STRINGS = {
     revertedDisable: '已撤销禁用 {n}', revertedEnable: '已撤销启用 {n}',
     tabDiagnose: '诊断', diagExport: '导出诊断日志', diagCopied: '诊断已复制到剪贴板',
     diagTitle: '环境与插件诊断', diagInstalled: '已安装插件（{n}）', diagDisabled: '禁用状态', diagPnpmLog: 'pnpm 日志（尾部）',
-    aiTitle: 'AI 推荐', aiPlaceholder: '描述你的需求，让 AI 推荐插件…（例如：能预览 Markdown 的插件）', aiAsk: '推荐', aiAsking: 'AI 思考中…',
-    aiFail: 'AI 推荐失败：{e}', scoreLabel: '评分',
+    scoreLabel: '评分',
     screenshot: '截图', noScreenshot: '无截图', screenshotFail: '截图获取失败',
     marketTooMany: '仅显示前 {n} 个（共 {m}），搜索可缩小范围',
   },
@@ -446,8 +445,7 @@ const STRINGS = {
     revertedDisable: 'Disable of {n} reverted', revertedEnable: 'Enable of {n} reverted',
     tabDiagnose: 'Diagnostics', diagExport: 'Export diagnostics', diagCopied: 'Diagnostics copied to clipboard',
     diagTitle: 'Environment & plugin diagnostics', diagInstalled: 'Installed plugins ({n})', diagDisabled: 'Disabled state', diagPnpmLog: 'pnpm log (tail)',
-    aiTitle: 'AI recommendation', aiPlaceholder: 'Describe what you need — e.g. a Markdown preview plugin…', aiAsk: 'Recommend', aiAsking: 'AI is thinking…',
-    aiFail: 'AI recommendation failed: {e}', scoreLabel: 'Score',
+    scoreLabel: 'Score',
     screenshot: 'Screenshot', noScreenshot: 'No screenshot', screenshotFail: 'Screenshot fetch failed',
     marketTooMany: 'Showing first {n} of {m}; search to narrow down',
   },
@@ -622,6 +620,7 @@ function MarketView({ category, single, source, search, onCount }: { category: s
     void rpc('install', { spec: m.spec }).then(
       v => {
         const durationMs = typeof v === 'object' && v !== null ? (v as { durationMs?: number }).durationMs : undefined
+        const detail = typeof v === 'object' && v !== null ? (v as { detail?: string }).detail : undefined
         if (v !== true && durationMs === undefined) throw new Error(t('installNotApplied'))
         setBusy(null)
         pendingInstall.add(m.spec)
@@ -630,7 +629,9 @@ function MarketView({ category, single, source, search, onCount }: { category: s
           if (c !== undefined) c.plugins = c.plugins.map(p => p.name === m.name ? { ...p, installed: true } : p)
         }
         setItems(prev => prev.map(p => p.name === m.name ? { ...p, installed: true } : p))
-        showToast(t('installQueued', { n: m.name }) + (durationMs !== undefined ? `（${(durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 5000)
+        // detail 来自 host 的安装后校验（bundle 注册 / 非插件包提示）——
+        // 比固定文案准确（2026-08-22：EAC 类仓库包「重启后生效」是误导）。
+        showToast(detail ?? t('installQueued', { n: m.name }) + (durationMs !== undefined ? `（${(durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 7000)
       },
       e => {
         setBusy(null)
@@ -670,7 +671,13 @@ function MarketView({ category, single, source, search, onCount }: { category: s
               {m.categories.slice(0, 4).map(c => <span key={c} className="pc-tag">{c}</span>)}
               <span className="pc-spacer" />
               <button type="button" className="pc-iconbtn" title={t('screenshot')} aria-label={t('screenshot')} disabled={shotBusy !== null} onClick={() => { showScreenshot(m) }}>
-                {shotBusy === m.name ? '…' : '📷'}
+                {shotBusy === m.name ? '…' : (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                    <rect x="2" y="3.5" width="12" height="9" rx="1.5" />
+                    <circle cx="8" cy="8" r="2.6" />
+                    <path d="M5.5 3.5 6.4 1.8h3.2l.9 1.7" />
+                  </svg>
+                )}
               </button>
               {m.installed || pendingInstall.has(m.spec)
                 ? <span className="pc-tag">{pendingInstall.has(m.spec) ? t('pendingRestart') : t('installedTag')}</span>
@@ -856,10 +863,6 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [aiQuery, setAiQuery] = useState('')
-  const [aiBusy, setAiBusy] = useState(false)
-  const [aiResult, setAiResult] = useState<{ name: string; reason: string; spec?: string | null; stars?: number | null }[] | null>(null)
-  const [aiError, setAiError] = useState<string | null>(null)
 
   const handleToggle = (p: InstalledPlugin) => {
     if (togglingId !== null) return
@@ -903,17 +906,6 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         console.log('[plugin-center] toggle failed', { id, error: e instanceof Error ? e.message : String(e) })
         showToast(t('toggleFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000)
       },
-    )
-  }
-  const askAi = () => {
-    const q = aiQuery.trim()
-    if (q === '' || aiBusy) return
-    setAiBusy(true)
-    setAiResult(null)
-    setAiError(null)
-    void rpc('suggest', { query: q }).then(
-      v => { setAiBusy(false); setAiResult(v as { name: string; reason: string }[]) },
-      e => { setAiBusy(false); setAiError(e instanceof Error ? e.message : String(e)) },
     )
   }
 
@@ -1077,54 +1069,8 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       </div>
     </div>
   ) : null
-  const aiBar = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 'none' }}>
-      <div className="pc-ai-row">
-        <input
-          className="pc-search" style={{ flex: 1 }} value={aiQuery}
-          onChange={e => { setAiQuery(e.target.value) }}
-          onKeyDown={e => { if (e.key === 'Enter') askAi() }}
-          placeholder={t('aiPlaceholder')}
-        />
-        <button className="pc-btn primary" disabled={aiBusy || aiQuery.trim() === ''} onClick={askAi}>
-          {aiBusy ? t('aiAsking') : t('aiAsk')}
-        </button>
-      </div>
-      {aiError !== null && <p className="pc-sub" style={{ color: 'var(--dsw-alias-state-error-primary)' }}>{t('aiFail', { e: aiError })}</p>}
-      {aiResult !== null && aiResult.length > 0 && (
-        <div className="pc-grid single">
-          {aiResult.map(item => {
-            const installed = (installedCache ?? []).some(p => p.name === item.name || p.spec === item.spec || p.name === item.spec)
-            return (
-              <div key={item.name} className="pc-card">
-                <div className="pc-row">
-                  <span className="pc-name">{item.name}</span>
-                  <span className="pc-spacer" />
-                  {item.stars != null && <span className="pc-ver">★ {item.stars}</span>}
-                  {installed
-                    ? <span className="pc-tag">{t('installedTag')}</span>
-                    : <button
-                        className="pc-btn primary"
-                        onClick={() => {
-                          if (item.spec === undefined || item.spec === null || item.spec === '') { showToast(t('installFailed', { e: '未找到该插件的安装 spec' }), 'error', 8000); return }
-                          void rpc('install', { spec: item.spec }).then(
-                            () => { pendingInstall.add(item.spec as string); showToast(t('installQueued', { n: item.name }), 'ok', 5000) },
-                            e => showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000),
-                          )
-                        }}
-                      >{t('install')}</button>}
-                </div>
-                <div className="pc-desc">{item.reason}</div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
   const marketToolbar = view === 'market' ? (
     <div className="pc-filter">
-      {aiBar}
       <div className="pc-toolbar pc-toolbar-main">
         <input className="pc-search" style={{ flex: 1, minWidth: 120 }} value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder={t('searchMarket')} />
         <select className="pc-select" value={source} onChange={e => { setSource(e.target.value); setCategory(null) }}>

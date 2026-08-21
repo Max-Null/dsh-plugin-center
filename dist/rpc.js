@@ -31,7 +31,7 @@ export class PluginCenterRpc extends Service {
                         const result = await ctx.pluginCenter.install(spec);
                         if (!result.ok)
                             return internal(`install ${spec} 失败：${result.detail}`);
-                        return { ok: true, value: { durationMs: result.durationMs } };
+                        return { ok: true, value: { durationMs: result.durationMs, detail: result.detail } };
                     }
                     case 'update': {
                         const name = payload?.name;

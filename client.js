@@ -413,11 +413,6 @@ var STRINGS = {
     diagInstalled: "\u5DF2\u5B89\u88C5\u63D2\u4EF6\uFF08{n}\uFF09",
     diagDisabled: "\u7981\u7528\u72B6\u6001",
     diagPnpmLog: "pnpm \u65E5\u5FD7\uFF08\u5C3E\u90E8\uFF09",
-    aiTitle: "AI \u63A8\u8350",
-    aiPlaceholder: "\u63CF\u8FF0\u4F60\u7684\u9700\u6C42\uFF0C\u8BA9 AI \u63A8\u8350\u63D2\u4EF6\u2026\uFF08\u4F8B\u5982\uFF1A\u80FD\u9884\u89C8 Markdown \u7684\u63D2\u4EF6\uFF09",
-    aiAsk: "\u63A8\u8350",
-    aiAsking: "AI \u601D\u8003\u4E2D\u2026",
-    aiFail: "AI \u63A8\u8350\u5931\u8D25\uFF1A{e}",
     scoreLabel: "\u8BC4\u5206",
     screenshot: "\u622A\u56FE",
     noScreenshot: "\u65E0\u622A\u56FE",
@@ -492,11 +487,6 @@ var STRINGS = {
     diagInstalled: "Installed plugins ({n})",
     diagDisabled: "Disabled state",
     diagPnpmLog: "pnpm log (tail)",
-    aiTitle: "AI recommendation",
-    aiPlaceholder: "Describe what you need \u2014 e.g. a Markdown preview plugin\u2026",
-    aiAsk: "Recommend",
-    aiAsking: "AI is thinking\u2026",
-    aiFail: "AI recommendation failed: {e}",
     scoreLabel: "Score",
     screenshot: "Screenshot",
     noScreenshot: "No screenshot",
@@ -667,6 +657,7 @@ function MarketView({ category, single, source, search, onCount }) {
     void rpc("install", { spec: m.spec }).then(
       (v) => {
         const durationMs = typeof v === "object" && v !== null ? v.durationMs : void 0;
+        const detail = typeof v === "object" && v !== null ? v.detail : void 0;
         if (v !== true && durationMs === void 0) throw new Error(t("installNotApplied"));
         setBusy(null);
         pendingInstall.add(m.spec);
@@ -675,7 +666,7 @@ function MarketView({ category, single, source, search, onCount }) {
           if (c !== void 0) c.plugins = c.plugins.map((p) => p.name === m.name ? { ...p, installed: true } : p);
         }
         setItems((prev) => prev.map((p) => p.name === m.name ? { ...p, installed: true } : p));
-        showToast(t("installQueued", { n: m.name }) + (durationMs !== void 0 ? `\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 5e3);
+        showToast(detail ?? t("installQueued", { n: m.name }) + (durationMs !== void 0 ? `\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 7e3);
       },
       (e) => {
         setBusy(null);
@@ -728,7 +719,11 @@ function MarketView({ category, single, source, search, onCount }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-iconbtn", title: t("screenshot"), "aria-label": t("screenshot"), disabled: shotBusy !== null, onClick: () => {
           showScreenshot(m);
-        }, children: shotBusy === m.name ? "\u2026" : "\u{1F4F7}" }),
+        }, children: shotBusy === m.name ? "\u2026" : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", "aria-hidden": "true", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "3.5", width: "12", height: "9", rx: "1.5" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", { cx: "8", cy: "8", r: "2.6" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M5.5 3.5 6.4 1.8h3.2l.9 1.7" })
+        ] }) }),
         m.installed || pendingInstall.has(m.spec) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: pendingInstall.has(m.spec) ? t("pendingRestart") : t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
           install(m);
         }, children: busy === m.name ? t("installing") : t("install") })
@@ -892,10 +887,6 @@ function CenterPanel({ variant = "section" }) {
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
   const [checking, setChecking] = (0, import_react.useState)(false);
   const [togglingId, setTogglingId] = (0, import_react.useState)(null);
-  const [aiQuery, setAiQuery] = (0, import_react.useState)("");
-  const [aiBusy, setAiBusy] = (0, import_react.useState)(false);
-  const [aiResult, setAiResult] = (0, import_react.useState)(null);
-  const [aiError, setAiError] = (0, import_react.useState)(null);
   const handleToggle = (p) => {
     if (togglingId !== null) return;
     const id = p.entryId;
@@ -926,23 +917,6 @@ function CenterPanel({ variant = "section" }) {
         setTogglingId(null);
         console.log("[plugin-center] toggle failed", { id, error: e instanceof Error ? e.message : String(e) });
         showToast(t("toggleFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3);
-      }
-    );
-  };
-  const askAi = () => {
-    const q = aiQuery.trim();
-    if (q === "" || aiBusy) return;
-    setAiBusy(true);
-    setAiResult(null);
-    setAiError(null);
-    void rpc("suggest", { query: q }).then(
-      (v) => {
-        setAiBusy(false);
-        setAiResult(v);
-      },
-      (e) => {
-        setAiBusy(false);
-        setAiError(e instanceof Error ? e.message : String(e));
       }
     );
   };
@@ -1104,63 +1078,7 @@ function CenterPanel({ variant = "section" }) {
       }, children: c }, c))
     ] })
   ] }) : null;
-  const aiBar = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, flex: "none" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai-row", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          className: "pc-search",
-          style: { flex: 1 },
-          value: aiQuery,
-          onChange: (e) => {
-            setAiQuery(e.target.value);
-          },
-          onKeyDown: (e) => {
-            if (e.key === "Enter") askAi();
-          },
-          placeholder: t("aiPlaceholder")
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: aiBusy || aiQuery.trim() === "", onClick: askAi, children: aiBusy ? t("aiAsking") : t("aiAsk") })
-    ] }),
-    aiError !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("aiFail", { e: aiError }) }),
-    aiResult !== null && aiResult.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-grid single", children: aiResult.map((item) => {
-      const installed = (installedCache ?? []).some((p) => p.name === item.name || p.spec === item.spec || p.name === item.spec);
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: item.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-          item.stars != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
-            "\u2605 ",
-            item.stars
-          ] }),
-          installed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              className: "pc-btn primary",
-              onClick: () => {
-                if (item.spec === void 0 || item.spec === null || item.spec === "") {
-                  showToast(t("installFailed", { e: "\u672A\u627E\u5230\u8BE5\u63D2\u4EF6\u7684\u5B89\u88C5 spec" }), "error", 8e3);
-                  return;
-                }
-                void rpc("install", { spec: item.spec }).then(
-                  () => {
-                    pendingInstall.add(item.spec);
-                    showToast(t("installQueued", { n: item.name }), "ok", 5e3);
-                  },
-                  (e) => showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3)
-                );
-              },
-              children: t("install")
-            }
-          )
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: item.reason })
-      ] }, item.name);
-    }) })
-  ] });
   const marketToolbar = view === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-filter", children: [
-    aiBar,
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar pc-toolbar-main", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", style: { flex: 1, minWidth: 120 }, value: marketSearch, onChange: (e) => {
         setMarketSearch(e.target.value);

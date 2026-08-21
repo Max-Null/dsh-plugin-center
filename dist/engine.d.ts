@@ -116,6 +116,8 @@ export declare class PluginCenterEngine extends Service {
     screenshot(name: string): Promise<string | null>;
     /** AI recommendation: keyword-filtered candidates ranked by the model. */
     suggest(query: string): Promise<Suggestion[]>;
-    /** Wait for the dsh-market catalog (fetch or failure), with a hard deadline. */
-    private waitDshMarket;
+    /** Wait for all three market sources (fetch or failure), with a hard deadline. */
+    private waitAllSources;
+    /** 三源市场合并（按 name 去重；spec 优先 npm 名——比 github 回退更可靠）。 */
+    private combinedMarketCache;
 }

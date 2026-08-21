@@ -17,6 +17,7 @@ import {
   mapConcurrent, mergePlugins, type MarketPlugin,
 } from './market.ts'
 import { detectUpdate, installPlugin, updatePlugin, type PnpmResult, type UpdateDigest } from './update.ts'
+import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
 import { readDisabledState, setDisabled } from './toggle.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -328,7 +329,23 @@ export class PluginCenterEngine extends Service {
   }
 
   async install(spec: string): Promise<PnpmResult> {
-    return this.enqueuePnpm(() => installPlugin(spec, this.baseUrl))
+    return this.enqueuePnpm(async () => {
+      // Snapshot inside the serialized chain: concurrent installs would
+      // otherwise diff each other's additions.
+      const before = readDependencyKeys(this.baseUrl)
+      const result = await installPlugin(spec, this.baseUrl)
+      if (result.ok) {
+        // `dsh plugin add` reconciles bundles into dsh.profile.bundles and
+        // reports non-plugin repos; mirror that so "restart to take effect"
+        // is true for real bundles and honest for repo-only packages
+        // (2026-08-22: EAC 装完不生效——无插件入口，提示误导).
+        try {
+          const { note } = reconcileInstalled(this.baseUrl, before)
+          if (note !== '') result.detail = note
+        } catch { /* best-effort */ }
+      }
+      return result
+    })
   }
 
   /** Update one installed plugin to the detected target version (exact — see update.ts). */
@@ -402,7 +419,7 @@ export class PluginCenterEngine extends Service {
   async suggest(query: string): Promise<Suggestion[]> {
     const q = query.trim()
     if (q === '') return []
-    await this.waitDshMarket()
+    await this.waitAllSources()
     const llm = this.ctx.get('llm') as
       | { stream?: (opts: Record<string, unknown>) => AsyncIterable<{ type?: string; text?: string; reason?: { kind?: string } }> }
       | undefined
@@ -410,7 +427,9 @@ export class PluginCenterEngine extends Service {
       throw new Error('llm 服务不可用（当前 profile 未提供 dsh-llm）')
     }
     const tokens = q.toLowerCase().split(/[\s,，、;；]+/u).filter(Boolean)
-    const scored = this.dshMarketCache
+    // 候选 = 三源合并（2026-08-22：此前只用 dsh-market，awesome/Oh-My-DSH
+    // 的精选插件进不了推荐；合并后按 name 去重、spec 优先 npm 名）。
+    const scored = this.combinedMarketCache()
       .map(p => ({
         p,
         hits: tokens.reduce((n, tok) => n + (
@@ -424,7 +443,7 @@ export class PluginCenterEngine extends Service {
       .slice(0, 25)
     if (scored.length === 0) return []
     const list = scored.map(({ p }) => `- ${p.name} | ${p.stars ?? 0}★ | ${p.description.zh.slice(0, 60)}`).join('\n')
-    const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块、不要任何多余文字）：[{"name":"插件名","reason":"一句话中文推荐理由（20 字以内）"}]'
+    const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块、不要任何多余文字）：[{"name":"插件名","reason":"一句话中文推荐理由（20 字以内）"}]。名称必须从候选列表原样复制，禁止改写、拼接或编造'
     // Message 契约：content 是 ContentBlock 数组（非字符串），且需要 id/source。
     const chunks = llm.stream({
       provider: 'deepseek-official',
@@ -475,8 +494,15 @@ export class PluginCenterEngine extends Service {
           && typeof (item as { reason?: unknown }).reason === 'string')
         .slice(0, 5)
         .map(item => {
-          const hit = this.dshMarketCache.find(p =>
-            p.name === item.name || p.spec === item.name || p.npm === item.name)
+          // 模型可能改写 owner/路径（幻觉，如 zhu1090093659 非真实 owner）
+          // 或输出 monorepo 子路径——先精确匹配（name/spec/npm），再 # 截断，
+          // 最后回退 repo 名匹配（2026-08-22：DamonKoy/dsh-web-ui#dsh-web-ui-all
+          // 被输出成 zhu1090093659/dsh-web-ui#packages/...，精确匹配失败无星）。
+          const base = item.name.split('#')[0]!.trim()
+          const repo = base.split('/').pop() ?? ''
+          const hit = this.combinedMarketCache().find(p =>
+            p.name === base || p.spec === base || p.npm === base
+            || (p.name.split('/').pop()?.split('#')[0] ?? '') === repo)
           return {
             name: item.name,
             reason: item.reason,
@@ -490,12 +516,39 @@ export class PluginCenterEngine extends Service {
     }
   }
 
-  /** Wait for the dsh-market catalog (fetch or failure), with a hard deadline. */
-  private async waitDshMarket(): Promise<void> {
+  /** Wait for all three market sources (fetch or failure), with a hard deadline. */
+  private async waitAllSources(): Promise<void> {
+    this.prefetchAwesome()
+    this.prefetchOhMyDsh()
     this.prefetchDshMarket()
     const deadline = Date.now() + 65_000
-    while (!this.dshMarketDone && Date.now() < deadline) {
+    while (!(this.awesomeDone && this.ohMyDshDone && this.dshMarketDone) && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, 200))
     }
+  }
+
+  /** 三源市场合并（按 name 去重；spec 优先 npm 名——比 github 回退更可靠）。 */
+  private combinedMarketCache(): MarketPlugin[] {
+    const map = new Map<string, MarketPlugin>()
+    for (const list of [this.awesomeCache, this.ohMyDshCache, this.dshMarketCache]) {
+      for (const p of list) {
+        const cur = map.get(p.name)
+        if (cur === undefined) {
+          map.set(p.name, p)
+          continue
+        }
+        map.set(p.name, {
+          ...cur,
+          spec: p.npm ?? cur.npm ?? p.spec ?? cur.spec,
+          npm: cur.npm ?? p.npm,
+          // 同一条目多源星数不同：取最大值（2026-08-22：awesome ★4 曾
+          // 覆盖 dsh-market 高星——合并顺序导致低星胜出）。
+          stars: Math.max(cur.stars ?? 0, p.stars ?? 0) || null,
+          score: cur.score ?? p.score,
+          description: cur.description.zh !== '' && cur.description.en !== '' ? cur.description : p.description,
+        })
+      }
+    }
+    return [...map.values()]
   }
 }
