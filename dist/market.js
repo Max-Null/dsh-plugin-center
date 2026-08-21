@@ -59,6 +59,22 @@ export async function fetchOhMyDshOverrides() {
         return {};
     }
 }
+/**
+ * Derive an install spec for a dsh-market entry: a reliable single command
+ * parsed from the README (`dsh plugin add <spec>` / `pnpm add <spec>` /
+ * `git clone`) yields its package/spec; anything else falls back to the
+ * GitHub form (`github:owner/repo`), which dsh always accepts — many
+ * catalog entries are NOT on npm (e.g. Deepseek-Harness-EAC 404, 2026-08-22).
+ */
+function installSpecOf(p, name, full) {
+    const cmd = (p.install?.commands ?? []).find(c => /\b(?:dsh\s+plugin\s+add|pnpm\s+add|npm\s+install|git\s+clone)\b/u.test(c));
+    if (cmd !== undefined) {
+        const match = /\b(?:add|install)\s+([^\s"'`]+)/u.exec(cmd);
+        if (match !== null && !/<[^>]+>/u.test(match[1]))
+            return match[1];
+    }
+    return `github:${full}`;
+}
 /** Category keywords for dsh-market tag → CATEGORIES mapping (prefix match). */
 const CATEGORY_KEYWORDS = [
     ['ui', ['ui', 'interface', 'sidebar', 'panel', 'widget', '界面', '面板', '侧栏', '导航']],
@@ -101,6 +117,11 @@ export async function fetchDshMarketPlugins() {
     const json = await res.json();
     const out = [];
     for (const p of json.plugins ?? []) {
+        // Skill entries install into ~/.agents/skills via a different mechanism
+        // (npx skills add); the pnpm-driven center cannot install them, so they
+        // are excluded from the catalog rather than offered with a broken spec.
+        if (p.type === 'skill' || p.install?.method === 'skills-add')
+            continue;
         const name = typeof p.name === 'string' && p.name !== '' ? p.name : '';
         const full = typeof p.fullName === 'string' && p.fullName !== '' ? p.fullName : name;
         if (full === '')
@@ -111,7 +132,7 @@ export async function fetchDshMarketPlugins() {
             // Merge key / display name: owner/repo (matches the awesome source).
             name: full,
             url: `https://github.com/${full}`,
-            spec: name, // npm package name is the install spec
+            spec: installSpecOf(p, name, full),
             categories: categorizeTags(p.tags),
             description: { en: descEn, zh: descZh },
             stars: typeof p.stars === 'number' ? p.stars : null,

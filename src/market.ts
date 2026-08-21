@@ -113,8 +113,25 @@ interface DshMarketJsonPlugin {
   descriptionZh?: string
   tags?: string[]
   stars?: number | null
-  install?: unknown
+  type?: string
+  install?: { method?: string; needsConfig?: boolean; commands?: string[] } | null
   score?: { total?: number; breakdown?: Record<string, number>; explanation?: string } | null
+}
+
+/**
+ * Derive an install spec for a dsh-market entry: a reliable single command
+ * parsed from the README (`dsh plugin add <spec>` / `pnpm add <spec>` /
+ * `git clone`) yields its package/spec; anything else falls back to the
+ * GitHub form (`github:owner/repo`), which dsh always accepts — many
+ * catalog entries are NOT on npm (e.g. Deepseek-Harness-EAC 404, 2026-08-22).
+ */
+function installSpecOf(p: DshMarketJsonPlugin, name: string, full: string): string {
+  const cmd = (p.install?.commands ?? []).find(c => /\b(?:dsh\s+plugin\s+add|pnpm\s+add|npm\s+install|git\s+clone)\b/u.test(c))
+  if (cmd !== undefined) {
+    const match = /\b(?:add|install)\s+([^\s"'`]+)/u.exec(cmd)
+    if (match !== null && !/<[^>]+>/u.test(match[1]!)) return match[1]!
+  }
+  return `github:${full}`
 }
 
 /** Category keywords for dsh-market tag → CATEGORIES mapping (prefix match). */
@@ -159,6 +176,10 @@ export async function fetchDshMarketPlugins(): Promise<RawPlugin[]> {
   const json = await res.json() as { plugins?: DshMarketJsonPlugin[] }
   const out: RawPlugin[] = []
   for (const p of json.plugins ?? []) {
+    // Skill entries install into ~/.agents/skills via a different mechanism
+    // (npx skills add); the pnpm-driven center cannot install them, so they
+    // are excluded from the catalog rather than offered with a broken spec.
+    if (p.type === 'skill' || p.install?.method === 'skills-add') continue
     const name = typeof p.name === 'string' && p.name !== '' ? p.name : ''
     const full = typeof p.fullName === 'string' && p.fullName !== '' ? p.fullName : name
     if (full === '') continue
@@ -168,7 +189,7 @@ export async function fetchDshMarketPlugins(): Promise<RawPlugin[]> {
       // Merge key / display name: owner/repo (matches the awesome source).
       name: full,
       url: `https://github.com/${full}`,
-      spec: name, // npm package name is the install spec
+      spec: installSpecOf(p, name, full),
       categories: categorizeTags(p.tags),
       description: { en: descEn, zh: descZh },
       stars: typeof p.stars === 'number' ? p.stars : null,
