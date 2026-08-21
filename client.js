@@ -30,6 +30,7 @@ __export(index_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(index_exports);
+var import_react_dom = require("react-dom");
 var import_react = require("react");
 var import_jsx_runtime = require("react/jsx-runtime");
 var CSS = `
@@ -1199,7 +1200,7 @@ function OverlayPanel() {
 function Toast() {
   const t = useToast();
   if (t === null) return null;
-  return (0, import_react.createPortal)(/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message }), document.body);
+  return (0, import_react_dom.createPortal)(/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message }), document.body);
 }
 function WhatsNewDialog() {
   const t = useT();

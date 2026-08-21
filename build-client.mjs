@@ -19,6 +19,8 @@ await build({
   external: [
     'react',
     'react/jsx-runtime',
+    'react-dom',
+    'react-dom/client',
     '@deepseek-ai/*',
   ],
   outfile: 'client.js',
