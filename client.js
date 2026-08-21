@@ -839,17 +839,24 @@ function CenterPanel({ variant = "section" }) {
   const [aiError, setAiError] = (0, import_react.useState)(null);
   const handleToggle = (p) => {
     if (togglingId !== null) return;
+    const id = p.entryId;
+    const nextEnabled = !p.enabled;
+    console.log("[plugin-center] toggle", { id, fromEnabled: p.enabled, toEnabled: nextEnabled });
     setTogglingId(p.name);
-    void rpc("toggle", { id: p.name, disabled: p.enabled }).then(
+    void rpc("toggle", { id, disabled: !nextEnabled }).then(
       (v) => {
         setTogglingId(null);
         const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;
-        showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
-        installedCache = null;
+        console.log("[plugin-center] toggle result", { id, nowDisabled });
+        if (installedCache !== null) {
+          installedCache = installedCache.map((item) => item.entryId === id ? { ...item, enabled: nextEnabled } : item);
+        }
         bumpInstalled();
+        showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
       },
       (e) => {
         setTogglingId(null);
+        console.log("[plugin-center] toggle failed", { id, error: e instanceof Error ? e.message : String(e) });
         showToast(t("toggleFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3);
       }
     );

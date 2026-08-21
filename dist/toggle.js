@@ -33,6 +33,24 @@ const PROTECTED_PATTERNS = [
 function isProtected(id) {
     return PROTECTED_PATTERNS.some(pattern => pattern.test(id));
 }
+/** Official bundle entry ids (timer/llm/session/… from dsh-base and
+ *  dsh-web-app patch inserts): disabling these breaks the core chain, so
+ *  they refuse to toggle alongside the pattern-based protection above. */
+function officialEntryIds(profileDir) {
+    const ids = new Set();
+    for (const pkg of ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']) {
+        try {
+            const patchPath = join(profileDir, 'node_modules', pkg, 'cordis.patch.yml');
+            if (!existsSync(patchPath))
+                continue;
+            const text = readFileSync(patchPath, 'utf8');
+            for (const match of text.matchAll(/^- id:\s*(\S+)\s*$/gmu))
+                ids.add(match[1]);
+        }
+        catch { /* best-effort */ }
+    }
+    return ids;
+}
 /** What the user patch layer currently says about every row id. */
 export function readDisabledState(patchPath) {
     const state = new Map();
@@ -73,7 +91,7 @@ let toggleChain = Promise.resolve();
  */
 export function setDisabled(profileDir, id, disabled) {
     const run = toggleChain.then(async () => {
-        if (isProtected(id)) {
+        if (isProtected(id) || officialEntryIds(profileDir).has(id)) {
             return { ok: false, detail: `"${id}" is host infrastructure and cannot be disabled`, nowDisabled: null };
         }
         const patchPath = join(profileDir, 'cordis.patch.yml');

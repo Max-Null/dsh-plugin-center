@@ -798,19 +798,33 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
 
   const handleToggle = (p: InstalledPlugin) => {
     if (togglingId !== null) return
+    // Patch rows match the loader entry id (e.g. "chat-rail"), not the npm
+    // package name — p.entryId is the correct key (2026-08-22: passing name
+    // wrote a row the loader never matches, so nothing changed after restart).
+    const id = p.entryId
+    const nextEnabled = !p.enabled
+    console.log('[plugin-center] toggle', { id, fromEnabled: p.enabled, toEnabled: nextEnabled })
     setTogglingId(p.name)
-    void rpc('toggle', { id: p.name, disabled: p.enabled }).then(
+    void rpc('toggle', { id, disabled: !nextEnabled }).then(
       v => {
         setTogglingId(null)
         const nowDisabled = typeof v === 'object' && v !== null ? (v as { nowDisabled?: boolean | null }).nowDisabled : null
-        showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
-        // Invalidate the installed cache and notify the view to refetch, so
-        // the card's enabled state flips immediately (2026-08-22 feedback:
-        // the toggle wrote the patch but the UI did not change).
-        installedCache = null
+        console.log('[plugin-center] toggle result', { id, nowDisabled })
+        // Optimistic flip: SSiD has no HMR, so the loader's enabled snapshot
+        // only changes after a restart — the card must reflect the intended
+        // state locally instead of refetching (which would return the old
+        // value). The patch is durable; the restart applies it.
+        if (installedCache !== null) {
+          installedCache = installedCache.map(item => item.entryId === id ? { ...item, enabled: nextEnabled } : item)
+        }
         bumpInstalled()
+        showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
       },
-      e => { setTogglingId(null); showToast(t('toggleFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000) },
+      e => {
+        setTogglingId(null)
+        console.log('[plugin-center] toggle failed', { id, error: e instanceof Error ? e.message : String(e) })
+        showToast(t('toggleFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000)
+      },
     )
   }
   const askAi = () => {
