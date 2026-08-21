@@ -113,13 +113,23 @@ function runOne(command: string, args: readonly string[], cwd: string): Promise<
     try {
       // shell: true —— Windows 下 .cmd shim 必须经 shell 才能 spawn；
       // windowsHide —— GUI 宿主下不弹 cmd 窗口（2026-08-18 用户实测闪烁）。
-      child = spawn(command, [...args], { cwd, stdio: 'inherit', shell: true, windowsHide: true })
+      // stdio 走默认 pipe：捕获 pnpm 输出，失败时把尾部输出放进 detail
+      // （2026-08-22 起——此前 inherit 只有 exit code，SSiD 下更新失败
+      // 无法诊断；宿主进程（web/electron）非 DSH 工具沙箱，pipe 可用）。
+      child = spawn(command, [...args], { cwd, shell: true, windowsHide: true })
     } catch (e) {
       resolve({ ok: false, detail: e instanceof Error ? e.message : String(e) })
       return
     }
+    let out = ''
+    child.stdout?.on('data', (d: Buffer) => { out += d.toString() })
+    child.stderr?.on('data', (d: Buffer) => { out += d.toString() })
     child.on('error', e => resolve({ ok: false, detail: e.message }))
-    child.on('close', code => resolve(code === 0 ? { ok: true, detail: '' } : { ok: false, detail: `exit code ${code ?? 1}` }))
+    child.on('close', code => {
+      if (code === 0) resolve({ ok: true, detail: '' })
+      const tail = out.trim()
+      resolve({ ok: false, detail: `exit code ${code ?? 1}${tail === '' ? '' : `\n${tail.slice(-1500)}`}` })
+    })
   })
 }
 
