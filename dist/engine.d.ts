@@ -8,7 +8,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis';
 import { type InstalledPlugin } from './meta.ts';
 import { type MarketPlugin } from './market.ts';
-import { type UpdateDigest } from './update.ts';
+import { type PnpmResult, type UpdateDigest } from './update.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         /** The plugin-center engine (provided by this package's host half). */
@@ -65,15 +65,9 @@ export declare class PluginCenterEngine extends Service {
     listMarket(source?: MarketSource): Promise<MarketSnapshot>;
     /** Detect updates for every installed third-party/local plugin, TTL-cached. */
     checkUpdates(sinceIso: string): Promise<UpdateDigest[]>;
-    install(spec: string): Promise<{
-        ok: boolean;
-        detail: string;
-    }>;
+    install(spec: string): Promise<PnpmResult>;
     /** Update one installed plugin to the detected target version (exact — see update.ts). */
-    update(name: string, version: string): Promise<{
-        ok: boolean;
-        detail: string;
-    }>;
+    update(name: string, version: string): Promise<PnpmResult>;
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     private enqueuePnpm;
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */

@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { buildInstalledPlugin, clearPackageCache, resolvePackage, type InstalledPlugin, type PluginSource } from './meta.ts'
 import { fetchAwesomePluginsJson, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins, type MarketPlugin } from './market.ts'
-import { detectUpdate, installPlugin, updatePlugin, type UpdateDigest } from './update.ts'
+import { detectUpdate, installPlugin, updatePlugin, type PnpmResult, type UpdateDigest } from './update.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -245,17 +245,17 @@ export class PluginCenterEngine extends Service {
     return this.updatesCache.digests
   }
 
-  async install(spec: string): Promise<{ ok: boolean; detail: string }> {
+  async install(spec: string): Promise<PnpmResult> {
     return this.enqueuePnpm(() => installPlugin(spec, this.baseUrl))
   }
 
   /** Update one installed plugin to the detected target version (exact — see update.ts). */
-  async update(name: string, version: string): Promise<{ ok: boolean; detail: string }> {
+  async update(name: string, version: string): Promise<PnpmResult> {
     return this.enqueuePnpm(() => updatePlugin(name, version, this.baseUrl))
   }
 
   /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
-  private enqueuePnpm(op: () => Promise<{ ok: boolean; detail: string }>): Promise<{ ok: boolean; detail: string }> {
+  private enqueuePnpm(op: () => Promise<PnpmResult>): Promise<PnpmResult> {
     const run = this.pnpmChain.then(async () => {
       const result = await op()
       this.installedNamesCache = null

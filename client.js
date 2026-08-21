@@ -527,7 +527,8 @@ function MarketView({ category, single, source, search, onCount }) {
     setBusy(m.name);
     void rpc("install", { spec: m.spec }).then(
       (v) => {
-        if (v !== true) throw new Error(t("installNotApplied"));
+        const durationMs = typeof v === "object" && v !== null ? v.durationMs : void 0;
+        if (v !== true && durationMs === void 0) throw new Error(t("installNotApplied"));
         setBusy(null);
         pendingInstall.add(m.spec);
         for (const key of Object.keys(marketCache)) {
@@ -535,11 +536,11 @@ function MarketView({ category, single, source, search, onCount }) {
           if (c !== void 0) c.plugins = c.plugins.map((p) => p.name === m.name ? { ...p, installed: true } : p);
         }
         setItems((prev) => prev.map((p) => p.name === m.name ? { ...p, installed: true } : p));
-        showToast(t("installQueued", { n: m.name }), "ok", 5e3);
+        showToast(t("installQueued", { n: m.name }) + (durationMs !== void 0 ? `\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 5e3);
       },
       (e) => {
         setBusy(null);
-        showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 8e3);
+        showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3);
       }
     );
   };
@@ -673,16 +674,17 @@ function CenterPanel({ variant = "section" }) {
     setUpdating(name, true);
     void rpc("update", { name, version }).then(
       (v) => {
-        if (v !== true) throw new Error(t("updateNotApplied"));
+        const durationMs = typeof v === "object" && v !== null ? v.durationMs : void 0;
+        if (v !== true && durationMs === void 0) throw new Error(t("updateNotApplied"));
         setUpdating(name, false);
         setBusyUpdate(null);
-        showToast(t("updatedOne", { n: name }), "ok", 5e3);
+        showToast(t("updatedOne", { n: name }) + (durationMs !== void 0 ? `\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 5e3);
         refreshUpdates(true);
       },
       (e) => {
         setUpdating(name, false);
         setBusyUpdate(null);
-        showToast(t("updateFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 8e3);
+        showToast(t("updateFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3);
       }
     );
   };
@@ -696,9 +698,10 @@ function CenterPanel({ variant = "section" }) {
       setUpdating(u.name, true);
       try {
         const v = await rpc("update", { name: u.name, version: u.toVersion });
-        if (v !== true) throw new Error(t("updateNotApplied"));
+        const durationMs = typeof v === "object" && v !== null ? v.durationMs : void 0;
+        if (v !== true && durationMs === void 0) throw new Error(t("updateNotApplied"));
         okCount++;
-        okNames.push(u.name);
+        okNames.push(durationMs !== void 0 ? `${u.name}\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : u.name);
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
       } finally {
@@ -709,7 +712,7 @@ function CenterPanel({ variant = "section" }) {
     if (failures.length === 0) {
       showToast(t("updatedMany", { n: okCount }) + `\uFF08${okNames.join("\u3001")}\uFF09`, "ok", 6e3);
     } else {
-      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 8e3);
+      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 15e3);
     }
     refreshUpdates();
   };

@@ -4,7 +4,7 @@
  * first (many community repos ship no release/tag/CHANGELOG — verified §7.2).
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { compareVersions, satisfies } from "./semver.js";
@@ -70,6 +70,28 @@ export async function detectUpdate(name, localVersion, repoUrl, compatRange, loc
         compatRange,
     };
 }
+/**
+ * Append one pnpm operation to `<profileDir>/plugin-center-pnpm.log`: time,
+ * command, cwd, exit, duration, and the captured output tail. Every install
+ * and update lands here regardless of success, so a problem on any machine
+ * can be diagnosed by copying the log (2026-08-22: SSiD 更新慢/失败复盘需要
+ * 现场证据；日志写失败绝不影响主流程）。
+ */
+export function logPnpm(profileDir, args, result) {
+    try {
+        const file = join(profileDir, 'plugin-center-pnpm.log');
+        const line = [
+            `${new Date().toISOString()} $ pnpm ${args.join(' ')}`,
+            `  cwd=${profileDir}`,
+            `  ${result.ok ? 'ok' : 'FAIL'} duration=${result.durationMs}ms`,
+            result.detail === '' ? '' : `  ${result.detail.split('\n').map(s => `  ${s}`).join('\n')}`,
+            '---',
+            '',
+        ].join('\n');
+        appendFileSync(file, line);
+    }
+    catch { /* logging must never break the install path */ }
+}
 /** pnpm 候选命令：GUI 进程 PATH 常缺用户级 npm 全局目录；且 Windows 上
  *  CreateProcess 只找 pnpm.exe（.cmd/.ps1 必须经 shell）——2026-08-17 实测
  *  spawn('pnpm', shell:false) 直接 ENOENT，更新永远假成功。 */
@@ -95,9 +117,10 @@ function runOne(command, args, cwd) {
             child = spawn(command, [...args], { cwd, shell: true, windowsHide: true });
         }
         catch (e) {
-            resolve({ ok: false, detail: e instanceof Error ? e.message : String(e) });
+            resolve({ ok: false, detail: e instanceof Error ? e.message : String(e), durationMs: 0 });
             return;
         }
+        const started = Date.now();
         // 15 分钟硬超时：pnpm 可能卡在 supply-chain 全量验证/网络重试上
         // （2026-08-22 SSiD 下「更新中」长时间不结束的防御），超时杀掉并报错。
         let timedOut = false;
@@ -108,29 +131,33 @@ function runOne(command, args, cwd) {
         let out = '';
         child.stdout?.on('data', (d) => { out += d.toString(); });
         child.stderr?.on('data', (d) => { out += d.toString(); });
-        child.on('error', e => { clearTimeout(timer); resolve({ ok: false, detail: e.message }); });
+        child.on('error', e => { clearTimeout(timer); resolve({ ok: false, detail: e.message, durationMs: Date.now() - started }); });
         child.on('close', code => {
             clearTimeout(timer);
+            const durationMs = Date.now() - started;
             if (code === 0)
-                resolve({ ok: true, detail: '' });
+                resolve({ ok: true, detail: '', durationMs });
             const tail = out.trim();
             const header = timedOut ? 'timed out after 15 minutes' : `exit code ${code ?? 1}`;
-            resolve({ ok: false, detail: `${header}${tail === '' ? '' : `\n${tail.slice(-1500)}`}` });
+            resolve({ ok: false, detail: `${header}${tail === '' ? '' : `\n${tail.slice(-4000)}`}`, durationMs });
         });
     });
 }
 /**
  * Run pnpm in the profile directory, trying each candidate command in turn.
- * Output inherits the process stdio (no pipe capture — the host sandbox
- * forbids named-pipe stdio); the exit code is the only result this layer needs.
+ * Output is captured (no named-pipe stdio — the host process is the web or
+ * electron main process, not the DSH tool sandbox); the exit code and the
+ * captured tail are the result this layer returns, and every attempt is
+ * appended to the profile's plugin-center-pnpm.log.
  */
 export async function runPnpm(args, cwd) {
-    let last = { ok: false, detail: 'no pnpm candidate found' };
+    let last = { ok: false, detail: 'no pnpm candidate found', durationMs: 0 };
     for (const command of pnpmCandidates()) {
         last = await runOne(command, args, cwd);
         if (last.ok)
-            return last;
+            break;
     }
+    logPnpm(cwd, args, last);
     return last;
 }
 /** Install a package into the web profile, mirroring `dsh plugin add` semantics. */

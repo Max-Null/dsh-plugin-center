@@ -21,15 +21,27 @@ export declare function detectUpdate(name: string, localVersion: string, repoUrl
 export interface PnpmResult {
     ok: boolean;
     detail: string;
+    /** Wall-clock duration of the pnpm process (slow-but-successful is common). */
+    durationMs: number;
 }
+/**
+ * Append one pnpm operation to `<profileDir>/plugin-center-pnpm.log`: time,
+ * command, cwd, exit, duration, and the captured output tail. Every install
+ * and update lands here regardless of success, so a problem on any machine
+ * can be diagnosed by copying the log (2026-08-22: SSiD 更新慢/失败复盘需要
+ * 现场证据；日志写失败绝不影响主流程）。
+ */
+export declare function logPnpm(profileDir: string, args: readonly string[], result: PnpmResult): void;
 /** pnpm 候选命令：GUI 进程 PATH 常缺用户级 npm 全局目录；且 Windows 上
  *  CreateProcess 只找 pnpm.exe（.cmd/.ps1 必须经 shell）——2026-08-17 实测
  *  spawn('pnpm', shell:false) 直接 ENOENT，更新永远假成功。 */
 export declare function pnpmCandidates(): string[];
 /**
  * Run pnpm in the profile directory, trying each candidate command in turn.
- * Output inherits the process stdio (no pipe capture — the host sandbox
- * forbids named-pipe stdio); the exit code is the only result this layer needs.
+ * Output is captured (no named-pipe stdio — the host process is the web or
+ * electron main process, not the DSH tool sandbox); the exit code and the
+ * captured tail are the result this layer returns, and every attempt is
+ * appended to the profile's plugin-center-pnpm.log.
  */
 export declare function runPnpm(args: readonly string[], cwd: string): Promise<PnpmResult>;
 /** Install a package into the web profile, mirroring `dsh plugin add` semantics. */

@@ -498,7 +498,8 @@ function MarketView({ category, single, source, search, onCount }: { category: s
     setBusy(m.name)
     void rpc('install', { spec: m.spec }).then(
       v => {
-        if (v !== true) throw new Error(t('installNotApplied'))
+        const durationMs = typeof v === 'object' && v !== null ? (v as { durationMs?: number }).durationMs : undefined
+        if (v !== true && durationMs === undefined) throw new Error(t('installNotApplied'))
         setBusy(null)
         pendingInstall.add(m.spec)
         for (const key of Object.keys(marketCache)) {
@@ -506,11 +507,11 @@ function MarketView({ category, single, source, search, onCount }: { category: s
           if (c !== undefined) c.plugins = c.plugins.map(p => p.name === m.name ? { ...p, installed: true } : p)
         }
         setItems(prev => prev.map(p => p.name === m.name ? { ...p, installed: true } : p))
-        showToast(t('installQueued', { n: m.name }), 'ok', 5000)
+        showToast(t('installQueued', { n: m.name }) + (durationMs !== undefined ? `（${(durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 5000)
       },
       e => {
         setBusy(null)
-        showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 8000)
+        showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000)
       },
     )
   }
@@ -666,18 +667,21 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   // would re-run the poll on every render (2026-08-22 loop root cause).
   const handleMarketCount = useCallback((n: number) => { setCounts({ market: n }) }, [])
 
-  const updateOne = (name: string, version: string) => {    setBusyUpdate(name)
+  const updateOne = (name: string, version: string) => {
+    setBusyUpdate(name)
     setUpdating(name, true)
     void rpc('update', { name, version }).then(
       v => {
-        if (v !== true) throw new Error(t('updateNotApplied'))
+        const durationMs = typeof v === 'object' && v !== null ? (v as { durationMs?: number }).durationMs : undefined
+        if (v !== true && durationMs === undefined) throw new Error(t('updateNotApplied'))
         setUpdating(name, false)
-        setBusyUpdate(null); showToast(t('updatedOne', { n: name }), 'ok', 5000)
+        setBusyUpdate(null)
+        showToast(t('updatedOne', { n: name }) + (durationMs !== undefined ? `（${(durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 5000)
         refreshUpdates(true) // 更新完成：列表立即反映新版本，无需手动检查
       },
       e => {
         setUpdating(name, false)
-        setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 8000)
+        setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000)
       },
     )
   }
@@ -692,10 +696,11 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     for (const u of updates) {
       setUpdating(u.name, true)
       try {
-        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean
-        if (v !== true) throw new Error(t('updateNotApplied'))
+        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean | { durationMs?: number }
+        const durationMs = typeof v === 'object' && v !== null ? v.durationMs : undefined
+        if (v !== true && durationMs === undefined) throw new Error(t('updateNotApplied'))
         okCount++
-        okNames.push(u.name)
+        okNames.push(durationMs !== undefined ? `${u.name}（${(durationMs / 1000).toFixed(1)}s）` : u.name)
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
       } finally {
@@ -706,7 +711,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     if (failures.length === 0) {
       showToast(t('updatedMany', { n: okCount }) + `（${okNames.join('、')}）`, 'ok', 6000)
     } else {
-      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 8000)
+      showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 15000)
     }
     refreshUpdates()
   }

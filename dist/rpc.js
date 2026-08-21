@@ -31,7 +31,7 @@ export class PluginCenterRpc extends Service {
                         const result = await ctx.pluginCenter.install(spec);
                         if (!result.ok)
                             return internal(`install ${spec} 失败：${result.detail}`);
-                        return { ok: true, value: true };
+                        return { ok: true, value: { durationMs: result.durationMs } };
                     }
                     case 'update': {
                         const name = payload?.name;
@@ -43,7 +43,7 @@ export class PluginCenterRpc extends Service {
                         const result = await ctx.pluginCenter.update(name, version);
                         if (!result.ok)
                             return internal(`update ${name} 失败：${result.detail}`);
-                        return { ok: true, value: true };
+                        return { ok: true, value: { durationMs: result.durationMs } };
                     }
                     case 'debug':
                         return { ok: true, value: await ctx.pluginCenter.debug() };
