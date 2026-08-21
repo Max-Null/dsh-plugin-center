@@ -375,7 +375,7 @@ export class PluginCenterEngine extends Service {
         if (scored.length === 0)
             return [];
         const list = scored.map(({ p }) => `- ${p.name} | ${p.stars ?? 0}★ | ${p.description.zh.slice(0, 60)}`).join('\n');
-        const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块）：[{"name":"插件名","reason":"一句话中文推荐理由"}]';
+        const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块、不要任何多余文字）：[{"name":"插件名","reason":"一句话中文推荐理由（20 字以内）"}]';
         // Message 契约：content 是 ContentBlock 数组（非字符串），且需要 id/source。
         const chunks = llm.stream({
             provider: 'deepseek-official',
@@ -387,19 +387,27 @@ export class PluginCenterEngine extends Service {
                     source: { kind: 'plugin', plugin: 'dsh-plugin-center' },
                 }],
             system,
-            maxTokens: 800,
-            signal: AbortSignal.timeout(60000),
+            // 800 会把 3-5 条中文推荐截断成不完整 JSON（2026-08-22 实测
+            // "模型输出无法解析" + 截断的 JSON 片段）；2000 留足余量。
+            maxTokens: 2000,
+            signal: AbortSignal.timeout(90000),
         });
         let text = '';
         let failed = false;
+        let failureDetail = '';
         for await (const chunk of chunks) {
             if (chunk.type === 'text-delta')
                 text += chunk.text ?? '';
-            else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted'))
+            else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) {
                 failed = true;
+                // LlmFailure { code, message }——必须透出，否则用户只看到笼统的
+                // "模型推荐失败"而无法诊断（2026-08-22 实测空 text + 无详情）。
+                const f = chunk.reason.failure;
+                failureDetail = f ? `${f.code ?? 'unknown'}: ${f.message ?? ''}` : chunk.reason.kind;
+            }
         }
         if (failed || text.trim() === '') {
-            throw new Error(`模型推荐失败，请重试${text === '' ? '' : `（模型返回：${text.slice(0, 80)}）`}`);
+            throw new Error(`模型推荐失败，请重试${failureDetail !== '' ? `（${failureDetail.slice(0, 200)}）` : text === '' ? '' : `（模型返回：${text.slice(0, 80)}）`}`);
         }
         const start = text.indexOf('[');
         const end = text.lastIndexOf(']');
@@ -430,7 +438,8 @@ export class PluginCenterEngine extends Service {
             });
         }
         catch {
-            throw new Error(`模型输出无法解析：${text.slice(0, 200)}`);
+            // 截断的 JSON（maxTokens 用尽/中止）会解析失败——展示更长片段辅助诊断。
+            throw new Error(`模型输出无法解析：${text.slice(0, 400)}`);
         }
     }
     /** Wait for the dsh-market catalog (fetch or failure), with a hard deadline. */
