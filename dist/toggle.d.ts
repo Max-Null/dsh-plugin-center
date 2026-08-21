@@ -28,4 +28,4 @@ export declare function readDisabledState(patchPath: string): Map<string, boolea
  * @param disabled - the target stance.
  * @returns the outcome; `nowDisabled` mirrors the stance or null when refused.
  */
-export declare function setDisabled(profileDir: string, id: string, disabled: boolean): Promise<ToggleResult>;
+export declare function setDisabled(profileDir: string, entryId: string, disabled: boolean): Promise<ToggleResult>;

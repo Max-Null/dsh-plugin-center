@@ -33,6 +33,17 @@ const PROTECTED_PATTERNS = [
 function isProtected(id) {
     return PROTECTED_PATTERNS.some(pattern => pattern.test(id));
 }
+/**
+ * Patch rows address a loader row by its ORIGINAL patch id, but the Loader
+ * expands `insert` children into runtime ids like `include:<id>`
+ * (2026-08-22 chinese-thinking 实证：写入 `include:chinese-thinking` 行
+ * 组合后不匹配任何行 → 禁用不生效；写入 `chinese-thinking` 即生效）。
+ * Strip the prefix so every entry we toggle writes a row the composition
+ * actually matches; non-insert rows are unaffected.
+ */
+function patchRowId(entryId) {
+    return entryId.replace(/^include:/u, '');
+}
 /** Official bundle entry ids (timer/llm/session/… from dsh-base and
  *  dsh-web-app patch inserts): disabling these breaks the core chain, so
  *  they refuse to toggle alongside the pattern-based protection above. */
@@ -89,8 +100,11 @@ let toggleChain = Promise.resolve();
  * @param disabled - the target stance.
  * @returns the outcome; `nowDisabled` mirrors the stance or null when refused.
  */
-export function setDisabled(profileDir, id, disabled) {
+export function setDisabled(profileDir, entryId, disabled) {
     const run = toggleChain.then(async () => {
+        // Loader runtime ids (include:<id>) never match patch composition —
+        // always address rows by their original patch id.
+        const id = patchRowId(entryId);
         if (isProtected(id) || officialEntryIds(profileDir).has(id)) {
             return { ok: false, detail: `"${id}" is host infrastructure and cannot be disabled`, nowDisabled: null };
         }
