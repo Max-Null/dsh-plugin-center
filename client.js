@@ -206,7 +206,9 @@ var marketCache = {};
 var countsState = { installed: 0, market: 0, failed: 0 };
 var countListeners = /* @__PURE__ */ new Set();
 function setCounts(partial) {
-  countsState = { ...countsState, ...partial };
+  const next = { ...countsState, ...partial };
+  if (next.installed === countsState.installed && next.market === countsState.market && next.failed === countsState.failed) return;
+  countsState = next;
   countListeners.forEach((l) => l());
 }
 var updatingPlugins = /* @__PURE__ */ new Set();
@@ -417,7 +419,7 @@ function useT() {
       localeListeners.delete(l);
     };
   }, []);
-  return (key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars);
+  return (0, import_react.useCallback)((key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars), [id]);
 }
 function InstalledView({ search, category, source }) {
   const t = useT();
@@ -663,6 +665,9 @@ function CenterPanel({ variant = "section" }) {
       for (const timer of timers) clearTimeout(timer);
     };
   }, []);
+  const handleMarketCount = (0, import_react.useCallback)((n) => {
+    setCounts({ market: n });
+  }, []);
   const updateOne = (name, version) => {
     setBusyUpdate(name);
     setUpdating(name, true);
@@ -783,9 +788,7 @@ function CenterPanel({ variant = "section" }) {
   ] }) : null;
   const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     view === "installed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstalledView, { search, category: installedCategory, source: installedSource }),
-    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: (n) => {
-      setCounts({ market: n });
-    } }),
+    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: handleMarketCount }),
     view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate })
   ] });
   if (variant === "overlay") {

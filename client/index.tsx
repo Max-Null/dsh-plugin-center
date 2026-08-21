@@ -220,7 +220,14 @@ const marketCache: Record<string, { plugins: MarketPlugin[]; done: boolean }> = 
 let countsState: { installed: number; market: number; failed: number } = { installed: 0, market: 0, failed: 0 }
 const countListeners = new Set<() => void>()
 function setCounts(partial: Partial<typeof countsState>): void {
-  countsState = { ...countsState, ...partial }
+  const next = { ...countsState, ...partial }
+  // Idempotent: identical values do not notify, so render loops driven by
+  // count-driven effects terminate (2026-08-22: a non-idempotent notify
+  // looped the panel mount effect into an ERR_INSUFFICIENT_RESOURCES storm).
+  if (next.installed === countsState.installed
+    && next.market === countsState.market
+    && next.failed === countsState.failed) return
+  countsState = next
   countListeners.forEach(l => l())
 }
 
@@ -372,7 +379,9 @@ function adoptLocale(id: string | undefined): void {
 function fmt(tpl: string, vars: Record<string, unknown> = {}): string {
   return tpl.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ''))
 }
-/** 文案函数 + 语言订阅：DSH 切换语言时组件自动重渲染。 */
+/** 文案函数 + 语言订阅：DSH 切换语言时组件自动重渲染。
+ *  useCallback 稳定化：每次渲染返回同一引用，否则依赖 t 的 effect/useCallback
+ *  会随渲染无限重跑（2026-08-22 ERR_INSUFFICIENT_RESOURCES 风暴根因之一）。 */
 function useT(): (key: StringKey, vars?: Record<string, unknown>) => string {
   const [id, setId] = useState(localeId)
   useEffect(() => {
@@ -380,7 +389,7 @@ function useT(): (key: StringKey, vars?: Record<string, unknown>) => string {
     localeListeners.add(l)
     return () => { localeListeners.delete(l) }
   }, [])
-  return (key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars)
+  return useCallback((key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars), [id])
 }
 
 // ---- views ----
@@ -653,8 +662,11 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     return () => { alive = false; for (const timer of timers) clearTimeout(timer) }
   }, [])
 
-  const updateOne = (name: string, version: string) => {
-    setBusyUpdate(name)
+  // Stable callback: MarketView's effect depends on it — an inline lambda
+  // would re-run the poll on every render (2026-08-22 loop root cause).
+  const handleMarketCount = useCallback((n: number) => { setCounts({ market: n }) }, [])
+
+  const updateOne = (name: string, version: string) => {    setBusyUpdate(name)
     setUpdating(name, true)
     void rpc('update', { name, version }).then(
       v => {
@@ -767,7 +779,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const body = (
     <>
       {view === 'installed' && <InstalledView search={search} category={installedCategory} source={installedSource} />}
-      {view === 'market' && <MarketView category={category} single={single} source={source} search={marketSearch} onCount={(n) => { setCounts({ market: n }) }} />}
+      {view === 'market' && <MarketView category={category} single={single} source={source} search={marketSearch} onCount={handleMarketCount} />}
       {view === 'updates' && <UpdatesView updates={updates} refresh={refreshUpdates} updateOne={updateOne} busy={busyUpdate} />}
     </>
   )
