@@ -114,9 +114,12 @@ export function setDisabled(profileDir: string, id: string, disabled: boolean): 
     } catch (error) {
       return { ok: false, detail: `read ${patchPath} failed: ${String(error)}`, nowDisabled: null }
     }
-    // Malformed guard: a non-empty patch file must be a plain entry list.
-    const first = text.trimStart().split('\n')[0] ?? ''
-    if (text.trim() !== '' && !first.startsWith('- ')) {
+    // Malformed guard: skip comment/blank lines first — the shipped profile
+    // patch file opens with a comment block and an empty `[]` array, both of
+    // which are legal. A non-empty significant first line that is neither an
+    // entry (`- …`) nor the empty array means a file we must not touch.
+    const significant = text.split('\n').map(line => line.trim()).filter(line => line !== '' && !line.startsWith('#'))
+    if (significant.length > 0 && !significant[0]!.startsWith('- ') && significant[0] !== '[]') {
       return { ok: false, detail: 'cordis.patch.yml is not a plain entry list; refusing to modify it', nowDisabled: null }
     }
     const lines = text === '' ? [] : text.split('\n')
@@ -124,6 +127,10 @@ export function setDisabled(profileDir: string, id: string, disabled: boolean): 
     let patched = false
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!
+      // The empty-array placeholder: appending entries to a file that still
+      // holds `[]` would produce invalid YAML, so the placeholder is dropped
+      // once the first real entry lands.
+      if (line.trim() === '[]') continue
       const row = /^- id:\s*(\S+)\s*$/u.exec(line)
       if (row !== null && row[1] === id) {
         // Find the row's disabled line (immediately after, if present) and
