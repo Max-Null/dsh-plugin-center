@@ -48,7 +48,18 @@ body[data-ds-dark-theme] .pc-switch { background: rgba(255,255,255,.28); }
 body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-success-primary); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
-.pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
+/* 筛选区纵向容器：AI 推荐行 / 主筛选行 / 分类行三段，间距统一。 */
+.pc-filter { display: flex; flex-direction: column; gap: 6px; flex: none; margin-top: 2px; }
+/* 主筛选行：一行放搜索 + 来源 + 工作区按钮，不换行。 */
+.pc-toolbar-main { flex-wrap: nowrap; }
+/* 分类行：独立一行、横向滚动（不 wrap 成折行乱排），chip 不压缩。 */
+.pc-catbar { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: thin; scrollbar-color: var(--dsw-alias-border-l3, rgba(0,0,0,.2)) transparent; }
+.pc-catbar .pc-chip { flex: none; white-space: nowrap; }
+/* 市场超量提示：小号弱化文字，与筛选区视觉分离。 */
+.pc-limit { margin: 2px 0 8px; font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-caption); }
+.pc-ai-row { display: flex; gap: 8px; align-items: center; }
+.pc-ai-row .pc-btn { height: 28px; }
+.pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .pc-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pc-chip.active { background: var(--dsw-alias-state-business-primary); border-color: var(--dsw-alias-state-business-primary); color: var(--dsw-alias-bg-base); }
 
@@ -61,7 +72,12 @@ body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-succe
 .pc-search { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 13px; outline: none; width: 200px; font-family: inherit; }
 .pc-search:focus { border-color: var(--dsw-alias-state-business-primary); }
 .pc-search::placeholder { color: var(--dsw-alias-label-caption); }
-.pc-select { height: 28px; padding: 0 8px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
+/* 定制 select：剥离浏览器原生外观（高度/内边距/padding 差异是跨控件不齐的
+   主因），用背景 chevron 替代系统箭头，与 chip/搜索框同高同圆角。 */
+.pc-select { height: 28px; padding: 0 26px 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background-color: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%23777777' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5l3 3 3-3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 10px 10px; }
+.pc-select:hover { background-color: var(--dsw-alias-interactive-bg-hover); }
+.pc-select:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%23b0b0b0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5l3 3 3-3'/%3E%3C/svg%3E"); }
 .pc-iconbtn { width: 28px; height: 28px; padding: 0; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .pc-iconbtn:hover { background: var(--dsw-alias-interactive-bg-hover); }
 
@@ -639,7 +655,7 @@ function MarketView({ category, single, source, search, onCount }: { category: s
   }
   return (
     <div>
-      {filtered.length > 200 && <p className="pc-sub">{t('marketTooMany', { n: shown.length, m: filtered.length })}</p>}
+      {filtered.length > 200 && <p className="pc-limit">{t('marketTooMany', { n: shown.length, m: filtered.length })}</p>}
       <div className={`pc-grid ${single ? 'single' : 'double'}`}>
         {shown.map(m => (
           <div key={m.name} className="pc-card">
@@ -1042,23 +1058,27 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     </div>
   )
   const installedToolbar = view === 'installed' ? (
-    <div className="pc-toolbar">
-      <input className="pc-search" value={search} onChange={e => { setSearch(e.target.value) }} placeholder={t('searchInstalled')} />
-      <select className="pc-select" value={installedSource ?? ''} onChange={e => { setInstalledSource(e.target.value === '' ? null : e.target.value as PluginSource) }}>
-        <option value="">{t('allSources')}</option>
-        <option value="official">{t('srcOfficial')}</option>
-        <option value="installed">{t('srcInstalled')}</option>
-        <option value="local">{t('srcLocal')}</option>
-        <option value="builtin">{t('srcBuiltin')}</option>
-      </select>
-      <button className={`pc-chip${installedCategory === null ? ' active' : ''}`} onClick={() => { setInstalledCategory(null) }}>{t('all')}</button>
-      {CATEGORIES.map(c => (
-        <button key={c} className={`pc-chip${installedCategory === c ? ' active' : ''}`} onClick={() => { setInstalledCategory(c) }}>{c}</button>
-      ))}
+    <div className="pc-filter">
+      <div className="pc-toolbar pc-toolbar-main">
+        <input className="pc-search" value={search} onChange={e => { setSearch(e.target.value) }} placeholder={t('searchInstalled')} />
+        <select className="pc-select" value={installedSource ?? ''} onChange={e => { setInstalledSource(e.target.value === '' ? null : e.target.value as PluginSource) }}>
+          <option value="">{t('allSources')}</option>
+          <option value="official">{t('srcOfficial')}</option>
+          <option value="installed">{t('srcInstalled')}</option>
+          <option value="local">{t('srcLocal')}</option>
+          <option value="builtin">{t('srcBuiltin')}</option>
+        </select>
+      </div>
+      <div className="pc-catbar">
+        <button className={`pc-chip${installedCategory === null ? ' active' : ''}`} onClick={() => { setInstalledCategory(null) }}>{t('all')}</button>
+        {CATEGORIES.map(c => (
+          <button key={c} className={`pc-chip${installedCategory === c ? ' active' : ''}`} onClick={() => { setInstalledCategory(c) }}>{c}</button>
+        ))}
+      </div>
     </div>
   ) : null
   const aiBar = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 'none' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 'none' }}>
       <div className="pc-ai-row">
         <input
           className="pc-search" style={{ flex: 1 }} value={aiQuery}
@@ -1104,35 +1124,37 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     </div>
   )
   const marketToolbar = view === 'market' ? (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 'none' }}>
+    <div className="pc-filter">
       {aiBar}
-      <div className="pc-toolbar">
-        <input className="pc-search" value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder={t('searchMarket')} />
+      <div className="pc-toolbar pc-toolbar-main">
+        <input className="pc-search" style={{ flex: 1, minWidth: 120 }} value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder={t('searchMarket')} />
         <select className="pc-select" value={source} onChange={e => { setSource(e.target.value); setCategory(null) }}>
           <option value="awesome">awesome-dsh-plugin</option>
           <option value="oh-my-dsh">Oh-My-DSH</option>
           <option value="dsh-market">dsh-market（{counts.dshMarket}）</option>
           <option value="all">{t('allMarkets')}</option>
         </select>
-      <button className={`pc-chip${category === null ? ' active' : ''}`} onClick={() => { setCategory(null) }}>{t('all')}</button>
-      {CATEGORIES.map(c => (
-        <button key={c} className={`pc-chip${category === c ? ' active' : ''}`} onClick={() => { setCategory(c) }}>{c}</button>
-      ))}
-      <span className="pc-spacer" />
-      <button type="button" title={single ? t('gridDouble') : t('gridSingle')} aria-label={single ? t('gridDouble') : t('gridSingle')} className="pc-iconbtn" onClick={() => { setSingle(v => !v) }}>
-        {single ? (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" />
-            <rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1" />
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="2" y="2" width="12" height="5" rx="1" /><rect x="2" y="9" width="12" height="5" rx="1" />
-          </svg>
-        )}
-      </button>
+        <span className="pc-spacer" />
+        <button type="button" title={single ? t('gridDouble') : t('gridSingle')} aria-label={single ? t('gridDouble') : t('gridSingle')} className="pc-iconbtn" onClick={() => { setSingle(v => !v) }}>
+          {single ? (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" />
+              <rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="2" y="2" width="12" height="5" rx="1" /><rect x="2" y="9" width="12" height="5" rx="1" />
+            </svg>
+          )}
+        </button>
       </div>
+      <div className="pc-catbar">
+        <button className={`pc-chip${category === null ? ' active' : ''}`} onClick={() => { setCategory(null) }}>{t('all')}</button>
+        {CATEGORIES.map(c => (
+          <button key={c} className={`pc-chip${category === c ? ' active' : ''}`} onClick={() => { setCategory(c) }}>{c}</button>
+        ))}
       </div>
+    </div>
   ) : null
   const body = (
     <>

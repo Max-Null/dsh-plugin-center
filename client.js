@@ -70,7 +70,18 @@ body[data-ds-dark-theme] .pc-switch { background: rgba(255,255,255,.28); }
 body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-success-primary); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
-.pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
+/* \u7B5B\u9009\u533A\u7EB5\u5411\u5BB9\u5668\uFF1AAI \u63A8\u8350\u884C / \u4E3B\u7B5B\u9009\u884C / \u5206\u7C7B\u884C\u4E09\u6BB5\uFF0C\u95F4\u8DDD\u7EDF\u4E00\u3002 */
+.pc-filter { display: flex; flex-direction: column; gap: 6px; flex: none; margin-top: 2px; }
+/* \u4E3B\u7B5B\u9009\u884C\uFF1A\u4E00\u884C\u653E\u641C\u7D22 + \u6765\u6E90 + \u5DE5\u4F5C\u533A\u6309\u94AE\uFF0C\u4E0D\u6362\u884C\u3002 */
+.pc-toolbar-main { flex-wrap: nowrap; }
+/* \u5206\u7C7B\u884C\uFF1A\u72EC\u7ACB\u4E00\u884C\u3001\u6A2A\u5411\u6EDA\u52A8\uFF08\u4E0D wrap \u6210\u6298\u884C\u4E71\u6392\uFF09\uFF0Cchip \u4E0D\u538B\u7F29\u3002 */
+.pc-catbar { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: thin; scrollbar-color: var(--dsw-alias-border-l3, rgba(0,0,0,.2)) transparent; }
+.pc-catbar .pc-chip { flex: none; white-space: nowrap; }
+/* \u5E02\u573A\u8D85\u91CF\u63D0\u793A\uFF1A\u5C0F\u53F7\u5F31\u5316\u6587\u5B57\uFF0C\u4E0E\u7B5B\u9009\u533A\u89C6\u89C9\u5206\u79BB\u3002 */
+.pc-limit { margin: 2px 0 8px; font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-caption); }
+.pc-ai-row { display: flex; gap: 8px; align-items: center; }
+.pc-ai-row .pc-btn { height: 28px; }
+.pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .pc-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pc-chip.active { background: var(--dsw-alias-state-business-primary); border-color: var(--dsw-alias-state-business-primary); color: var(--dsw-alias-bg-base); }
 
@@ -83,7 +94,12 @@ body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-succe
 .pc-search { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 13px; outline: none; width: 200px; font-family: inherit; }
 .pc-search:focus { border-color: var(--dsw-alias-state-business-primary); }
 .pc-search::placeholder { color: var(--dsw-alias-label-caption); }
-.pc-select { height: 28px; padding: 0 8px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
+/* \u5B9A\u5236 select\uFF1A\u5265\u79BB\u6D4F\u89C8\u5668\u539F\u751F\u5916\u89C2\uFF08\u9AD8\u5EA6/\u5185\u8FB9\u8DDD/padding \u5DEE\u5F02\u662F\u8DE8\u63A7\u4EF6\u4E0D\u9F50\u7684
+   \u4E3B\u56E0\uFF09\uFF0C\u7528\u80CC\u666F chevron \u66FF\u4EE3\u7CFB\u7EDF\u7BAD\u5934\uFF0C\u4E0E chip/\u641C\u7D22\u6846\u540C\u9AD8\u540C\u5706\u89D2\u3002 */
+.pc-select { height: 28px; padding: 0 26px 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background-color: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%23777777' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5l3 3 3-3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 10px 10px; }
+.pc-select:hover { background-color: var(--dsw-alias-interactive-bg-hover); }
+.pc-select:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%23b0b0b0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5l3 3 3-3'/%3E%3C/svg%3E"); }
 .pc-iconbtn { width: 28px; height: 28px; padding: 0; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .pc-iconbtn:hover { background: var(--dsw-alias-interactive-bg-hover); }
 
@@ -688,7 +704,7 @@ function MarketView({ category, single, source, search, onCount }) {
     );
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-    filtered.length > 200 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("marketTooMany", { n: shown.length, m: filtered.length }) }),
+    filtered.length > 200 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-limit", children: t("marketTooMany", { n: shown.length, m: filtered.length }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-grid ${single ? "single" : "double"}`, children: shown.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: m.name }),
@@ -1064,27 +1080,31 @@ function CenterPanel({ variant = "section" }) {
       void updateAll();
     }, children: t("updateAll", { n: updates?.length ?? 0 }) })
   ] });
-  const installedToolbar = view === "installed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: search, onChange: (e) => {
-      setSearch(e.target.value);
-    }, placeholder: t("searchInstalled") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: installedSource ?? "", onChange: (e) => {
-      setInstalledSource(e.target.value === "" ? null : e.target.value);
-    }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: t("allSources") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "official", children: t("srcOfficial") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "installed", children: t("srcInstalled") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "local", children: t("srcLocal") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "builtin", children: t("srcBuiltin") })
+  const installedToolbar = view === "installed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-filter", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar pc-toolbar-main", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: search, onChange: (e) => {
+        setSearch(e.target.value);
+      }, placeholder: t("searchInstalled") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: installedSource ?? "", onChange: (e) => {
+        setInstalledSource(e.target.value === "" ? null : e.target.value);
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: t("allSources") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "official", children: t("srcOfficial") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "installed", children: t("srcInstalled") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "local", children: t("srcLocal") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "builtin", children: t("srcBuiltin") })
+      ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${installedCategory === null ? " active" : ""}`, onClick: () => {
-      setInstalledCategory(null);
-    }, children: t("all") }),
-    CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${installedCategory === c ? " active" : ""}`, onClick: () => {
-      setInstalledCategory(c);
-    }, children: c }, c))
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-catbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${installedCategory === null ? " active" : ""}`, onClick: () => {
+        setInstalledCategory(null);
+      }, children: t("all") }),
+      CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${installedCategory === c ? " active" : ""}`, onClick: () => {
+        setInstalledCategory(c);
+      }, children: c }, c))
+    ] })
   ] }) : null;
-  const aiBar = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: "none" }, children: [
+  const aiBar = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, flex: "none" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai-row", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -1140,10 +1160,10 @@ function CenterPanel({ variant = "section" }) {
       ] }, item.name);
     }) })
   ] });
-  const marketToolbar = view === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: "none" }, children: [
+  const marketToolbar = view === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-filter", children: [
     aiBar,
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: marketSearch, onChange: (e) => {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar pc-toolbar-main", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", style: { flex: 1, minWidth: 120 }, value: marketSearch, onChange: (e) => {
         setMarketSearch(e.target.value);
       }, placeholder: t("searchMarket") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: source, onChange: (e) => {
@@ -1159,12 +1179,6 @@ function CenterPanel({ variant = "section" }) {
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: t("allMarkets") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === null ? " active" : ""}`, onClick: () => {
-        setCategory(null);
-      }, children: t("all") }),
-      CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === c ? " active" : ""}`, onClick: () => {
-        setCategory(c);
-      }, children: c }, c)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: single ? t("gridDouble") : t("gridSingle"), "aria-label": single ? t("gridDouble") : t("gridSingle"), className: "pc-iconbtn", onClick: () => {
         setSingle((v) => !v);
@@ -1177,6 +1191,14 @@ function CenterPanel({ variant = "section" }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "12", height: "5", rx: "1" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "9", width: "12", height: "5", rx: "1" })
       ] }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-catbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === null ? " active" : ""}`, onClick: () => {
+        setCategory(null);
+      }, children: t("all") }),
+      CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === c ? " active" : ""}`, onClick: () => {
+        setCategory(c);
+      }, children: c }, c))
     ] })
   ] }) : null;
   const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
