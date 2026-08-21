@@ -443,12 +443,19 @@ export class PluginCenterEngine extends Service {
     })
     let text = ''
     let failed = false
+    let failureDetail = ''
     for await (const chunk of chunks) {
       if (chunk.type === 'text-delta') text += chunk.text ?? ''
-      else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) failed = true
+      else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) {
+        failed = true
+        // LlmFailure { code, message }——必须透出，否则用户只看到笼统的
+        // "模型推荐失败"而无法诊断（2026-08-22 实测空 text + 无详情）。
+        const f = (chunk.reason as { failure?: { code?: string; message?: string } }).failure
+        failureDetail = f ? `${f.code ?? 'unknown'}: ${f.message ?? ''}` : chunk.reason.kind
+      }
     }
     if (failed || text.trim() === '') {
-      throw new Error(`模型推荐失败，请重试${text === '' ? '' : `（模型返回：${text.slice(0, 80)}）`}`)
+      throw new Error(`模型推荐失败，请重试${failureDetail !== '' ? `（${failureDetail.slice(0, 200)}）` : text === '' ? '' : `（模型返回：${text.slice(0, 80)}）`}`)
     }
     const start = text.indexOf('[')
     const end = text.lastIndexOf(']')
