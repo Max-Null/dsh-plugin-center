@@ -1089,11 +1089,7 @@ function CenterPanel({ variant = "section" }) {
       }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "awesome", children: "awesome-dsh-plugin" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "oh-my-dsh", children: "Oh-My-DSH" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: "dsh-market", children: [
-          "dsh-market\uFF08",
-          counts.dshMarket,
-          "\uFF09"
-        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "dsh-market", children: "dsh-market" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: t("allMarkets") })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),

@@ -1076,7 +1076,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         <select className="pc-select" value={source} onChange={e => { setSource(e.target.value); setCategory(null) }}>
           <option value="awesome">awesome-dsh-plugin</option>
           <option value="oh-my-dsh">Oh-My-DSH</option>
-          <option value="dsh-market">dsh-market（{counts.dshMarket}）</option>
+          <option value="dsh-market">dsh-market</option>
           <option value="all">{t('allMarkets')}</option>
         </select>
         <span className="pc-spacer" />

@@ -45,12 +45,17 @@ export declare class PluginCenterEngine extends Service {
     private awesomeCache;
     private awesomeDone;
     private awesomeFetching;
+    /** 上次 fetch 失败时刻（0=未失败过）：失败后冷却 60s 再重试，
+     *  防止瞬时网络故障让源永久失效（2026-08-22 dsh-market（0）实测）。 */
+    private awesomeFailedAt;
     private ohMyDshCache;
     private ohMyDshDone;
     private ohMyDshFetching;
+    private ohMyDshFailedAt;
     private dshMarketCache;
     private dshMarketDone;
     private dshMarketFetching;
+    private dshMarketFailedAt;
     /** README-extracted screenshot URL per plugin name (lazy, P2). */
     private readonly screenshotCache;
     private installedNamesCache;
@@ -74,15 +79,15 @@ export declare class PluginCenterEngine extends Service {
     dshVersion(): Promise<string>;
     /** Non-group Loader entries, cross-matched with market categories. */
     listInstalled(): Promise<InstalledPlugin[]>;
-    /** Start the awesome catalog fetch once, keeping the process-local cache. */
+    /** Start the awesome catalog fetch (with failed-retry cooldown). */
     private prefetchAwesome;
     /** Backfill npm latest versions into the awesome cache (best-effort, concurrent). */
     private fillNpmVersions;
     /** Single-registry latest version for the market bulk backfill (npmmirror is fast). */
     private fastNpmVersion;
-    /** Start the Oh-My-DSH fetch once (single PLUGINS.md parse). */
+    /** Start the Oh-My-DSH fetch (single PLUGINS.md parse, with failed-retry cooldown). */
     private prefetchOhMyDsh;
-    /** Start the dsh-market fetch once (2BingLing/dsh-market, ~3900 plugins, trimmed). */
+    /** Start the dsh-market fetch (2BingLing/dsh-market, ~3900 plugins, trimmed, with failed-retry cooldown). */
     private prefetchDshMarket;
     /** Installed plugin names (no file IO) — cached so market polling stays cheap. */
     private installedNames;

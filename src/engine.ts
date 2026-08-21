@@ -104,12 +104,17 @@ export class PluginCenterEngine extends Service {
   private awesomeCache: MarketPlugin[] = []
   private awesomeDone = false
   private awesomeFetching = false
+  /** 上次 fetch 失败时刻（0=未失败过）：失败后冷却 60s 再重试，
+   *  防止瞬时网络故障让源永久失效（2026-08-22 dsh-market（0）实测）。 */
+  private awesomeFailedAt = 0
   private ohMyDshCache: MarketPlugin[] = []
   private ohMyDshDone = false
   private ohMyDshFetching = false
+  private ohMyDshFailedAt = 0
   private dshMarketCache: MarketPlugin[] = []
   private dshMarketDone = false
   private dshMarketFetching = false
+  private dshMarketFailedAt = 0
   /** README-extracted screenshot URL per plugin name (lazy, P2). */
   private readonly screenshotCache = new Map<string, string | null>()
   private installedNamesCache: Set<string> | null = null
@@ -200,10 +205,13 @@ export class PluginCenterEngine extends Service {
       .sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source])
   }
 
-  /** Start the awesome catalog fetch once, keeping the process-local cache. */
+  /** Start the awesome catalog fetch (with failed-retry cooldown). */
   private prefetchAwesome(): void {
-    if (this.awesomeFetching || this.awesomeDone) return
+    if (this.awesomeFetching) return
+    if (this.awesomeDone && this.awesomeCache.length > 0) return
+    if (this.awesomeDone && Date.now() - this.awesomeFailedAt < 60_000) return
     this.awesomeFetching = true
+    this.awesomeDone = false
     void (async () => {
       try {
         const [plugins, overrides] = await Promise.all([fetchAwesomePluginsJson(), fetchOhMyDshOverrides()])
@@ -215,7 +223,9 @@ export class PluginCenterEngine extends Service {
         })
         this.awesomeCache = merged
         await this.fillNpmVersions()
-      } catch { /* keep whatever cached so far */ }
+      } catch {
+        this.awesomeFailedAt = Date.now()
+      }
       this.awesomeDone = true
       this.awesomeFetching = false
     })()
@@ -248,27 +258,37 @@ export class PluginCenterEngine extends Service {
     }
   }
 
-  /** Start the Oh-My-DSH fetch once (single PLUGINS.md parse). */
+  /** Start the Oh-My-DSH fetch (single PLUGINS.md parse, with failed-retry cooldown). */
   private prefetchOhMyDsh(): void {
-    if (this.ohMyDshFetching || this.ohMyDshDone) return
+    if (this.ohMyDshFetching) return
+    if (this.ohMyDshDone && this.ohMyDshCache.length > 0) return
+    if (this.ohMyDshDone && Date.now() - this.ohMyDshFailedAt < 60_000) return
     this.ohMyDshFetching = true
+    this.ohMyDshDone = false
     void (async () => {
       try {
         this.ohMyDshCache = mergePlugins([await fetchOhMyDshPlugins()])
-      } catch { /* empty on failure */ }
+      } catch {
+        this.ohMyDshFailedAt = Date.now()
+      }
       this.ohMyDshDone = true
       this.ohMyDshFetching = false
     })()
   }
 
-  /** Start the dsh-market fetch once (2BingLing/dsh-market, ~3900 plugins, trimmed). */
+  /** Start the dsh-market fetch (2BingLing/dsh-market, ~3900 plugins, trimmed, with failed-retry cooldown). */
   private prefetchDshMarket(): void {
-    if (this.dshMarketFetching || this.dshMarketDone) return
+    if (this.dshMarketFetching) return
+    if (this.dshMarketDone && this.dshMarketCache.length > 0) return
+    if (this.dshMarketDone && Date.now() - this.dshMarketFailedAt < 60_000) return
     this.dshMarketFetching = true
+    this.dshMarketDone = false
     void (async () => {
       try {
         this.dshMarketCache = mergePlugins([await fetchDshMarketPlugins()])
-      } catch { /* empty on failure */ }
+      } catch {
+        this.dshMarketFailedAt = Date.now()
+      }
       this.dshMarketDone = true
       this.dshMarketFetching = false
     })()
@@ -292,18 +312,18 @@ export class PluginCenterEngine extends Service {
       plugins.map(p => ({ ...p, installed: installedNames.has(p.name) || installedNames.has(p.spec) }))
     if (source === 'awesome') {
       this.prefetchAwesome()
-      return { plugins: decorate(this.awesomeCache), done: this.awesomeDone }
+      return { plugins: decorate(this.awesomeCache), done: this.awesomeDone && this.awesomeCache.length > 0 }
     }
     if (source === 'oh-my-dsh') {
       this.prefetchOhMyDsh()
-      return { plugins: decorate(this.ohMyDshCache), done: this.ohMyDshDone }
+      return { plugins: decorate(this.ohMyDshCache), done: this.ohMyDshDone && this.ohMyDshCache.length > 0 }
     }
     if (source === 'dsh-market') {
       this.prefetchDshMarket()
       // Score-first order (best first) so the big catalog reads usefully.
       return {
         plugins: decorate(this.dshMarketCache).sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0)),
-        done: this.dshMarketDone,
+        done: this.dshMarketDone && this.dshMarketCache.length > 0,
       }
     }
     this.prefetchAwesome()
@@ -311,7 +331,9 @@ export class PluginCenterEngine extends Service {
     this.prefetchDshMarket()
     return {
       plugins: decorate(mergePlugins([this.awesomeCache, this.ohMyDshCache, this.dshMarketCache])),
-      done: this.awesomeDone && this.ohMyDshDone && this.dshMarketDone,
+      done: (this.awesomeDone && this.awesomeCache.length > 0)
+        && (this.ohMyDshDone && this.ohMyDshCache.length > 0)
+        && (this.dshMarketDone && this.dshMarketCache.length > 0),
     }
   }
 

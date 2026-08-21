@@ -108,9 +108,12 @@ function categorizeTags(tags) {
  * file is ~10 MB, so the trimmed result (~1.5 MB) is what the engine caches.
  */
 export async function fetchDshMarketPlugins() {
+    // 10MB 聚合文件 + raw.githubusercontent 不稳定：60s 曾实测超时失败
+    // （2026-08-22 用户看到 dsh-market（0）——失败后无重试，永远空），
+    // 超时放宽到 120s。
     const res = await fetch('https://raw.githubusercontent.com/2BingLing/dsh-market/master/data/plugins.json', {
         headers: UA,
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(120000),
     });
     if (!res.ok)
         throw new Error(`dsh-market plugins.json: HTTP ${res.status}`);
