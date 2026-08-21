@@ -4,7 +4,7 @@
  * injected <style> sheet (so :hover/:focus work) and use var(--dsw-*) tokens
  * only, so skin plugins restyle this UI too.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { createPortal, useCallback, useEffect, useState } from 'react'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `

@@ -1199,7 +1199,7 @@ function OverlayPanel() {
 function Toast() {
   const t = useToast();
   if (t === null) return null;
-  return createPortal(/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message }), document.body);
+  return (0, import_react.createPortal)(/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message }), document.body);
 }
 function WhatsNewDialog() {
   const t = useT();
