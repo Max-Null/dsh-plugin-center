@@ -409,11 +409,25 @@ export class PluginCenterEngine extends Service {
             const parsed = JSON.parse(text.slice(start, end + 1));
             if (!Array.isArray(parsed))
                 throw new Error('bad shape');
+            // Attach the catalog identity (spec/stars) here, so the client never
+            // has to reverse-match by name — the model may echo either the npm
+            // name or the owner/repo form (2026-08-22: stars went missing because
+            // "Deepseek-Harness-EAC" (npm) did not match the cache key
+            // "zouyuxuan122/Deepseek-Harness-EAC").
             return parsed
                 .filter((item) => item !== null && typeof item === 'object'
                 && typeof item.name === 'string'
                 && typeof item.reason === 'string')
-                .slice(0, 5);
+                .slice(0, 5)
+                .map(item => {
+                const hit = this.dshMarketCache.find(p => p.name === item.name || p.spec === item.name || p.npm === item.name);
+                return {
+                    name: item.name,
+                    reason: item.reason,
+                    spec: hit?.spec ?? null,
+                    stars: hit?.stars ?? null,
+                };
+            });
         }
         catch {
             throw new Error(`模型输出无法解析：${text.slice(0, 200)}`);

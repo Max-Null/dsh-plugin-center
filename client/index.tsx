@@ -858,7 +858,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [aiQuery, setAiQuery] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
-  const [aiResult, setAiResult] = useState<{ name: string; reason: string }[] | null>(null)
+  const [aiResult, setAiResult] = useState<{ name: string; reason: string; spec?: string | null; stars?: number | null }[] | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
 
   const handleToggle = (p: InstalledPlugin) => {
@@ -1094,22 +1094,21 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       {aiResult !== null && aiResult.length > 0 && (
         <div className="pc-grid single">
           {aiResult.map(item => {
-            const plugin = marketCache.all?.plugins.find(p => p.spec === item.name || p.name === item.name)
-            const installed = plugin?.installed === true || (installedCache ?? []).some(p => p.name === item.name)
+            const installed = (installedCache ?? []).some(p => p.name === item.name || p.spec === item.spec || p.name === item.spec)
             return (
               <div key={item.name} className="pc-card">
                 <div className="pc-row">
                   <span className="pc-name">{item.name}</span>
                   <span className="pc-spacer" />
-                  {plugin !== undefined && plugin.stars !== null && <span className="pc-ver">★ {plugin.stars}</span>}
+                  {item.stars != null && <span className="pc-ver">★ {item.stars}</span>}
                   {installed
                     ? <span className="pc-tag">{t('installedTag')}</span>
                     : <button
                         className="pc-btn primary"
                         onClick={() => {
-                          if (plugin === undefined) { showToast(t('installFailed', { e: '未在市场目录中找到该插件，请手动安装' }), 'error', 8000); return }
-                          void rpc('install', { spec: plugin.spec }).then(
-                            () => { pendingInstall.add(plugin.spec); showToast(t('installQueued', { n: item.name }), 'ok', 5000) },
+                          if (item.spec === undefined || item.spec === null || item.spec === '') { showToast(t('installFailed', { e: '未找到该插件的安装 spec' }), 'error', 8000); return }
+                          void rpc('install', { spec: item.spec }).then(
+                            () => { pendingInstall.add(item.spec as string); showToast(t('installQueued', { n: item.name }), 'ok', 5000) },
                             e => showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000),
                           )
                         }}

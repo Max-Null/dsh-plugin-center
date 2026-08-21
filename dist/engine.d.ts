@@ -26,6 +26,10 @@ export interface MarketSnapshot {
 export interface Suggestion {
     name: string;
     reason: string;
+    /** Install spec resolved at suggest time (npm name or github:owner/repo). */
+    spec: string | null;
+    /** GitHub stars when the catalog knows them. */
+    stars: number | null;
 }
 /** One-shot diagnostics report (diagnostics). */
 export interface DiagnosticsReport {

@@ -52,6 +52,10 @@ export interface MarketSnapshot {
 export interface Suggestion {
   name: string
   reason: string
+  /** Install spec resolved at suggest time (npm name or github:owner/repo). */
+  spec: string | null
+  /** GitHub stars when the catalog knows them. */
+  stars: number | null
 }
 
 /** One-shot diagnostics report (diagnostics). */
@@ -450,12 +454,27 @@ export class PluginCenterEngine extends Service {
     try {
       const parsed = JSON.parse(text.slice(start, end + 1)) as unknown
       if (!Array.isArray(parsed)) throw new Error('bad shape')
+      // Attach the catalog identity (spec/stars) here, so the client never
+      // has to reverse-match by name — the model may echo either the npm
+      // name or the owner/repo form (2026-08-22: stars went missing because
+      // "Deepseek-Harness-EAC" (npm) did not match the cache key
+      // "zouyuxuan122/Deepseek-Harness-EAC").
       return parsed
-        .filter((item): item is Suggestion =>
+        .filter((item): item is { name: string; reason: string } =>
           item !== null && typeof item === 'object'
           && typeof (item as { name?: unknown }).name === 'string'
           && typeof (item as { reason?: unknown }).reason === 'string')
         .slice(0, 5)
+        .map(item => {
+          const hit = this.dshMarketCache.find(p =>
+            p.name === item.name || p.spec === item.name || p.npm === item.name)
+          return {
+            name: item.name,
+            reason: item.reason,
+            spec: hit?.spec ?? null,
+            stars: hit?.stars ?? null,
+          }
+        })
     } catch {
       throw new Error(`模型输出无法解析：${text.slice(0, 200)}`)
     }

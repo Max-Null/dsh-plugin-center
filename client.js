@@ -1125,28 +1125,27 @@ function CenterPanel({ variant = "section" }) {
     ] }),
     aiError !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("aiFail", { e: aiError }) }),
     aiResult !== null && aiResult.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-grid single", children: aiResult.map((item) => {
-      const plugin = marketCache.all?.plugins.find((p) => p.spec === item.name || p.name === item.name);
-      const installed = plugin?.installed === true || (installedCache ?? []).some((p) => p.name === item.name);
+      const installed = (installedCache ?? []).some((p) => p.name === item.name || p.spec === item.spec || p.name === item.spec);
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: item.name }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-          plugin !== void 0 && plugin.stars !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
+          item.stars != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
             "\u2605 ",
-            plugin.stars
+            item.stars
           ] }),
           installed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "button",
             {
               className: "pc-btn primary",
               onClick: () => {
-                if (plugin === void 0) {
-                  showToast(t("installFailed", { e: "\u672A\u5728\u5E02\u573A\u76EE\u5F55\u4E2D\u627E\u5230\u8BE5\u63D2\u4EF6\uFF0C\u8BF7\u624B\u52A8\u5B89\u88C5" }), "error", 8e3);
+                if (item.spec === void 0 || item.spec === null || item.spec === "") {
+                  showToast(t("installFailed", { e: "\u672A\u627E\u5230\u8BE5\u63D2\u4EF6\u7684\u5B89\u88C5 spec" }), "error", 8e3);
                   return;
                 }
-                void rpc("install", { spec: plugin.spec }).then(
+                void rpc("install", { spec: item.spec }).then(
                   () => {
-                    pendingInstall.add(plugin.spec);
+                    pendingInstall.add(item.spec);
                     showToast(t("installQueued", { n: item.name }), "ok", 5e3);
                   },
                   (e) => showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3)
