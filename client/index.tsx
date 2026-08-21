@@ -363,8 +363,8 @@ const STRINGS = {
     disabledOk: '已禁用 {n}，重启后生效', enabledOk: '已启用 {n}，重启后生效', toggleFailed: '操作失败：{e}',
     tabDiagnose: '诊断', diagExport: '导出诊断日志', diagCopied: '诊断已复制到剪贴板',
     diagTitle: '环境与插件诊断', diagInstalled: '已安装插件（{n}）', diagDisabled: '禁用状态', diagPnpmLog: 'pnpm 日志（尾部）',
-    aiTitle: 'AI 推荐', aiPlaceholder: '描述你的需求，让 AI 推荐插件…', aiAsk: '推荐', aiAsking: 'AI 思考中…',
-    aiFail: 'AI 推荐失败：{e}', aiHint: '例如：我想要一个能预览 Markdown 的插件', scoreLabel: '评分',
+    aiTitle: 'AI 推荐', aiPlaceholder: '描述你的需求，让 AI 推荐插件…（例如：能预览 Markdown 的插件）', aiAsk: '推荐', aiAsking: 'AI 思考中…',
+    aiFail: 'AI 推荐失败：{e}', scoreLabel: '评分',
     screenshot: '截图', noScreenshot: '无截图', screenshotFail: '截图获取失败',
     marketTooMany: '仅显示前 {n} 个（共 {m}），搜索可缩小范围',
   },
@@ -397,8 +397,8 @@ const STRINGS = {
     disabledOk: 'Disabled {n}; restart to take effect', enabledOk: 'Enabled {n}; restart to take effect', toggleFailed: 'Failed: {e}',
     tabDiagnose: 'Diagnostics', diagExport: 'Export diagnostics', diagCopied: 'Diagnostics copied to clipboard',
     diagTitle: 'Environment & plugin diagnostics', diagInstalled: 'Installed plugins ({n})', diagDisabled: 'Disabled state', diagPnpmLog: 'pnpm log (tail)',
-    aiTitle: 'AI recommendation', aiPlaceholder: 'Describe what you need…', aiAsk: 'Recommend', aiAsking: 'AI is thinking…',
-    aiFail: 'AI recommendation failed: {e}', aiHint: 'e.g. a plugin that previews Markdown', scoreLabel: 'Score',
+    aiTitle: 'AI recommendation', aiPlaceholder: 'Describe what you need — e.g. a Markdown preview plugin…', aiAsk: 'Recommend', aiAsking: 'AI is thinking…',
+    aiFail: 'AI recommendation failed: {e}', scoreLabel: 'Score',
     screenshot: 'Screenshot', noScreenshot: 'No screenshot', screenshotFail: 'Screenshot fetch failed',
     marketTooMany: 'Showing first {n} of {m}; search to narrow down',
   },
@@ -982,8 +982,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     </div>
   ) : null
   const aiBar = (
-    <div className="pc-ai">
-      <span className="pc-ai-title">{t('aiTitle')}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 'none' }}>
       <div className="pc-ai-row">
         <input
           className="pc-search" style={{ flex: 1 }} value={aiQuery}
@@ -995,7 +994,6 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
           {aiBusy ? t('aiAsking') : t('aiAsk')}
         </button>
       </div>
-      <p className="pc-sub">{t('aiHint')}</p>
       {aiError !== null && <p className="pc-sub" style={{ color: 'var(--dsw-alias-state-error-primary)' }}>{t('aiFail', { e: aiError })}</p>}
       {aiResult !== null && aiResult.length > 0 && (
         <div className="pc-grid single">

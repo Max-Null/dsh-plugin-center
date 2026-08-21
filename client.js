@@ -374,11 +374,10 @@ var STRINGS = {
     diagDisabled: "\u7981\u7528\u72B6\u6001",
     diagPnpmLog: "pnpm \u65E5\u5FD7\uFF08\u5C3E\u90E8\uFF09",
     aiTitle: "AI \u63A8\u8350",
-    aiPlaceholder: "\u63CF\u8FF0\u4F60\u7684\u9700\u6C42\uFF0C\u8BA9 AI \u63A8\u8350\u63D2\u4EF6\u2026",
+    aiPlaceholder: "\u63CF\u8FF0\u4F60\u7684\u9700\u6C42\uFF0C\u8BA9 AI \u63A8\u8350\u63D2\u4EF6\u2026\uFF08\u4F8B\u5982\uFF1A\u80FD\u9884\u89C8 Markdown \u7684\u63D2\u4EF6\uFF09",
     aiAsk: "\u63A8\u8350",
     aiAsking: "AI \u601D\u8003\u4E2D\u2026",
     aiFail: "AI \u63A8\u8350\u5931\u8D25\uFF1A{e}",
-    aiHint: "\u4F8B\u5982\uFF1A\u6211\u60F3\u8981\u4E00\u4E2A\u80FD\u9884\u89C8 Markdown \u7684\u63D2\u4EF6",
     scoreLabel: "\u8BC4\u5206",
     screenshot: "\u622A\u56FE",
     noScreenshot: "\u65E0\u622A\u56FE",
@@ -452,11 +451,10 @@ var STRINGS = {
     diagDisabled: "Disabled state",
     diagPnpmLog: "pnpm log (tail)",
     aiTitle: "AI recommendation",
-    aiPlaceholder: "Describe what you need\u2026",
+    aiPlaceholder: "Describe what you need \u2014 e.g. a Markdown preview plugin\u2026",
     aiAsk: "Recommend",
     aiAsking: "AI is thinking\u2026",
     aiFail: "AI recommendation failed: {e}",
-    aiHint: "e.g. a plugin that previews Markdown",
     scoreLabel: "Score",
     screenshot: "Screenshot",
     noScreenshot: "No screenshot",
@@ -1027,8 +1025,7 @@ function CenterPanel({ variant = "section" }) {
       setInstalledCategory(c);
     }, children: c }, c))
   ] }) : null;
-  const aiBar = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ai-title", children: t("aiTitle") }),
+  const aiBar = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: "none" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai-row", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -1047,7 +1044,6 @@ function CenterPanel({ variant = "section" }) {
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: aiBusy || aiQuery.trim() === "", onClick: askAi, children: aiBusy ? t("aiAsking") : t("aiAsk") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("aiHint") }),
     aiError !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("aiFail", { e: aiError }) }),
     aiResult !== null && aiResult.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-grid single", children: aiResult.map((item) => {
       const plugin = marketCache.all?.plugins.find((p) => p.spec === item.name || p.name === item.name);
