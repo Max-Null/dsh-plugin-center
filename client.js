@@ -224,6 +224,26 @@ function setUpdating(name, on) {
   else updatingPlugins.delete(name);
   updatingListeners.forEach((l) => l());
 }
+var pendingToggles = /* @__PURE__ */ new Map();
+var pendingListeners = /* @__PURE__ */ new Set();
+function setPendingToggle(id, disabled) {
+  if (disabled === true) pendingToggles.set(id, true);
+  else pendingToggles.delete(id);
+  pendingListeners.forEach((l) => l());
+}
+function usePendingVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    pendingListeners.add(l);
+    return () => {
+      pendingListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
 var installedListeners = /* @__PURE__ */ new Set();
 function useInstalledVersion() {
   const [v, setV] = (0, import_react.useState)(0);
@@ -490,6 +510,7 @@ function useT() {
 function InstalledView({ search, category, source, onToggle, togglingId }) {
   const t = useT();
   const installedVersion = useInstalledVersion();
+  usePendingVersion();
   const [items, setItems] = (0, import_react.useState)(installedCache);
   const [error, setError] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
@@ -562,7 +583,8 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
       p.categories.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
       p.compatRange !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("requiresDsh", { r: p.compatRange }) }),
-      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") })
+      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") }),
+      pendingToggles.has(p.entryId) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("pendingRestart") })
     ] })
   ] }, p.entryId)) });
 }
@@ -865,6 +887,7 @@ function CenterPanel({ variant = "section" }) {
         const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;
         console.log("[plugin-center] toggle result", { id, nowDisabled });
         showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
+        setPendingToggle(id, nowDisabled);
         if (installedCache !== null) {
           installedCache = installedCache.map((item) => item.entryId === id ? { ...item, enabled: nextEnabled } : item);
         }

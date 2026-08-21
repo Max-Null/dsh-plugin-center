@@ -253,6 +253,26 @@ function setUpdating(name: string, on: boolean): void {
   else updatingPlugins.delete(name)
   updatingListeners.forEach(l => l())
 }
+// ---- pending-toggle state: a disable written to the patch layer but not
+// yet applied by a restart (SSiD has no HMR). The card shows a
+// "restart pending" tag while set; toggling back clears it (that is a
+// revert — the patch is rewritten, nothing waits for a restart).
+const pendingToggles = new Map<string, boolean>()
+const pendingListeners = new Set<() => void>()
+function setPendingToggle(id: string, disabled: boolean | null): void {
+  if (disabled === true) pendingToggles.set(id, true)
+  else pendingToggles.delete(id)
+  pendingListeners.forEach(l => l())
+}
+function usePendingVersion(): number {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    pendingListeners.add(l)
+    return () => { pendingListeners.delete(l) }
+  }, [])
+  return v
+}
 // ---- installed-list refresh signal: toggle/install invalidate the module
 // cache and bump this, and InstalledView refetches on the change ----
 let installedVersion = 0
@@ -447,6 +467,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
 }) {
   const t = useT()
   const installedVersion = useInstalledVersion()
+  usePendingVersion()
   const [items, setItems] = useState<InstalledPlugin[] | null>(installedCache)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -511,6 +532,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
             {p.categories.map(c => <span key={c} className="pc-tag">{c}</span>)}
             {p.compatRange !== null && <span className="pc-tag">{t('requiresDsh', { r: p.compatRange })}</span>}
             {!p.enabled && <span className="pc-tag">{t('disabledTag')}</span>}
+            {pendingToggles.has(p.entryId) && <span className="pc-tag">{t('pendingRestart')}</span>}
           </div>
         </div>
       ))}
@@ -834,6 +856,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         const nowDisabled = typeof v === 'object' && v !== null ? (v as { nowDisabled?: boolean | null }).nowDisabled : null
         console.log('[plugin-center] toggle result', { id, nowDisabled })
         showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
+        // Pending marker: a fresh disable waits for a restart; toggling back
+        // (nowDisabled=false) is a revert and clears it — nothing waits.
+        setPendingToggle(id, nowDisabled)
         // Sync the module cache only — the visible card was already flipped
         // locally by InstalledView (no bump: a refetch would flash the list
         // and return the loader's pre-restart enabled snapshot anyway).
