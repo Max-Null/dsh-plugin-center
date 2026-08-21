@@ -158,6 +158,8 @@ interface MarketPlugin {
   npm: string | null
   version: string | null
   installed: boolean
+  /** dsh-market five-dimension score (dsh-market source only). */
+  score: { total: number; breakdown: Record<string, number>; explanation: string } | null
 }
 
 interface UpdateDigest {
@@ -217,7 +219,7 @@ const marketCache: Record<string, { plugins: MarketPlugin[]; done: boolean }> = 
 
 // ---- header counts (module-level: survive settings panel remounts, so the
 // numbers never flash back to 0 while a fresh fetch is in flight) ----
-let countsState: { installed: number; market: number; failed: number } = { installed: 0, market: 0, failed: 0 }
+let countsState: { installed: number; market: number; dshMarket: number; failed: number } = { installed: 0, market: 0, dshMarket: 0, failed: 0 }
 const countListeners = new Set<() => void>()
 function setCounts(partial: Partial<typeof countsState>): void {
   const next = { ...countsState, ...partial }
@@ -226,6 +228,7 @@ function setCounts(partial: Partial<typeof countsState>): void {
   // looped the panel mount effect into an ERR_INSUFFICIENT_RESOURCES storm).
   if (next.installed === countsState.installed
     && next.market === countsState.market
+    && next.dshMarket === countsState.dshMarket
     && next.failed === countsState.failed) return
   countsState = next
   countListeners.forEach(l => l())
@@ -240,6 +243,23 @@ function setUpdating(name: string, on: boolean): void {
   if (on) updatingPlugins.add(name)
   else updatingPlugins.delete(name)
   updatingListeners.forEach(l => l())
+}
+// ---- installed-list refresh signal: toggle/install invalidate the module
+// cache and bump this, and InstalledView refetches on the change ----
+let installedVersion = 0
+const installedListeners = new Set<() => void>()
+function bumpInstalled(): void {
+  installedVersion++
+  installedListeners.forEach(l => l())
+}
+function useInstalledVersion(): number {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    installedListeners.add(l)
+    return () => { installedListeners.delete(l) }
+  }, [])
+  return v
 }
 /** Subscribe to the module-level updating set (returns a bump counter the
  *  component uses to re-render; read `updatingPlugins` directly). */
@@ -339,6 +359,14 @@ const STRINGS = {
     later: '稍后', markAllRead: '全部标记已读', updateNow: '立即更新', close: '关闭',
     checkFail: '检查更新失败，请稍后重试',
     foundUpdates: '发现 {n} 个可更新插件', allUpToDate: '所有插件均为最新',
+    disable: '禁用', enable: '启用', toggling: '处理中…',
+    disabledOk: '已禁用 {n}，重启后生效', enabledOk: '已启用 {n}，重启后生效', toggleFailed: '操作失败：{e}',
+    tabDiagnose: '诊断', diagExport: '导出诊断日志', diagCopied: '诊断已复制到剪贴板',
+    diagTitle: '环境与插件诊断', diagInstalled: '已安装插件（{n}）', diagDisabled: '禁用状态', diagPnpmLog: 'pnpm 日志（尾部）',
+    aiTitle: 'AI 推荐', aiPlaceholder: '描述你的需求，让 AI 推荐插件…', aiAsk: '推荐', aiAsking: 'AI 思考中…',
+    aiFail: 'AI 推荐失败：{e}', aiHint: '例如：我想要一个能预览 Markdown 的插件', scoreLabel: '评分',
+    screenshot: '截图', noScreenshot: '无截图', screenshotFail: '截图获取失败',
+    marketTooMany: '仅显示前 {n} 个（共 {m}），搜索可缩小范围',
   },
   en: {
     title: 'Plugin Center', tabInstalled: 'Installed', tabMarket: 'Market', tabUpdates: 'Updates',
@@ -365,6 +393,14 @@ const STRINGS = {
     later: 'Later', markAllRead: 'Mark all read', updateNow: 'Update now', close: 'Close',
     checkFail: 'Failed to check updates, please retry later',
     foundUpdates: '{n} updates found', allUpToDate: 'All plugins are up to date',
+    disable: 'Disable', enable: 'Enable', toggling: 'Working…',
+    disabledOk: 'Disabled {n}; restart to take effect', enabledOk: 'Enabled {n}; restart to take effect', toggleFailed: 'Failed: {e}',
+    tabDiagnose: 'Diagnostics', diagExport: 'Export diagnostics', diagCopied: 'Diagnostics copied to clipboard',
+    diagTitle: 'Environment & plugin diagnostics', diagInstalled: 'Installed plugins ({n})', diagDisabled: 'Disabled state', diagPnpmLog: 'pnpm log (tail)',
+    aiTitle: 'AI recommendation', aiPlaceholder: 'Describe what you need…', aiAsk: 'Recommend', aiAsking: 'AI is thinking…',
+    aiFail: 'AI recommendation failed: {e}', aiHint: 'e.g. a plugin that previews Markdown', scoreLabel: 'Score',
+    screenshot: 'Screenshot', noScreenshot: 'No screenshot', screenshotFail: 'Screenshot fetch failed',
+    marketTooMany: 'Showing first {n} of {m}; search to narrow down',
   },
 } as const
 type StringKey = keyof typeof STRINGS.zh
@@ -393,19 +429,30 @@ function useT(): (key: StringKey, vars?: Record<string, unknown>) => string {
 }
 
 // ---- views ----
-function InstalledView({ search, category, source }: { search: string; category: string | null; source: PluginSource | null }) {
+function InstalledView({ search, category, source, onToggle, togglingId }: {
+  search: string
+  category: string | null
+  source: PluginSource | null
+  onToggle: (p: InstalledPlugin) => void
+  togglingId: string | null
+}) {
   const t = useT()
+  const installedVersion = useInstalledVersion()
   const [items, setItems] = useState<InstalledPlugin[] | null>(installedCache)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (installedCache !== null) return // already loaded once; reuse across tab switches
     let alive = true
+    if (installedCache !== null) {
+      // Cache is current (nothing invalidated it); keep showing it.
+      setItems(installedCache)
+      return () => { alive = false }
+    }
     void rpc('listInstalled').then(
       v => { installedCache = v as InstalledPlugin[]; if (alive) setItems(installedCache) },
       e => { if (alive) setError(e instanceof Error ? e.message : String(e)) },
     )
     return () => { alive = false }
-  }, [])
+  }, [installedVersion])
   if (error !== null) return <p className="pc-sub">{t('loadFailed', { e: error })}</p>
   if (items === null) return <p className="pc-sub">{t('loading')}</p>
   const srcLabel: Record<PluginSource, string> = {
@@ -437,6 +484,10 @@ function InstalledView({ search, category, source }: { search: string; category:
             {p.categories.map(c => <span key={c} className="pc-tag">{c}</span>)}
             {p.compatRange !== null && <span className="pc-tag">{t('requiresDsh', { r: p.compatRange })}</span>}
             {!p.enabled && <span className="pc-tag">{t('disabledTag')}</span>}
+            <span className="pc-spacer" />
+            <button className="pc-btn" disabled={togglingId !== null} onClick={() => { onToggle(p) }}>
+              {togglingId === p.name ? t('toggling') : p.enabled ? t('disable') : t('enable')}
+            </button>
           </div>
         </div>
       ))}
@@ -450,6 +501,10 @@ function MarketView({ category, single, source, search, onCount }: { category: s
   const [done, setDone] = useState(marketCache[source]?.done ?? marketCache.all?.done ?? false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [shotBusy, setShotBusy] = useState<string | null>(null)
+  const [shotUrl, setShotUrl] = useState<string | null>(null)
+  const [shotName, setShotName] = useState<string | null>(null)
+  const [shotZoom, setShotZoom] = useState(false)
   useEffect(() => {
     let alive = true
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -493,6 +548,9 @@ function MarketView({ category, single, source, search, onCount }: { category: s
       || (m.description.zh || m.description.en).toLowerCase().includes(q)
     return matchSearch && (category === null || m.categories.includes(category))
   })
+  // Big sources (dsh-market ~3900) render the top of the scored/sorted list;
+  // searching narrows the full set.
+  const shown = filtered.slice(0, 200)
   const descOf = (m: MarketPlugin): string => localeId === 'en' ? (m.description.en || m.description.zh) : (m.description.zh || m.description.en)
   const install = (m: MarketPlugin) => {
     setBusy(m.name)
@@ -515,20 +573,40 @@ function MarketView({ category, single, source, search, onCount }: { category: s
       },
     )
   }
+
+  const showScreenshot = (m: MarketPlugin) => {
+    if (shotBusy !== null) return
+    setShotBusy(m.name)
+    void rpc('screenshot', { name: m.name }).then(
+      url => {
+        setShotBusy(null)
+        if (typeof url !== 'string' || url === '') { showToast(t('noScreenshot'), 'error', 6000); return }
+        setShotName(m.name)
+        setShotUrl(url)
+        setShotZoom(false)
+      },
+      () => { setShotBusy(null); showToast(t('screenshotFail'), 'error', 6000) },
+    )
+  }
   return (
     <div>
+      {filtered.length > 200 && <p className="pc-sub">{t('marketTooMany', { n: shown.length, m: filtered.length })}</p>}
       <div className={`pc-grid ${single ? 'single' : 'double'}`}>
-        {filtered.map(m => (
+        {shown.map(m => (
           <div key={m.name} className="pc-card">
             <div className="pc-row">
               <span className="pc-name">{m.name}</span>
+              {m.score !== null && <span className="pc-tag" title={`${m.score.total}${m.score.explanation !== '' ? `：${m.score.explanation}` : ''}`}>{t('scoreLabel')} {m.score.total}</span>}
               {m.stars !== null && <span className="pc-ver">★ {m.stars}</span>}
               {m.version !== null && <span className="pc-ver">v{m.version}</span>}
             </div>
             <div className="pc-desc">{descOf(m)}</div>
             <div className="pc-meta">
-              {m.categories.map(c => <span key={c} className="pc-tag">{c}</span>)}
+              {m.categories.slice(0, 4).map(c => <span key={c} className="pc-tag">{c}</span>)}
               <span className="pc-spacer" />
+              <button type="button" className="pc-iconbtn" title={t('screenshot')} aria-label={t('screenshot')} disabled={shotBusy !== null} onClick={() => { showScreenshot(m) }}>
+                {shotBusy === m.name ? '…' : '📷'}
+              </button>
               {m.installed || pendingInstall.has(m.spec)
                 ? <span className="pc-tag">{pendingInstall.has(m.spec) ? t('pendingRestart') : t('installedTag')}</span>
                 : <button className="pc-btn primary" disabled={busy !== null} onClick={() => { install(m) }}>{busy === m.name ? t('installing') : t('install')}</button>}
@@ -537,6 +615,28 @@ function MarketView({ category, single, source, search, onCount }: { category: s
         ))}
       </div>
       {!done && <p className="pc-sub">{t('loadMore', { n: items.length })}</p>}
+      {shotUrl !== null && (
+        <div className="pc-overlay" role="presentation" onClick={() => { setShotUrl(null); setShotName(null) }}>
+          <div className="pc-panel" role="dialog" aria-modal="true" onClick={(e) => { e.stopPropagation() }}>
+            <div className="pc-panel-head">
+              <span className="pc-title">{shotName ?? ''}</span>
+              <span className="pc-spacer" />
+              <button type="button" className="pc-close" onClick={() => { setShotUrl(null); setShotName(null) }} aria-label={t('close')}>✕</button>
+            </div>
+            <div className="pc-panel-body" style={{ alignItems: 'center', overflow: shotZoom ? 'auto' : 'hidden' }}>
+              <img
+                src={shotUrl}
+                alt={shotName ?? ''}
+                onClick={() => { setShotZoom(v => !v) }}
+                title={shotZoom ? '缩小' : '点击放大'}
+                style={shotZoom
+                  ? { maxWidth: 'none', maxHeight: 'none', width: 'auto', borderRadius: 8 }
+                  : { maxWidth: '100%', maxHeight: '70vh', borderRadius: 8, objectFit: 'contain' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -582,7 +682,98 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
   )
 }
 
-type View = 'installed' | 'market' | 'updates'
+interface DiagnosticsReport {
+  dshVersion: string
+  baseUrl: string
+  node: string
+  installed: InstalledPlugin[]
+  disabled: Record<string, boolean>
+  pnpmLogTail: string
+}
+
+function DiagnoseView() {
+  const t = useT()
+  const [report, setReport] = useState<DiagnosticsReport | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    void rpc('diagnostics').then(
+      v => { if (alive) setReport(v as DiagnosticsReport) },
+      e => { if (alive) setError(e instanceof Error ? e.message : String(e)) },
+    )
+    return () => { alive = false }
+  }, [])
+
+  const textOf = (): string => {
+    if (report === null) return 'no diagnostics'
+    const lines: string[] = [
+      '=== dsh-plugin-center diagnostics ===',
+      `dsh: ${report.dshVersion}`,
+      `node: ${report.node}`,
+      `profile: ${report.baseUrl}`,
+      `installed (${report.installed.length}):`,
+      ...report.installed.map(p => `  ${p.enabled ? '' : '[disabled] '}${p.name}@${p.version ?? '?'} (${p.source}, ${p.fiberPhase ?? '?'})`),
+      'patch disabled:',
+      ...Object.entries(report.disabled).map(([id, v]) => `  ${id}: ${v ? 'disabled' : 'force-enabled'}`),
+      'pnpm log tail:',
+      report.pnpmLogTail,
+    ]
+    return lines.join('\n')
+  }
+
+  const exportLog = () => {
+    const blob = new Blob([textOf()], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `plugin-center-diagnostics-${new Date().toISOString().slice(0, 19).replace(/[:T]/gu, '-')}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  const copy = () => {
+    void navigator.clipboard?.writeText(textOf()).then(() => { showToast(t('diagCopied'), 'ok', 3000) }).catch(() => {})
+  }
+
+  if (error !== null) return <p className="pc-sub">{t('loadFailed', { e: error })}</p>
+  if (report === null) return <p className="pc-sub">{t('loading')}</p>
+  return (
+    <div>
+      <div className="pc-toolbar">
+        <button className="pc-btn" onClick={exportLog}>{t('diagExport')}</button>
+        <button className="pc-btn" onClick={copy}>{t('diagCopied')}</button>
+      </div>
+      <p className="pc-sub">{t('diagTitle')}</p>
+      <div className="pc-card">
+        <div className="pc-row"><span className="pc-name">dsh</span><span className="pc-ver">{report.dshVersion}</span></div>
+        <div className="pc-row"><span className="pc-name">node</span><span className="pc-ver">{report.node}</span></div>
+        <div className="pc-row"><span className="pc-name">profile</span><span className="pc-ver" style={{ wordBreak: 'break-all' }}>{report.baseUrl}</span></div>
+      </div>
+      <p className="pc-sub">{t('diagInstalled', { n: report.installed.length })}</p>
+      {report.installed.map(p => (
+        <div key={p.name} className="pc-card">
+          <div className="pc-row">
+            <span className="pc-name">{p.name}</span>
+            <span className="pc-ver">v{p.version ?? '?'}</span>
+            <span className={`pc-badge ${p.source}`}>{p.source}</span>
+            {!p.enabled && <span className="pc-tag">{t('disabledTag')}</span>}
+          </div>
+        </div>
+      ))}
+      <p className="pc-sub">{t('diagDisabled')}</p>
+      <div className="pc-card">
+        {Object.keys(report.disabled).length === 0
+          ? <span className="pc-ver">—</span>
+          : Object.entries(report.disabled).map(([id, v]) => (
+            <div key={id} className="pc-row"><span className="pc-name">{id}</span><span className="pc-ver">{v ? 'disabled' : 'enabled'}</span></div>
+          ))}
+      </div>
+      <p className="pc-sub">{t('diagPnpmLog')}</p>
+      <pre className="pc-desc" style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>{report.pnpmLogTail === '' ? '—' : report.pnpmLogTail}</pre>
+    </div>
+  )
+}
+
+type View = 'installed' | 'market' | 'updates' | 'diagnose'
 
 function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' }) {
   const t = useT()
@@ -599,6 +790,40 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [updates, setUpdates] = useState<UpdateDigest[] | null>(null)
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [aiQuery, setAiQuery] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiResult, setAiResult] = useState<{ name: string; reason: string }[] | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  const handleToggle = (p: InstalledPlugin) => {
+    if (togglingId !== null) return
+    setTogglingId(p.name)
+    void rpc('toggle', { id: p.name, disabled: p.enabled }).then(
+      v => {
+        setTogglingId(null)
+        const nowDisabled = typeof v === 'object' && v !== null ? (v as { nowDisabled?: boolean | null }).nowDisabled : null
+        showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
+        // Invalidate the installed cache and notify the view to refetch, so
+        // the card's enabled state flips immediately (2026-08-22 feedback:
+        // the toggle wrote the patch but the UI did not change).
+        installedCache = null
+        bumpInstalled()
+      },
+      e => { setTogglingId(null); showToast(t('toggleFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000) },
+    )
+  }
+  const askAi = () => {
+    const q = aiQuery.trim()
+    if (q === '' || aiBusy) return
+    setAiBusy(true)
+    setAiResult(null)
+    setAiError(null)
+    void rpc('suggest', { query: q }).then(
+      v => { setAiBusy(false); setAiResult(v as { name: string; reason: string }[]) },
+      e => { setAiBusy(false); setAiError(e instanceof Error ? e.message : String(e)) },
+    )
+  }
 
   // silent：挂载自动检查不弹 toast；用户点按钮（silent=false）给明确反馈
   // （2026-08-17 用户反馈：按了「检查更新」没啥变化——原来只有 tab 徽标/列表
@@ -652,6 +877,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         if (!alive) return
         marketCache[src] = { plugins: r.plugins, done: r.done }
         if (src === 'all') setCounts({ market: r.plugins.length })
+        if (src === 'dsh-market') setCounts({ dshMarket: r.plugins.length })
         if (!r.done) timers.push(setTimeout(() => { void poll(src) }, 5000))
       } catch {
         if (alive) timers.push(setTimeout(() => { void poll(src) }, 15000))
@@ -727,6 +953,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       {tab('installed', t('tabInstalled'), counts.installed)}
       {tab('market', t('tabMarket'), counts.market)}
       {tab('updates', t('tabUpdates'), updates?.length ?? 0)}
+      {tab('diagnose', t('tabDiagnose'), null)}
     </div>
   )
   const head = (showTitle: boolean) => (
@@ -754,14 +981,65 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       ))}
     </div>
   ) : null
+  const aiBar = (
+    <div className="pc-ai">
+      <span className="pc-ai-title">{t('aiTitle')}</span>
+      <div className="pc-ai-row">
+        <input
+          className="pc-search" style={{ flex: 1 }} value={aiQuery}
+          onChange={e => { setAiQuery(e.target.value) }}
+          onKeyDown={e => { if (e.key === 'Enter') askAi() }}
+          placeholder={t('aiPlaceholder')}
+        />
+        <button className="pc-btn primary" disabled={aiBusy || aiQuery.trim() === ''} onClick={askAi}>
+          {aiBusy ? t('aiAsking') : t('aiAsk')}
+        </button>
+      </div>
+      <p className="pc-sub">{t('aiHint')}</p>
+      {aiError !== null && <p className="pc-sub" style={{ color: 'var(--dsw-alias-state-error-primary)' }}>{t('aiFail', { e: aiError })}</p>}
+      {aiResult !== null && aiResult.length > 0 && (
+        <div className="pc-grid single">
+          {aiResult.map(item => {
+            const plugin = marketCache.all?.plugins.find(p => p.spec === item.name || p.name === item.name)
+            const installed = plugin?.installed === true || (installedCache ?? []).some(p => p.name === item.name)
+            return (
+              <div key={item.name} className="pc-card">
+                <div className="pc-row">
+                  <span className="pc-name">{item.name}</span>
+                  <span className="pc-spacer" />
+                  {plugin !== undefined && plugin.stars !== null && <span className="pc-ver">★ {plugin.stars}</span>}
+                  {installed
+                    ? <span className="pc-tag">{t('installedTag')}</span>
+                    : <button
+                        className="pc-btn primary"
+                        onClick={() => {
+                          if (plugin === undefined) { showToast(t('installFailed', { e: '未在市场目录中找到该插件，请手动安装' }), 'error', 8000); return }
+                          void rpc('install', { spec: plugin.spec }).then(
+                            () => { pendingInstall.add(plugin.spec); showToast(t('installQueued', { n: item.name }), 'ok', 5000) },
+                            e => showToast(t('installFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 15000),
+                          )
+                        }}
+                      >{t('install')}</button>}
+                </div>
+                <div className="pc-desc">{item.reason}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
   const marketToolbar = view === 'market' ? (
-    <div className="pc-toolbar">
-      <input className="pc-search" value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder={t('searchMarket')} />
-      <select className="pc-select" value={source} onChange={e => { setSource(e.target.value); setCategory(null) }}>
-        <option value="awesome">awesome-dsh-plugin</option>
-        <option value="oh-my-dsh">Oh-My-DSH</option>
-        <option value="all">{t('allMarkets')}</option>
-      </select>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 'none' }}>
+      {aiBar}
+      <div className="pc-toolbar">
+        <input className="pc-search" value={marketSearch} onChange={e => { setMarketSearch(e.target.value) }} placeholder={t('searchMarket')} />
+        <select className="pc-select" value={source} onChange={e => { setSource(e.target.value); setCategory(null) }}>
+          <option value="awesome">awesome-dsh-plugin</option>
+          <option value="oh-my-dsh">Oh-My-DSH</option>
+          <option value="dsh-market">dsh-market（{counts.dshMarket}）</option>
+          <option value="all">{t('allMarkets')}</option>
+        </select>
       <button className={`pc-chip${category === null ? ' active' : ''}`} onClick={() => { setCategory(null) }}>{t('all')}</button>
       {CATEGORIES.map(c => (
         <button key={c} className={`pc-chip${category === c ? ' active' : ''}`} onClick={() => { setCategory(c) }}>{c}</button>
@@ -779,13 +1057,15 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
           </svg>
         )}
       </button>
-    </div>
+      </div>
+      </div>
   ) : null
   const body = (
     <>
-      {view === 'installed' && <InstalledView search={search} category={installedCategory} source={installedSource} />}
+      {view === 'installed' && <InstalledView search={search} category={installedCategory} source={installedSource} onToggle={handleToggle} togglingId={togglingId} />}
       {view === 'market' && <MarketView category={category} single={single} source={source} search={marketSearch} onCount={handleMarketCount} />}
       {view === 'updates' && <UpdatesView updates={updates} refresh={refreshUpdates} updateOne={updateOne} busy={busyUpdate} />}
+      {view === 'diagnose' && <DiagnoseView />}
     </>
   )
   if (variant === 'overlay') {

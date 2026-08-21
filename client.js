@@ -203,11 +203,11 @@ function useWhatsNewOpen() {
 var readCache = {};
 var installedCache = null;
 var marketCache = {};
-var countsState = { installed: 0, market: 0, failed: 0 };
+var countsState = { installed: 0, market: 0, dshMarket: 0, failed: 0 };
 var countListeners = /* @__PURE__ */ new Set();
 function setCounts(partial) {
   const next = { ...countsState, ...partial };
-  if (next.installed === countsState.installed && next.market === countsState.market && next.failed === countsState.failed) return;
+  if (next.installed === countsState.installed && next.market === countsState.market && next.dshMarket === countsState.dshMarket && next.failed === countsState.failed) return;
   countsState = next;
   countListeners.forEach((l) => l());
 }
@@ -217,6 +217,25 @@ function setUpdating(name, on) {
   if (on) updatingPlugins.add(name);
   else updatingPlugins.delete(name);
   updatingListeners.forEach((l) => l());
+}
+var installedVersion = 0;
+var installedListeners = /* @__PURE__ */ new Set();
+function bumpInstalled() {
+  installedVersion++;
+  installedListeners.forEach((l) => l());
+}
+function useInstalledVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    installedListeners.add(l);
+    return () => {
+      installedListeners.delete(l);
+    };
+  }, []);
+  return v;
 }
 function useUpdatingVersion() {
   const [v, setV] = (0, import_react.useState)(0);
@@ -471,11 +490,17 @@ function useT() {
 }
 function InstalledView({ search, category, source, onToggle, togglingId }) {
   const t = useT();
+  const installedVersion2 = useInstalledVersion();
   const [items, setItems] = (0, import_react.useState)(installedCache);
   const [error, setError] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
-    if (installedCache !== null) return;
     let alive = true;
+    if (installedCache !== null) {
+      setItems(installedCache);
+      return () => {
+        alive = false;
+      };
+    }
     void rpc("listInstalled").then(
       (v) => {
         installedCache = v;
@@ -488,7 +513,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [installedVersion2]);
   if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) });
   if (items === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loading") });
   const srcLabel = {
@@ -536,6 +561,7 @@ function MarketView({ category, single, source, search, onCount }) {
   const [shotBusy, setShotBusy] = (0, import_react.useState)(null);
   const [shotUrl, setShotUrl] = (0, import_react.useState)(null);
   const [shotName, setShotName] = (0, import_react.useState)(null);
+  const [shotZoom, setShotZoom] = (0, import_react.useState)(false);
   (0, import_react.useEffect)(() => {
     let alive = true;
     let timer;
@@ -607,15 +633,16 @@ function MarketView({ category, single, source, search, onCount }) {
       (url) => {
         setShotBusy(null);
         if (typeof url !== "string" || url === "") {
-          showToast(t("noScreenshot"), "error", 4e3);
+          showToast(t("noScreenshot"), "error", 6e3);
           return;
         }
         setShotName(m.name);
         setShotUrl(url);
+        setShotZoom(false);
       },
       () => {
         setShotBusy(null);
-        showToast(t("screenshotFail"), "error", 4e3);
+        showToast(t("screenshotFail"), "error", 6e3);
       }
     );
   };
@@ -665,7 +692,18 @@ function MarketView({ category, single, source, search, onCount }) {
           setShotName(null);
         }, "aria-label": t("close"), children: "\u2715" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", style: { alignItems: "center" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: shotUrl, alt: shotName ?? "", style: { maxWidth: "100%", maxHeight: "70vh", borderRadius: 8, objectFit: "contain" } }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", style: { alignItems: "center", overflow: shotZoom ? "auto" : "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "img",
+        {
+          src: shotUrl,
+          alt: shotName ?? "",
+          onClick: () => {
+            setShotZoom((v) => !v);
+          },
+          title: shotZoom ? "\u7F29\u5C0F" : "\u70B9\u51FB\u653E\u5927",
+          style: shotZoom ? { maxWidth: "none", maxHeight: "none", width: "auto", borderRadius: 8 } : { maxWidth: "100%", maxHeight: "70vh", borderRadius: 8, objectFit: "contain" }
+        }
+      ) })
     ] }) })
   ] });
 }
@@ -809,9 +847,8 @@ function CenterPanel({ variant = "section" }) {
         setTogglingId(null);
         const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;
         showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
-        if (installedCache !== null) {
-          installedCache = installedCache.map((item) => item.name === p.name ? { ...item, enabled: !p.enabled } : item);
-        }
+        installedCache = null;
+        bumpInstalled();
       },
       (e) => {
         setTogglingId(null);
@@ -879,6 +916,7 @@ function CenterPanel({ variant = "section" }) {
         if (!alive) return;
         marketCache[src] = { plugins: r.plugins, done: r.done };
         if (src === "all") setCounts({ market: r.plugins.length });
+        if (src === "dsh-market") setCounts({ dshMarket: r.plugins.length });
         if (!r.done) timers.push(setTimeout(() => {
           void poll(src);
         }, 5e3));
@@ -989,105 +1027,106 @@ function CenterPanel({ variant = "section" }) {
       setInstalledCategory(c);
     }, children: c }, c))
   ] }) : null;
-  const marketToolbar = view === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: marketSearch, onChange: (e) => {
-      setMarketSearch(e.target.value);
-    }, placeholder: t("searchMarket") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: source, onChange: (e) => {
-      setSource(e.target.value);
-      setCategory(null);
-    }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "awesome", children: "awesome-dsh-plugin" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "oh-my-dsh", children: "Oh-My-DSH" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: "dsh-market", children: [
-        "dsh-market\uFF08",
-        counts.market,
-        "\uFF09"
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: t("allMarkets") })
+  const aiBar = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ai-title", children: t("aiTitle") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai-row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          className: "pc-search",
+          style: { flex: 1 },
+          value: aiQuery,
+          onChange: (e) => {
+            setAiQuery(e.target.value);
+          },
+          onKeyDown: (e) => {
+            if (e.key === "Enter") askAi();
+          },
+          placeholder: t("aiPlaceholder")
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: aiBusy || aiQuery.trim() === "", onClick: askAi, children: aiBusy ? t("aiAsking") : t("aiAsk") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === null ? " active" : ""}`, onClick: () => {
-      setCategory(null);
-    }, children: t("all") }),
-    CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === c ? " active" : ""}`, onClick: () => {
-      setCategory(c);
-    }, children: c }, c)),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: single ? t("gridDouble") : t("gridSingle"), "aria-label": single ? t("gridDouble") : t("gridSingle"), className: "pc-iconbtn", onClick: () => {
-      setSingle((v) => !v);
-    }, children: single ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "5", height: "5", rx: "1" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "9", y: "2", width: "5", height: "5", rx: "1" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "9", width: "5", height: "5", rx: "1" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "9", y: "9", width: "5", height: "5", rx: "1" })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "12", height: "5", rx: "1" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "9", width: "12", height: "5", rx: "1" })
-    ] }) })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("aiHint") }),
+    aiError !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("aiFail", { e: aiError }) }),
+    aiResult !== null && aiResult.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-grid single", children: aiResult.map((item) => {
+      const plugin = marketCache.all?.plugins.find((p) => p.spec === item.name || p.name === item.name);
+      const installed = plugin?.installed === true || (installedCache ?? []).some((p) => p.name === item.name);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: item.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+          plugin !== void 0 && plugin.stars !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
+            "\u2605 ",
+            plugin.stars
+          ] }),
+          installed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              className: "pc-btn primary",
+              onClick: () => {
+                if (plugin === void 0) {
+                  showToast(t("installFailed", { e: "\u672A\u5728\u5E02\u573A\u76EE\u5F55\u4E2D\u627E\u5230\u8BE5\u63D2\u4EF6\uFF0C\u8BF7\u624B\u52A8\u5B89\u88C5" }), "error", 8e3);
+                  return;
+                }
+                void rpc("install", { spec: plugin.spec }).then(
+                  () => {
+                    pendingInstall.add(plugin.spec);
+                    showToast(t("installQueued", { n: item.name }), "ok", 5e3);
+                  },
+                  (e) => showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3)
+                );
+              },
+              children: t("install")
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: item.reason })
+      ] }, item.name);
+    }) })
+  ] });
+  const marketToolbar = view === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, flex: "none" }, children: [
+    aiBar,
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "pc-search", value: marketSearch, onChange: (e) => {
+        setMarketSearch(e.target.value);
+      }, placeholder: t("searchMarket") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: "pc-select", value: source, onChange: (e) => {
+        setSource(e.target.value);
+        setCategory(null);
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "awesome", children: "awesome-dsh-plugin" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "oh-my-dsh", children: "Oh-My-DSH" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: "dsh-market", children: [
+          "dsh-market\uFF08",
+          counts.dshMarket,
+          "\uFF09"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: t("allMarkets") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === null ? " active" : ""}`, onClick: () => {
+        setCategory(null);
+      }, children: t("all") }),
+      CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: `pc-chip${category === c ? " active" : ""}`, onClick: () => {
+        setCategory(c);
+      }, children: c }, c)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: single ? t("gridDouble") : t("gridSingle"), "aria-label": single ? t("gridDouble") : t("gridSingle"), className: "pc-iconbtn", onClick: () => {
+        setSingle((v) => !v);
+      }, children: single ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "5", height: "5", rx: "1" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "9", y: "2", width: "5", height: "5", rx: "1" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "9", width: "5", height: "5", rx: "1" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "9", y: "9", width: "5", height: "5", rx: "1" })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "2", width: "12", height: "5", rx: "1" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { x: "2", y: "9", width: "12", height: "5", rx: "1" })
+      ] }) })
+    ] })
   ] }) : null;
   const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     view === "installed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstalledView, { search, category: installedCategory, source: installedSource, onToggle: handleToggle, togglingId }),
-    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ai-title", children: t("aiTitle") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-ai-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              className: "pc-search",
-              style: { flex: 1 },
-              value: aiQuery,
-              onChange: (e) => {
-                setAiQuery(e.target.value);
-              },
-              onKeyDown: (e) => {
-                if (e.key === "Enter") askAi();
-              },
-              placeholder: t("aiPlaceholder")
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: aiBusy || aiQuery.trim() === "", onClick: askAi, children: aiBusy ? t("aiAsking") : t("aiAsk") })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("aiHint") }),
-        aiError !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("aiFail", { e: aiError }) }),
-        aiResult !== null && aiResult.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-grid single", children: aiResult.map((item) => {
-          const plugin = marketCache.all?.plugins.find((p) => p.spec === item.name || p.name === item.name);
-          const installed = plugin?.installed === true || (installedCache ?? []).some((p) => p.name === item.name);
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: item.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-              plugin !== void 0 && plugin.stars !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
-                "\u2605 ",
-                plugin.stars
-              ] }),
-              installed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("installedTag") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "button",
-                {
-                  className: "pc-btn primary",
-                  onClick: () => {
-                    if (plugin === void 0) {
-                      showToast(t("installFailed", { e: "\u672A\u5728\u5E02\u573A\u76EE\u5F55\u4E2D\u627E\u5230\u8BE5\u63D2\u4EF6\uFF0C\u8BF7\u624B\u52A8\u5B89\u88C5" }), "error", 8e3);
-                      return;
-                    }
-                    void rpc("install", { spec: plugin.spec }).then(
-                      () => {
-                        pendingInstall.add(plugin.spec);
-                        showToast(t("installQueued", { n: item.name }), "ok", 5e3);
-                      },
-                      (e) => showToast(t("installFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 15e3)
-                    );
-                  },
-                  children: t("install")
-                }
-              )
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: item.reason })
-          ] }, item.name);
-        }) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: handleMarketCount })
-    ] }),
+    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: handleMarketCount }),
     view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate }),
     view === "diagnose" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnoseView, {})
   ] });
