@@ -62,6 +62,7 @@ var CSS = `
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
 .pc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); }
 .pc-dot.failed { background: var(--dsw-alias-state-error-primary); }
+.pc-dot.off { background: var(--dsw-alias-label-tertiary, rgba(0,0,0,.25)); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
 .pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
@@ -218,12 +219,7 @@ function setUpdating(name, on) {
   else updatingPlugins.delete(name);
   updatingListeners.forEach((l) => l());
 }
-var installedVersion = 0;
 var installedListeners = /* @__PURE__ */ new Set();
-function bumpInstalled() {
-  installedVersion++;
-  installedListeners.forEach((l) => l());
-}
 function useInstalledVersion() {
   const [v, setV] = (0, import_react.useState)(0);
   (0, import_react.useEffect)(() => {
@@ -488,7 +484,7 @@ function useT() {
 }
 function InstalledView({ search, category, source, onToggle, togglingId }) {
   const t = useT();
-  const installedVersion2 = useInstalledVersion();
+  const installedVersion = useInstalledVersion();
   const [items, setItems] = (0, import_react.useState)(installedCache);
   const [error, setError] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
@@ -511,7 +507,11 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
     return () => {
       alive = false;
     };
-  }, [installedVersion2]);
+  }, [installedVersion]);
+  const handleToggleLocal = (p) => {
+    setItems((prev) => prev === null ? prev : prev.map((item) => item.entryId === p.entryId ? { ...item, enabled: !item.enabled } : item));
+    onToggle(p);
+  };
   if (error !== null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) });
   if (items === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loading") });
   const srcLabel = {
@@ -536,7 +536,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-dot${p.fiberPhase === "failed" ? " failed" : ""}` })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-dot${p.fiberPhase === "failed" ? " failed" : ""}${!p.enabled ? " off" : ""}` })
     ] }),
     p.description !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: p.description }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
@@ -545,7 +545,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
       !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: togglingId !== null, onClick: () => {
-        onToggle(p);
+        handleToggleLocal(p);
       }, children: togglingId === p.name ? t("toggling") : p.enabled ? t("disable") : t("enable") })
     ] })
   ] }, p.entryId)) });
@@ -848,11 +848,10 @@ function CenterPanel({ variant = "section" }) {
         setTogglingId(null);
         const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;
         console.log("[plugin-center] toggle result", { id, nowDisabled });
+        showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
         if (installedCache !== null) {
           installedCache = installedCache.map((item) => item.entryId === id ? { ...item, enabled: nextEnabled } : item);
         }
-        bumpInstalled();
-        showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
       },
       (e) => {
         setTogglingId(null);

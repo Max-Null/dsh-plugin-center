@@ -37,6 +37,7 @@ const CSS = `
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
 .pc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); }
 .pc-dot.failed { background: var(--dsw-alias-state-error-primary); }
+.pc-dot.off { background: var(--dsw-alias-label-tertiary, rgba(0,0,0,.25)); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
 .pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
@@ -453,6 +454,14 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
     )
     return () => { alive = false }
   }, [installedVersion])
+  // Optimistic per-card flip: update local items immediately so only this
+  // card re-renders (no whole-list refetch → no flash), then hand the RPC
+  // and toast to the panel. The module cache is synced by the panel so a
+  // remount shows the flipped state; nothing bumps the refetch signal.
+  const handleToggleLocal = (p: InstalledPlugin) => {
+    setItems(prev => prev === null ? prev : prev.map(item => item.entryId === p.entryId ? { ...item, enabled: !item.enabled } : item))
+    onToggle(p)
+  }
   if (error !== null) return <p className="pc-sub">{t('loadFailed', { e: error })}</p>
   if (items === null) return <p className="pc-sub">{t('loading')}</p>
   const srcLabel: Record<PluginSource, string> = {
@@ -477,7 +486,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
             {p.version !== null && <span className="pc-ver">v{p.version}</span>}
             <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
             <span className="pc-spacer" />
-            <span className={`pc-dot${p.fiberPhase === 'failed' ? ' failed' : ''}`} />
+            <span className={`pc-dot${p.fiberPhase === 'failed' ? ' failed' : ''}${!p.enabled ? ' off' : ''}`} />
           </div>
           {p.description !== null && <div className="pc-desc">{p.description}</div>}
           <div className="pc-meta">
@@ -485,7 +494,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
             {p.compatRange !== null && <span className="pc-tag">{t('requiresDsh', { r: p.compatRange })}</span>}
             {!p.enabled && <span className="pc-tag">{t('disabledTag')}</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn" disabled={togglingId !== null} onClick={() => { onToggle(p) }}>
+            <button className="pc-btn" disabled={togglingId !== null} onClick={() => { handleToggleLocal(p) }}>
               {togglingId === p.name ? t('toggling') : p.enabled ? t('disable') : t('enable')}
             </button>
           </div>
@@ -810,15 +819,13 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         setTogglingId(null)
         const nowDisabled = typeof v === 'object' && v !== null ? (v as { nowDisabled?: boolean | null }).nowDisabled : null
         console.log('[plugin-center] toggle result', { id, nowDisabled })
-        // Optimistic flip: SSiD has no HMR, so the loader's enabled snapshot
-        // only changes after a restart — the card must reflect the intended
-        // state locally instead of refetching (which would return the old
-        // value). The patch is durable; the restart applies it.
+        showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
+        // Sync the module cache only — the visible card was already flipped
+        // locally by InstalledView (no bump: a refetch would flash the list
+        // and return the loader's pre-restart enabled snapshot anyway).
         if (installedCache !== null) {
           installedCache = installedCache.map(item => item.entryId === id ? { ...item, enabled: nextEnabled } : item)
         }
-        bumpInstalled()
-        showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
       },
       e => {
         setTogglingId(null)
