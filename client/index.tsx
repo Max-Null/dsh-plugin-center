@@ -4,7 +4,11 @@
  * injected <style> sheet (so :hover/:focus work) and use var(--dsw-*) tokens
  * only, so skin plugins restyle this UI too.
  */
-import { createPortal, useCallback, useEffect, useState } from 'react'
+// createPortal lives in react-dom, not react (the earlier `react` import
+// compiled to `import_react.createPortal` which is undefined at runtime —
+// 2026-08-22 slot crash). react-dom is bundled by build-client.mjs.
+import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useState } from 'react'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `
