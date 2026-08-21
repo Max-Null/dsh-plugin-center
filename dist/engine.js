@@ -376,13 +376,19 @@ export class PluginCenterEngine extends Service {
             return [];
         const list = scored.map(({ p }) => `- ${p.name} | ${p.stars ?? 0}★ | ${p.description.zh.slice(0, 60)}`).join('\n');
         const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块）：[{"name":"插件名","reason":"一句话中文推荐理由"}]';
+        // Message 契约：content 是 ContentBlock 数组（非字符串），且需要 id/source。
         const chunks = llm.stream({
             provider: 'deepseek-official',
             model: 'deepseek-v4-flash',
-            messages: [{ role: 'user', content: `用户需求：${q}\n\n候选插件列表（名称 | 星标 | 简介）：\n${list}` }],
+            messages: [{
+                    id: 'plugin-center-suggest',
+                    role: 'user',
+                    content: [{ type: 'text', text: `用户需求：${q}\n\n候选插件列表（名称 | 星标 | 简介）：\n${list}` }],
+                    source: { kind: 'plugin', plugin: 'dsh-plugin-center' },
+                }],
             system,
             maxTokens: 800,
-            signal: AbortSignal.timeout(40000),
+            signal: AbortSignal.timeout(60000),
         });
         let text = '';
         let failed = false;
@@ -392,8 +398,9 @@ export class PluginCenterEngine extends Service {
             else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted'))
                 failed = true;
         }
-        if (failed || text.trim() === '')
-            throw new Error('模型推荐失败，请重试');
+        if (failed || text.trim() === '') {
+            throw new Error(`模型推荐失败，请重试${text === '' ? '' : `（模型返回：${text.slice(0, 80)}）`}`);
+        }
         const start = text.indexOf('[');
         const end = text.lastIndexOf(']');
         if (start < 0 || end <= start)
