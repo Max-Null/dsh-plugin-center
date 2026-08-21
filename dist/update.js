@@ -98,15 +98,24 @@ function runOne(command, args, cwd) {
             resolve({ ok: false, detail: e instanceof Error ? e.message : String(e) });
             return;
         }
+        // 15 分钟硬超时：pnpm 可能卡在 supply-chain 全量验证/网络重试上
+        // （2026-08-22 SSiD 下「更新中」长时间不结束的防御），超时杀掉并报错。
+        let timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            child.kill();
+        }, 15 * 60_000);
         let out = '';
         child.stdout?.on('data', (d) => { out += d.toString(); });
         child.stderr?.on('data', (d) => { out += d.toString(); });
-        child.on('error', e => resolve({ ok: false, detail: e.message }));
+        child.on('error', e => { clearTimeout(timer); resolve({ ok: false, detail: e.message }); });
         child.on('close', code => {
+            clearTimeout(timer);
             if (code === 0)
                 resolve({ ok: true, detail: '' });
             const tail = out.trim();
-            resolve({ ok: false, detail: `exit code ${code ?? 1}${tail === '' ? '' : `\n${tail.slice(-1500)}`}` });
+            const header = timedOut ? 'timed out after 15 minutes' : `exit code ${code ?? 1}`;
+            resolve({ ok: false, detail: `${header}${tail === '' ? '' : `\n${tail.slice(-1500)}`}` });
         });
     });
 }

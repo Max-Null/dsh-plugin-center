@@ -215,6 +215,48 @@ let readCache: Record<string, string> = {}
 let installedCache: InstalledPlugin[] | null = null
 const marketCache: Record<string, { plugins: MarketPlugin[]; done: boolean }> = {}
 
+// ---- header counts (module-level: survive settings panel remounts, so the
+// numbers never flash back to 0 while a fresh fetch is in flight) ----
+let countsState: { installed: number; market: number; failed: number } = { installed: 0, market: 0, failed: 0 }
+const countListeners = new Set<() => void>()
+function setCounts(partial: Partial<typeof countsState>): void {
+  countsState = { ...countsState, ...partial }
+  countListeners.forEach(l => l())
+}
+
+// ---- in-flight install/update state (module-level: survives settings panel
+// remounts, so closing the panel mid-update does not revert the button to
+// "Update" while the host pnpm still runs) ----
+const updatingPlugins = new Set<string>()
+const updatingListeners = new Set<() => void>()
+function setUpdating(name: string, on: boolean): void {
+  if (on) updatingPlugins.add(name)
+  else updatingPlugins.delete(name)
+  updatingListeners.forEach(l => l())
+}
+/** Subscribe to the module-level updating set (returns a bump counter the
+ *  component uses to re-render; read `updatingPlugins` directly). */
+function useUpdatingVersion(): number {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    updatingListeners.add(l)
+    return () => { updatingListeners.delete(l) }
+  }, [])
+  return v
+}
+/** Subscribe to the module-level header counts (same bump-counter pattern). */
+function useCounts(): { installed: number; market: number; failed: number } {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    countListeners.add(l)
+    return () => { countListeners.delete(l) }
+  }, [])
+  void v
+  return countsState
+}
+
 // ---- toast (replaces the native alert) ----
 let toastState: { message: string; kind: 'ok' | 'error'; until: number } | null = null
 const toastListeners = new Set<() => void>()
@@ -395,14 +437,16 @@ function InstalledView({ search, category, source }: { search: string; category:
 
 function MarketView({ category, single, source, search, onCount }: { category: string | null; single: boolean; source: string; search: string; onCount: (n: number) => void }) {
   const t = useT()
-  const [items, setItems] = useState<MarketPlugin[]>(marketCache[source]?.plugins ?? [])
-  const [done, setDone] = useState(marketCache[source]?.done ?? false)
+  const [items, setItems] = useState<MarketPlugin[]>(marketCache[source]?.plugins ?? marketCache.all?.plugins ?? [])
+  const [done, setDone] = useState(marketCache[source]?.done ?? marketCache.all?.done ?? false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
     let timer: ReturnType<typeof setTimeout> | undefined
-    // Sync to this source's cache on switch (empty → show "loading", done → reuse).
+    // Sync to this source's cache on switch; a missing source cache falls
+    // back to the 'all' cache so the list never flashes empty while the
+    // source-specific fetch is in flight (2026-08-22).
     const cached = marketCache[source]
     if (cached !== undefined) {
       setItems(cached.plugins)
@@ -410,9 +454,10 @@ function MarketView({ category, single, source, search, onCount }: { category: s
       onCount(cached.plugins.length)
       if (cached.done) return
     } else {
-      setItems([])
-      setDone(false)
-      onCount(0)
+      const fallback = marketCache.all
+      setItems(fallback?.plugins ?? [])
+      setDone(fallback?.done ?? false)
+      if (fallback !== undefined) onCount(fallback.plugins.length)
     }
     const poll = async () => {
       try {
@@ -493,6 +538,9 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
   busy: string | null
 }) {
   const t = useT()
+  // Module-level in-flight set: keeps "Updating…" visible even when the panel
+  // was remounted while a host update was still running (2026-08-22).
+  useUpdatingVersion()
   if (updates === null) return <p className="pc-sub">{t('checkingUpdates')}</p>
   if (updates.length === 0) return (
     <div>
@@ -511,7 +559,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' ? t('updating') : t('update')}</button>
+            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
@@ -536,9 +584,8 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [installedCategory, setInstalledCategory] = useState<string | null>(null)
   const [marketSearch, setMarketSearch] = useState('')
   const [installedSource, setInstalledSource] = useState<PluginSource | null>(null)
-  const [installedCount, setInstalledCount] = useState(0)
-  const [failedCount, setFailedCount] = useState(0)
-  const [marketCount, setMarketCount] = useState(0)
+  // Module-level counts (survive panel remounts; never flash back to 0).
+  const counts = useCounts()
   const [updates, setUpdates] = useState<UpdateDigest[] | null>(null)
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
@@ -573,44 +620,53 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     void rpc('listInstalled').then(
       v => {
         const items = v as InstalledPlugin[]
-        setInstalledCount(items.length)
-        setFailedCount(items.filter(p => p.fiberPhase === 'failed').length)
+        installedCache = items
+        setCounts({ installed: items.length, failed: items.filter(p => p.fiberPhase === 'failed').length })
       },
-      () => { /* leave counts at 0 */ },
+      () => { /* keep previous counts (cached or 0) */ },
     )
     refreshUpdates(true)
   }, [refreshUpdates])
 
-  // 市场计数预载（2026-08-17 实测缺陷：tab 未打开过时徽标恒 0——MarketView
-  // 不挂载就没有 onCount 回调）。挂载即拉取；服务端缓存未就绪（done=false）
-  // 时每 5s 轮询直到完成，失败 15s 重试。
+  // 市场计数与列表预载（2026-08-22：三个源全部预载，MarketView 任意 source
+  // 打开都有缓存——此前只预载 'all' 而 MarketView 默认 'awesome'，tab 打开
+  // 缓存未命中归零重拉；计数模块级持久，面板重开不闪 0）。服务端缓存未
+  // 就绪（done=false）时每 5s 轮询直到完成，失败 15s 重试。
   useEffect(() => {
     let alive = true
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const poll = async () => {
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const poll = async (src: string) => {
       if (!alive) return
       try {
-        const r = await rpc('listMarket', { source: 'all' }) as { plugins: MarketPlugin[]; done: boolean }
+        const r = await rpc('listMarket', { source: src }) as { plugins: MarketPlugin[]; done: boolean }
         if (!alive) return
-        marketCache.all = { plugins: r.plugins, done: r.done }
-        setMarketCount(r.plugins.length)
-        if (!r.done) timer = setTimeout(() => { void poll() }, 5000)
+        marketCache[src] = { plugins: r.plugins, done: r.done }
+        if (src === 'all') setCounts({ market: r.plugins.length })
+        if (!r.done) timers.push(setTimeout(() => { void poll(src) }, 5000))
       } catch {
-        if (alive) timer = setTimeout(() => { void poll() }, 15000)
+        if (alive) timers.push(setTimeout(() => { void poll(src) }, 15000))
       }
     }
-    void poll()
-    return () => { alive = false; if (timer !== null) clearTimeout(timer) }
+    void poll('all')
+    void poll('awesome')
+    void poll('oh-my-dsh')
+    return () => { alive = false; for (const timer of timers) clearTimeout(timer) }
   }, [])
 
   const updateOne = (name: string, version: string) => {
     setBusyUpdate(name)
+    setUpdating(name, true)
     void rpc('update', { name, version }).then(
       v => {
         if (v !== true) throw new Error(t('updateNotApplied'))
+        setUpdating(name, false)
         setBusyUpdate(null); showToast(t('updatedOne', { n: name }), 'ok', 5000)
+        refreshUpdates(true) // 更新完成：列表立即反映新版本，无需手动检查
       },
-      e => { setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 8000) },
+      e => {
+        setUpdating(name, false)
+        setBusyUpdate(null); showToast(t('updateFailed', { e: e instanceof Error ? e.message : String(e) }), 'error', 8000)
+      },
     )
   }
   // 串行逐个更新（2026-08-17 实测：并发 update 会同时 spawn 多个 pnpm，
@@ -622,6 +678,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     const okNames: string[] = []
     const failures: string[] = []
     for (const u of updates) {
+      setUpdating(u.name, true)
       try {
         const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean
         if (v !== true) throw new Error(t('updateNotApplied'))
@@ -629,6 +686,8 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
         okNames.push(u.name)
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
+      } finally {
+        setUpdating(u.name, false)
       }
     }
     setBusyUpdate(null)
@@ -648,15 +707,15 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   )
   const tabs = (
     <div className="pc-tabs">
-      {tab('installed', t('tabInstalled'), installedCount)}
-      {tab('market', t('tabMarket'), marketCount)}
+      {tab('installed', t('tabInstalled'), counts.installed)}
+      {tab('market', t('tabMarket'), counts.market)}
       {tab('updates', t('tabUpdates'), updates?.length ?? 0)}
     </div>
   )
   const head = (showTitle: boolean) => (
     <div className="pc-head">
       {showTitle && <span className="pc-title">{t('title')}</span>}
-      <span className="pc-sub">{t('headSummary', { a: installedCount, b: updates?.length ?? 0, c: failedCount })}</span>
+      <span className="pc-sub">{t('headSummary', { a: counts.installed, b: updates?.length ?? 0, c: counts.failed })}</span>
       <span className="pc-spacer" />
       <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? t('checking') : t('check')}</button>
       <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{t('updateAll', { n: updates?.length ?? 0 })}</button>
@@ -708,7 +767,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const body = (
     <>
       {view === 'installed' && <InstalledView search={search} category={installedCategory} source={installedSource} />}
-      {view === 'market' && <MarketView category={category} single={single} source={source} search={marketSearch} onCount={setMarketCount} />}
+      {view === 'market' && <MarketView category={category} single={single} source={source} search={marketSearch} onCount={(n) => { setCounts({ market: n }) }} />}
       {view === 'updates' && <UpdatesView updates={updates} refresh={refreshUpdates} updateOne={updateOne} busy={busyUpdate} />}
     </>
   )

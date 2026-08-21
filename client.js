@@ -203,6 +203,45 @@ function useWhatsNewOpen() {
 var readCache = {};
 var installedCache = null;
 var marketCache = {};
+var countsState = { installed: 0, market: 0, failed: 0 };
+var countListeners = /* @__PURE__ */ new Set();
+function setCounts(partial) {
+  countsState = { ...countsState, ...partial };
+  countListeners.forEach((l) => l());
+}
+var updatingPlugins = /* @__PURE__ */ new Set();
+var updatingListeners = /* @__PURE__ */ new Set();
+function setUpdating(name, on) {
+  if (on) updatingPlugins.add(name);
+  else updatingPlugins.delete(name);
+  updatingListeners.forEach((l) => l());
+}
+function useUpdatingVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    updatingListeners.add(l);
+    return () => {
+      updatingListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+function useCounts() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    countListeners.add(l);
+    return () => {
+      countListeners.delete(l);
+    };
+  }, []);
+  return countsState;
+}
 var toastState = null;
 var toastListeners = /* @__PURE__ */ new Set();
 function showToast(message, kind = "ok", duration = 3200) {
@@ -436,8 +475,8 @@ function InstalledView({ search, category, source }) {
 }
 function MarketView({ category, single, source, search, onCount }) {
   const t = useT();
-  const [items, setItems] = (0, import_react.useState)(marketCache[source]?.plugins ?? []);
-  const [done, setDone] = (0, import_react.useState)(marketCache[source]?.done ?? false);
+  const [items, setItems] = (0, import_react.useState)(marketCache[source]?.plugins ?? marketCache.all?.plugins ?? []);
+  const [done, setDone] = (0, import_react.useState)(marketCache[source]?.done ?? marketCache.all?.done ?? false);
   const [error, setError] = (0, import_react.useState)(null);
   const [busy, setBusy] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
@@ -450,9 +489,10 @@ function MarketView({ category, single, source, search, onCount }) {
       onCount(cached.plugins.length);
       if (cached.done) return;
     } else {
-      setItems([]);
-      setDone(false);
-      onCount(0);
+      const fallback = marketCache.all;
+      setItems(fallback?.plugins ?? []);
+      setDone(fallback?.done ?? false);
+      if (fallback !== void 0) onCount(fallback.plugins.length);
     }
     const poll = async () => {
       try {
@@ -528,6 +568,7 @@ function MarketView({ category, single, source, search, onCount }) {
 }
 function UpdatesView({ updates, refresh, updateOne, busy }) {
   const t = useT();
+  useUpdatingVersion();
   if (updates === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("checkingUpdates") });
   if (updates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("noUpdates") }),
@@ -543,7 +584,7 @@ function UpdatesView({ updates, refresh, updateOne, busy }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
         updateOne(u.name, u.toVersion);
-      }, children: busy === u.name || busy === "__all__" ? t("updating") : t("update") })
+      }, children: busy === u.name || busy === "__all__" || updatingPlugins.has(u.name) ? t("updating") : t("update") })
     ] }),
     u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
   ] }, u.name)) });
@@ -558,9 +599,7 @@ function CenterPanel({ variant = "section" }) {
   const [installedCategory, setInstalledCategory] = (0, import_react.useState)(null);
   const [marketSearch, setMarketSearch] = (0, import_react.useState)("");
   const [installedSource, setInstalledSource] = (0, import_react.useState)(null);
-  const [installedCount, setInstalledCount] = (0, import_react.useState)(0);
-  const [failedCount, setFailedCount] = (0, import_react.useState)(0);
-  const [marketCount, setMarketCount] = (0, import_react.useState)(0);
+  const counts = useCounts();
   const [updates, setUpdates] = (0, import_react.useState)(null);
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
   const [checking, setChecking] = (0, import_react.useState)(false);
@@ -589,8 +628,8 @@ function CenterPanel({ variant = "section" }) {
     void rpc("listInstalled").then(
       (v) => {
         const items = v;
-        setInstalledCount(items.length);
-        setFailedCount(items.filter((p) => p.fiberPhase === "failed").length);
+        installedCache = items;
+        setCounts({ installed: items.length, failed: items.filter((p) => p.fiberPhase === "failed").length });
       },
       () => {
       }
@@ -599,38 +638,44 @@ function CenterPanel({ variant = "section" }) {
   }, [refreshUpdates]);
   (0, import_react.useEffect)(() => {
     let alive = true;
-    let timer = null;
-    const poll = async () => {
+    const timers = [];
+    const poll = async (src) => {
       if (!alive) return;
       try {
-        const r = await rpc("listMarket", { source: "all" });
+        const r = await rpc("listMarket", { source: src });
         if (!alive) return;
-        marketCache.all = { plugins: r.plugins, done: r.done };
-        setMarketCount(r.plugins.length);
-        if (!r.done) timer = setTimeout(() => {
-          void poll();
-        }, 5e3);
+        marketCache[src] = { plugins: r.plugins, done: r.done };
+        if (src === "all") setCounts({ market: r.plugins.length });
+        if (!r.done) timers.push(setTimeout(() => {
+          void poll(src);
+        }, 5e3));
       } catch {
-        if (alive) timer = setTimeout(() => {
-          void poll();
-        }, 15e3);
+        if (alive) timers.push(setTimeout(() => {
+          void poll(src);
+        }, 15e3));
       }
     };
-    void poll();
+    void poll("all");
+    void poll("awesome");
+    void poll("oh-my-dsh");
     return () => {
       alive = false;
-      if (timer !== null) clearTimeout(timer);
+      for (const timer of timers) clearTimeout(timer);
     };
   }, []);
   const updateOne = (name, version) => {
     setBusyUpdate(name);
+    setUpdating(name, true);
     void rpc("update", { name, version }).then(
       (v) => {
         if (v !== true) throw new Error(t("updateNotApplied"));
+        setUpdating(name, false);
         setBusyUpdate(null);
         showToast(t("updatedOne", { n: name }), "ok", 5e3);
+        refreshUpdates(true);
       },
       (e) => {
+        setUpdating(name, false);
         setBusyUpdate(null);
         showToast(t("updateFailed", { e: e instanceof Error ? e.message : String(e) }), "error", 8e3);
       }
@@ -643,6 +688,7 @@ function CenterPanel({ variant = "section" }) {
     const okNames = [];
     const failures = [];
     for (const u of updates) {
+      setUpdating(u.name, true);
       try {
         const v = await rpc("update", { name: u.name, version: u.toVersion });
         if (v !== true) throw new Error(t("updateNotApplied"));
@@ -650,6 +696,8 @@ function CenterPanel({ variant = "section" }) {
         okNames.push(u.name);
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setUpdating(u.name, false);
       }
     }
     setBusyUpdate(null);
@@ -667,13 +715,13 @@ function CenterPanel({ variant = "section" }) {
     count !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-count", children: count })
   ] }, v);
   const tabs = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-tabs", children: [
-    tab("installed", t("tabInstalled"), installedCount),
-    tab("market", t("tabMarket"), marketCount),
+    tab("installed", t("tabInstalled"), counts.installed),
+    tab("market", t("tabMarket"), counts.market),
     tab("updates", t("tabUpdates"), updates?.length ?? 0)
   ] });
   const head = (showTitle) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-head", children: [
     showTitle && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", children: t("headSummary", { a: installedCount, b: updates?.length ?? 0, c: failedCount }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", children: t("headSummary", { a: counts.installed, b: updates?.length ?? 0, c: counts.failed }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: checking, onClick: () => {
       refreshUpdates();
@@ -735,7 +783,9 @@ function CenterPanel({ variant = "section" }) {
   ] }) : null;
   const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     view === "installed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstalledView, { search, category: installedCategory, source: installedSource }),
-    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: setMarketCount }),
+    view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: (n) => {
+      setCounts({ market: n });
+    } }),
     view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate })
   ] });
   if (variant === "overlay") {
