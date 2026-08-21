@@ -253,14 +253,16 @@ function setUpdating(name: string, on: boolean): void {
   else updatingPlugins.delete(name)
   updatingListeners.forEach(l => l())
 }
-// ---- pending-toggle state: a disable written to the patch layer but not
-// yet applied by a restart (SSiD has no HMR). The card shows a
-// "restart pending" tag while set; toggling back clears it (that is a
-// revert — the patch is rewritten, nothing waits for a restart).
+// ---- pending-toggle state: a disable/enable written to the patch layer but
+// not yet applied by a restart (SSiD has no HMR). The card shows a
+// "restart pending" tag while a pending action exists; toggling back clears
+// it (that is a revert — the patch is rewritten, nothing waits for a
+// restart, and the toast says so instead of "restart to take effect").
 const pendingToggles = new Map<string, boolean>()
 const pendingListeners = new Set<() => void>()
-function setPendingToggle(id: string, disabled: boolean | null): void {
-  if (disabled === true) pendingToggles.set(id, true)
+function setPendingToggle(id: string, action: 'disable' | 'enable' | null): void {
+  if (action === 'disable') pendingToggles.set(id, true)
+  else if (action === 'enable') pendingToggles.set(id, false)
   else pendingToggles.delete(id)
   pendingListeners.forEach(l => l())
 }
@@ -390,6 +392,7 @@ const STRINGS = {
     foundUpdates: '发现 {n} 个可更新插件', allUpToDate: '所有插件均为最新',
     disable: '禁用', enable: '启用', toggling: '处理中…',
     disabledOk: '已禁用 {n}，重启后生效', enabledOk: '已启用 {n}，重启后生效', toggleFailed: '操作失败：{e}',
+    revertedDisable: '已撤销禁用 {n}', revertedEnable: '已撤销启用 {n}',
     tabDiagnose: '诊断', diagExport: '导出诊断日志', diagCopied: '诊断已复制到剪贴板',
     diagTitle: '环境与插件诊断', diagInstalled: '已安装插件（{n}）', diagDisabled: '禁用状态', diagPnpmLog: 'pnpm 日志（尾部）',
     aiTitle: 'AI 推荐', aiPlaceholder: '描述你的需求，让 AI 推荐插件…（例如：能预览 Markdown 的插件）', aiAsk: '推荐', aiAsking: 'AI 思考中…',
@@ -424,6 +427,7 @@ const STRINGS = {
     foundUpdates: '{n} updates found', allUpToDate: 'All plugins are up to date',
     disable: 'Disable', enable: 'Enable', toggling: 'Working…',
     disabledOk: 'Disabled {n}; restart to take effect', enabledOk: 'Enabled {n}; restart to take effect', toggleFailed: 'Failed: {e}',
+    revertedDisable: 'Disable of {n} reverted', revertedEnable: 'Enable of {n} reverted',
     tabDiagnose: 'Diagnostics', diagExport: 'Export diagnostics', diagCopied: 'Diagnostics copied to clipboard',
     diagTitle: 'Environment & plugin diagnostics', diagInstalled: 'Installed plugins ({n})', diagDisabled: 'Disabled state', diagPnpmLog: 'pnpm log (tail)',
     aiTitle: 'AI recommendation', aiPlaceholder: 'Describe what you need — e.g. a Markdown preview plugin…', aiAsk: 'Recommend', aiAsking: 'AI is thinking…',
@@ -848,17 +852,29 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     // wrote a row the loader never matches, so nothing changed after restart).
     const id = p.entryId
     const nextEnabled = !p.enabled
-    console.log('[plugin-center] toggle', { id, fromEnabled: p.enabled, toEnabled: nextEnabled })
+    // A pending action on this entry means the next click is a revert — the
+    // patch returns to its previous stance, so no restart is involved and
+    // the toast must not claim one.
+    const wasPending = pendingToggles.has(id)
+    console.log('[plugin-center] toggle', { id, fromEnabled: p.enabled, toEnabled: nextEnabled, wasPending })
     setTogglingId(p.name)
     void rpc('toggle', { id, disabled: !nextEnabled }).then(
       v => {
         setTogglingId(null)
         const nowDisabled = typeof v === 'object' && v !== null ? (v as { nowDisabled?: boolean | null }).nowDisabled : null
         console.log('[plugin-center] toggle result', { id, nowDisabled })
-        showToast(nowDisabled === true ? t('disabledOk', { n: p.name }) : t('enabledOk', { n: p.name }), 'ok', 5000)
-        // Pending marker: a fresh disable waits for a restart; toggling back
-        // (nowDisabled=false) is a revert and clears it — nothing waits.
-        setPendingToggle(id, nowDisabled)
+        if (nowDisabled === true && !wasPending) {
+          setPendingToggle(id, 'disable')
+          showToast(t('disabledOk', { n: p.name }), 'ok', 5000)
+        } else if (nowDisabled === false && !wasPending) {
+          setPendingToggle(id, 'enable')
+          showToast(t('enabledOk', { n: p.name }), 'ok', 5000)
+        } else if (wasPending) {
+          // Revert: clear the pending marker; the patch is back to its
+          // previous stance, nothing waits for a restart.
+          setPendingToggle(id, null)
+          showToast(nowDisabled === true ? t('revertedDisable', { n: p.name }) : t('revertedEnable', { n: p.name }), 'ok', 5000)
+        }
         // Sync the module cache only — the visible card was already flipped
         // locally by InstalledView (no bump: a refetch would flash the list
         // and return the loader's pre-restart enabled snapshot anyway).

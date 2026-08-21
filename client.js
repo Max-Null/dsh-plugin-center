@@ -226,8 +226,9 @@ function setUpdating(name, on) {
 }
 var pendingToggles = /* @__PURE__ */ new Map();
 var pendingListeners = /* @__PURE__ */ new Set();
-function setPendingToggle(id, disabled) {
-  if (disabled === true) pendingToggles.set(id, true);
+function setPendingToggle(id, action) {
+  if (action === "disable") pendingToggles.set(id, true);
+  else if (action === "enable") pendingToggles.set(id, false);
   else pendingToggles.delete(id);
   pendingListeners.forEach((l) => l());
 }
@@ -387,6 +388,8 @@ var STRINGS = {
     disabledOk: "\u5DF2\u7981\u7528 {n}\uFF0C\u91CD\u542F\u540E\u751F\u6548",
     enabledOk: "\u5DF2\u542F\u7528 {n}\uFF0C\u91CD\u542F\u540E\u751F\u6548",
     toggleFailed: "\u64CD\u4F5C\u5931\u8D25\uFF1A{e}",
+    revertedDisable: "\u5DF2\u64A4\u9500\u7981\u7528 {n}",
+    revertedEnable: "\u5DF2\u64A4\u9500\u542F\u7528 {n}",
     tabDiagnose: "\u8BCA\u65AD",
     diagExport: "\u5BFC\u51FA\u8BCA\u65AD\u65E5\u5FD7",
     diagCopied: "\u8BCA\u65AD\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F",
@@ -464,6 +467,8 @@ var STRINGS = {
     disabledOk: "Disabled {n}; restart to take effect",
     enabledOk: "Enabled {n}; restart to take effect",
     toggleFailed: "Failed: {e}",
+    revertedDisable: "Disable of {n} reverted",
+    revertedEnable: "Enable of {n} reverted",
     tabDiagnose: "Diagnostics",
     diagExport: "Export diagnostics",
     diagCopied: "Diagnostics copied to clipboard",
@@ -879,15 +884,24 @@ function CenterPanel({ variant = "section" }) {
     if (togglingId !== null) return;
     const id = p.entryId;
     const nextEnabled = !p.enabled;
-    console.log("[plugin-center] toggle", { id, fromEnabled: p.enabled, toEnabled: nextEnabled });
+    const wasPending = pendingToggles.has(id);
+    console.log("[plugin-center] toggle", { id, fromEnabled: p.enabled, toEnabled: nextEnabled, wasPending });
     setTogglingId(p.name);
     void rpc("toggle", { id, disabled: !nextEnabled }).then(
       (v) => {
         setTogglingId(null);
         const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;
         console.log("[plugin-center] toggle result", { id, nowDisabled });
-        showToast(nowDisabled === true ? t("disabledOk", { n: p.name }) : t("enabledOk", { n: p.name }), "ok", 5e3);
-        setPendingToggle(id, nowDisabled);
+        if (nowDisabled === true && !wasPending) {
+          setPendingToggle(id, "disable");
+          showToast(t("disabledOk", { n: p.name }), "ok", 5e3);
+        } else if (nowDisabled === false && !wasPending) {
+          setPendingToggle(id, "enable");
+          showToast(t("enabledOk", { n: p.name }), "ok", 5e3);
+        } else if (wasPending) {
+          setPendingToggle(id, null);
+          showToast(nowDisabled === true ? t("revertedDisable", { n: p.name }) : t("revertedEnable", { n: p.name }), "ok", 5e3);
+        }
         if (installedCache !== null) {
           installedCache = installedCache.map((item) => item.entryId === id ? { ...item, enabled: nextEnabled } : item);
         }
