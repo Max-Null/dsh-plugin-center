@@ -60,9 +60,13 @@ var CSS = `
 .pc-badge.local, .pc-badge.builtin { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-tertiary); }
 .pc-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 6px; font-size: 12px; line-height: 1; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
-.pc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-state-success-primary); }
-.pc-dot.failed { background: var(--dsw-alias-state-error-primary); }
-.pc-dot.off { background: var(--dsw-alias-label-tertiary, rgba(0,0,0,.25)); }
+.pc-switch { position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,.22); cursor: pointer; transition: background .2s ease; padding: 0; }
+.pc-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .2s ease; }
+.pc-switch.on { background: var(--dsw-alias-state-success-primary); }
+.pc-switch.on::after { left: 18px; }
+.pc-switch:disabled { opacity: .6; cursor: default; }
+body[data-ds-dark-theme] .pc-switch { background: rgba(255,255,255,.28); }
+body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-success-primary); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
 .pc-chip { height: 28px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font-size: 13px; cursor: pointer; font-family: inherit; }
@@ -536,17 +540,28 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-dot${p.fiberPhase === "failed" ? " failed" : ""}${!p.enabled ? " off" : ""}` })
+      p.fiberPhase === "failed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-dot failed", title: "failed" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          type: "button",
+          role: "switch",
+          "aria-checked": p.enabled,
+          "aria-label": p.enabled ? t("disable") : t("enable"),
+          title: p.enabled ? t("disable") : t("enable"),
+          className: `pc-switch${p.enabled ? " on" : ""}`,
+          disabled: togglingId !== null,
+          onClick: () => {
+            handleToggleLocal(p);
+          }
+        }
+      )
     ] }),
     p.description !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-desc", children: p.description }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-meta", children: [
       p.categories.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: c }, c)),
       p.compatRange !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("requiresDsh", { r: p.compatRange }) }),
-      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: togglingId !== null, onClick: () => {
-        handleToggleLocal(p);
-      }, children: togglingId === p.name ? t("toggling") : p.enabled ? t("disable") : t("enable") })
+      !p.enabled && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("disabledTag") })
     ] })
   ] }, p.entryId)) });
 }
@@ -1184,7 +1199,7 @@ function OverlayPanel() {
 function Toast() {
   const t = useToast();
   if (t === null) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message });
+  return createPortal(/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `pc-toast ${t.kind}`, children: t.message }), document.body);
 }
 function WhatsNewDialog() {
   const t = useT();
