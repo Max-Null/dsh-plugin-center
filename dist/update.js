@@ -206,10 +206,15 @@ export function detectStoreMajor(profileDir) {
         return undefined;
     }
 }
-/** 完整 pnpm 命令候选序列：本地 pnpm（PATH/用户级）在前，布局 major 一致的
- *  npx 兜底在后（前序全部失败时才会走到，且仅当探测到布局 major）。 */
+/** 完整 pnpm 命令候选序列：壳内捆绑 pnpm（SSID_PNPM，与归档 store 布局同
+ *  major）最优先；本地 pnpm（PATH/用户级）其次；最终以 npx pnpm@<major>
+ *  兜底（仅当探测到布局 major）。 */
 export function pnpmCommandCandidates(profileDir) {
-    const commands = pnpmCandidates();
+    const commands = [];
+    const bundled = process.env.SSID_PNPM;
+    if (bundled !== undefined && bundled !== '')
+        commands.push(bundled);
+    commands.push(...pnpmCandidates());
     const major = detectStoreMajor(profileDir);
     if (major !== undefined) {
         commands.push(`npx --yes pnpm@${major}`);
