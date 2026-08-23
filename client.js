@@ -50,7 +50,7 @@ var CSS = `
 
 .pc-card { border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; background: var(--dsw-alias-bg-layer-3); min-width: 0; transition: border-color .16s, background .16s; display: flex; flex-direction: column; }
 .pc-card:hover { border-color: var(--dsw-alias-label-dimmed); }
-.pc-name { font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--dsw-alias-label-primary); }
+.pc-name { font-size: 15px; font-weight: 600; line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
 .pc-ver { color: var(--dsw-alias-label-caption); font-size: 12px; }
 .pc-desc { color: var(--dsw-alias-label-tertiary); font-size: 13px; margin-top: 6px; word-break: break-word; overflow-wrap: break-word; }
 .pc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -815,7 +815,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   ] });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
@@ -829,7 +829,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
       ] }),
       u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
     ] }, u.name)),
-    doneOnly.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+    doneOnly.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: d.name }),
       d.fromVersion !== "" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: d.fromVersion }),

@@ -28,7 +28,7 @@ const CSS = `
 
 .pc-card { border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; background: var(--dsw-alias-bg-layer-3); min-width: 0; transition: border-color .16s, background .16s; display: flex; flex-direction: column; }
 .pc-card:hover { border-color: var(--dsw-alias-label-dimmed); }
-.pc-name { font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--dsw-alias-label-primary); }
+.pc-name { font-size: 15px; font-weight: 600; line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
 .pc-ver { color: var(--dsw-alias-label-caption); font-size: 12px; }
 .pc-desc { color: var(--dsw-alias-label-tertiary); font-size: 13px; margin-top: 6px; word-break: break-word; overflow-wrap: break-word; }
 .pc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -782,7 +782,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
     <div>
       {updates.map(u => (
         <div key={u.name} className="pc-card">
-          <div className="pc-row">
+          <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
             <span className="pc-name">{u.name}</span>
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>
@@ -801,7 +801,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
       ))}
       {doneOnly.map(d => (
         <div key={d.name} className="pc-card">
-          <div className="pc-row">
+          <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
             <span className="pc-name">{d.name}</span>
             {d.fromVersion !== '' && (<><span className="pc-ver">{d.fromVersion}</span><span className="pc-ver">→</span></>)}
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{d.toVersion}</span>
