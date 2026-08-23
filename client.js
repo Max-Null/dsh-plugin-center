@@ -34,8 +34,8 @@ var import_react_dom = require("react-dom");
 var import_react = require("react");
 var import_jsx_runtime = require("react/jsx-runtime");
 var CSS = `
-.pc-title { font-size: 18px; font-weight: 600; line-height: 26px; color: var(--dsw-alias-label-primary); }
-.pc-sub { font-size: 13px; line-height: 20px; margin-top: 4px; color: var(--dsw-alias-label-tertiary); }
+.pc-title { font-size: 16px; font-weight: 600; line-height: 24px; color: var(--dsw-alias-label-primary); }
+.pc-sub { font-size: 13px; line-height: 20px; margin-top: 4px; color: var(--dsw-alias-label-secondary); }
 .pc-head { display: flex; align-items: center; gap: 10px; }
 .pc-head .pc-sub { margin-top: 0; }
 .pc-head .pc-btn { flex: none; }
@@ -261,6 +261,28 @@ function usePendingVersion() {
   }, []);
   return v;
 }
+var doneUpdatesStore = [];
+var doneUpdatesVersion = 0;
+var doneUpdatesListeners = /* @__PURE__ */ new Set();
+function markDoneUpdate(entry) {
+  if (doneUpdatesStore.some((d) => d.name === entry.name)) return;
+  doneUpdatesStore.push(entry);
+  doneUpdatesVersion++;
+  doneUpdatesListeners.forEach((l) => l());
+}
+function useDoneUpdatesVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    doneUpdatesListeners.add(l);
+    return () => {
+      doneUpdatesListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
 var installedListeners = /* @__PURE__ */ new Set();
 function useInstalledVersion() {
   const [v, setV] = (0, import_react.useState)(0);
@@ -384,10 +406,21 @@ var STRINGS = {
     installQueued: "\u5DF2\u53D1\u8D77\u5B89\u88C5 {n}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548",
     installFailed: "\u5B89\u88C5\u5931\u8D25\uFF1A{e}",
     installNotApplied: "\u5B89\u88C5\u672A\u751F\u6548",
-    updatedOne: "\u5DF2\u66F4\u65B0 {n}\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548",
+    updatedOne: "\u5DF2\u66F4\u65B0 {n}\uFF0C\u91CD\u542F\u540E\u751F\u6548",
     updateFailed: "\u66F4\u65B0\u5931\u8D25\uFF1A{e}",
     updateNotApplied: "\u66F4\u65B0\u672A\u751F\u6548",
-    updatedMany: "\u5DF2\u66F4\u65B0 {n} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F dsh web \u540E\u751F\u6548",
+    updatedMany: "\u5DF2\u66F4\u65B0 {n} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F\u540E\u751F\u6548",
+    commandTitle: "\u5728\u7EC8\u7AEF\u6267\u884C\u4EE5\u4E0B\u547D\u4EE4",
+    commandHint: "\u5F53\u524D\u5E94\u7528\u6B63\u5728\u8FD0\u884C\uFF0C\u88AB\u9501\u5B9A\u7684\u6587\u4EF6\u65E0\u6CD5\u5728\u5E94\u7528\u5185\u66FF\u6362\u3002\u8BF7\u5148\u5173\u95ED\u5E94\u7528\uFF0C\u518D\u5728\u7EC8\u7AEF\u6267\u884C\uFF1A",
+    commandCopy: "\u590D\u5236\u547D\u4EE4",
+    commandCopied: "\u5DF2\u590D\u5236",
+    updateRestartNow: "\u5DF2\u4E0B\u8F7D {n} \u4E2A\u66F4\u65B0\uFF0C\u91CD\u542F\u601D\u7075\u540E\u81EA\u52A8\u5B89\u88C5\u3002\u7ACB\u5373\u91CD\u542F\uFF1F",
+    updateRestartBusy: "\u6709 {n} \u4E2A\u4F1A\u8BDD\u6B63\u5728\u8FDB\u884C\u4E2D\uFF0C\u672A\u6267\u884C\u91CD\u542F\uFF1B\u66F4\u65B0\u5DF2\u51C6\u5907\u597D\uFF0C\u7A0D\u540E\u624B\u52A8\u91CD\u542F\u5373\u53EF",
+    updatedPendingTag: "\u5DF2\u66F4\u65B0\u5F85\u91CD\u542F",
+    restartUnavailable: "\u5F53\u524D\u73AF\u5883\u4E0D\u652F\u6301\u81EA\u52A8\u91CD\u542F\uFF0C\u8BF7\u624B\u52A8\u91CD\u542F\u5E94\u7528",
+    restartAskTitle: "\u9700\u8981\u91CD\u542F\u751F\u6548",
+    restartAskBody: "\u5DF2\u66F4\u65B0 {n} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F\u601D\u7075\u540E\u751F\u6548\uFF08\u6709\u8FDB\u884C\u4E2D\u7684\u4F1A\u8BDD\u65F6\u4F1A\u5148\u68C0\u67E5\uFF09",
+    restartNowBtn: "\u7ACB\u5373\u91CD\u542F",
     updateSummary: "\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F {a}\uFF0C\u5931\u8D25 {b}\uFF08{c}\uFF09",
     whatsNewTitle: "\u63D2\u4EF6\u66F4\u65B0",
     whatsNewSub: "{n} \u4E2A\u63D2\u4EF6\u6709\u65B0\u7248\u672C",
@@ -458,10 +491,21 @@ var STRINGS = {
     installQueued: "Install of {n} started; restart dsh web to take effect",
     installFailed: "Install failed: {e}",
     installNotApplied: "Install did not take effect",
-    updatedOne: "Updated {n}; restart dsh web to take effect",
+    updatedOne: "Updated {n}; restart to take effect",
     updateFailed: "Update failed: {e}",
     updateNotApplied: "Update did not take effect",
-    updatedMany: "Updated {n} plugins; restart dsh web to take effect",
+    updatedMany: "Updated {n} plugin(s); restart to take effect",
+    commandTitle: "Run this command in a terminal",
+    commandHint: "The app is running and locked files cannot be replaced in-place. Close the app first, then run:",
+    commandCopy: "Copy command",
+    commandCopied: "Copied",
+    updateRestartNow: "{n} update(s) downloaded; auto-installs after restarting SSiD. Restart now?",
+    updateRestartBusy: "{n} session(s) still in progress \u2014 no restart; updates ready, restart manually later",
+    updatedPendingTag: "Updated \u2014 restart pending",
+    restartUnavailable: "Auto-restart unavailable here; please restart manually",
+    restartAskTitle: "Restart required",
+    restartAskBody: "{n} plugin(s) updated; takes effect after restarting SSiD (active sessions are checked first)",
+    restartNowBtn: "Restart now",
     updateSummary: "Update done: {a} succeeded, {b} failed ({c})",
     whatsNewTitle: "Plugin updates",
     whatsNewSub: "{n} plugins have new versions",
@@ -759,28 +803,45 @@ function MarketView({ category, single, source, search, onCount }) {
     ] }) })
   ] });
 }
-function UpdatesView({ updates, refresh, updateOne, busy }) {
+function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneClick }) {
   const t = useT();
   useUpdatingVersion();
   if (updates === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("checkingUpdates") });
-  if (updates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+  const doneOnly = doneUpdates.filter((d) => !(updates ?? []).some((u) => u.name === d.name));
+  if (updates.length === 0 && doneOnly.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("noUpdates") }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: refresh, children: t("recheck") })
   ] });
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
-      u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
+        u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
+        pendingInstall.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("pendingRestart") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name), onClick: () => {
+          updateOne(u.name, u.toVersion);
+        }, children: busy === u.name || busy === "__all__" || updatingPlugins.has(u.name) ? t("updating") : t("update") })
+      ] }),
+      u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
+    ] }, u.name)),
+    doneOnly.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: d.name }),
+      d.fromVersion !== "" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: d.fromVersion }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: d.toVersion }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("updatedPendingTag") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null, onClick: () => {
-        updateOne(u.name, u.toVersion);
-      }, children: busy === u.name || busy === "__all__" || updatingPlugins.has(u.name) ? t("updating") : t("update") })
-    ] }),
-    u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
-  ] }, u.name)) });
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", onClick: () => {
+        onDoneClick(d.name);
+      }, children: t("updatedPendingTag") })
+    ] }) }, d.name))
+  ] });
 }
 function DiagnoseView() {
   const t = useT();
@@ -872,6 +933,63 @@ function DiagnoseView() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: "pc-desc", style: { whiteSpace: "pre-wrap", fontSize: 11 }, children: report.pnpmLogTail === "" ? "\u2014" : report.pnpmLogTail })
   ] });
 }
+function CommandDialog({ command, copied, onCopy, onClose }) {
+  const t = useT();
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "min(560px, 92vw)", background: "var(--dsw-alias-bg-layer-1, #131a26)", border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--dsw-alias-label-primary, #d8e0ea)" }, children: t("commandTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)", lineHeight: 1.5 }, children: t("commandHint") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          readOnly: true,
+          value: command,
+          rows: Math.min(8, command.split("\n").length + 1),
+          style: { width: "100%", boxSizing: "border-box", background: "var(--dsw-alias-bg-module-platform, rgba(128,148,168,.12))", color: "var(--dsw-alias-label-primary, #d8e0ea)", border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 6, padding: "8px 10px", fontSize: 12, fontFamily: "monospace", resize: "vertical" }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", onClick: () => {
+          void navigator.clipboard.writeText(command).then(onCopy).catch(() => {
+          });
+        }, children: copied ? t("commandCopied") : t("commandCopy") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn primary", onClick: onClose, children: t("close") })
+      ] })
+    ] }) }),
+    document.body
+  );
+}
+function RestartDialog({ count, onRestart, onClose }) {
+  const t = useT();
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "min(420px, 92vw)", background: "var(--dsw-alias-bg-layer-1, #131a26)", border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--dsw-alias-label-primary, #d8e0ea)" }, children: t("restartAskTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)", lineHeight: 1.5 }, children: t("restartAskBody", { n: count }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", onClick: onClose, children: t("later") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            style: {
+              padding: "3px 12px",
+              fontSize: 11.5,
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: 600,
+              background: "var(--dsw-alias-button-primary-fill)",
+              color: "var(--dsw-alias-label-primary-foreground)"
+            },
+            onClick: onRestart,
+            children: t("restartNowBtn")
+          }
+        )
+      ] })
+    ] }) }),
+    document.body
+  );
+}
 function CenterPanel({ variant = "section" }) {
   const t = useT();
   const [view, setView] = (0, import_react.useState)("installed");
@@ -887,6 +1005,28 @@ function CenterPanel({ variant = "section" }) {
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
   const [checking, setChecking] = (0, import_react.useState)(false);
   const [togglingId, setTogglingId] = (0, import_react.useState)(null);
+  const [commandDialog, setCommandDialog] = (0, import_react.useState)(null);
+  const [copied, setCopied] = (0, import_react.useState)(false);
+  const readyPending = (0, import_react.useRef)([]);
+  const inUpdateAll = (0, import_react.useRef)(false);
+  useDoneUpdatesVersion();
+  const [restartAsk, setRestartAsk] = (0, import_react.useState)(0);
+  const runRestartNow = (n) => {
+    void fetch("/ssid/api/sessionRoot.restart", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((res) => res.json()).then((body2) => {
+      if (body2.value?.code === "busy") {
+        showToast(t("updateRestartBusy", { n: body2.value.activeSessions ?? 0 }), "error", 8e3);
+      }
+    }).catch(() => showToast(t("restartUnavailable"), "error", 8e3));
+  };
+  const askRestart = (n) => {
+    setRestartAsk(n);
+  };
+  const flushReady = () => {
+    const n = readyPending.current.length;
+    if (n === 0) return;
+    readyPending.current = [];
+    askRestart(n);
+  };
   const handleToggle = (p) => {
     if (togglingId !== null) return;
     const id = p.entryId;
@@ -989,11 +1129,29 @@ function CenterPanel({ variant = "section" }) {
     setUpdating(name, true);
     void rpc("update", { name, version }).then(
       (v) => {
-        const durationMs = typeof v === "object" && v !== null ? v.durationMs : void 0;
-        if (v !== true && durationMs === void 0) throw new Error(t("updateNotApplied"));
+        const value = typeof v === "object" && v !== null ? v : null;
+        if (value === null || value.durationMs === void 0 && value.command === void 0) throw new Error(t("updateNotApplied"));
         setUpdating(name, false);
         setBusyUpdate(null);
-        showToast(t("updatedOne", { n: name }) + (durationMs !== void 0 ? `\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 5e3);
+        if (value.command !== void 0 && value.command !== "") {
+          setCommandDialog(value.command);
+          setCopied(false);
+          return;
+        }
+        if (value.pending === true) {
+          pendingInstall.add(name);
+          readyPending.current.push(name);
+          if (!inUpdateAll.current) flushReady();
+          refreshUpdates(true);
+          return;
+        }
+        pendingInstall.add(name);
+        markDoneUpdate({
+          name,
+          fromVersion: updates?.find((u) => u.name === name)?.fromVersion ?? "",
+          toVersion: version
+        });
+        showToast(t("updatedOne", { n: name }) + (value.durationMs !== void 0 ? `\uFF08${(value.durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 5e3);
         refreshUpdates(true);
       },
       (e) => {
@@ -1006,6 +1164,9 @@ function CenterPanel({ variant = "section" }) {
   const updateAll = async () => {
     if (updates === null || updates.length === 0) return;
     setBusyUpdate("__all__");
+    inUpdateAll.current = true;
+    readyPending.current = [];
+    const commands = [];
     let okCount = 0;
     const okNames = [];
     const failures = [];
@@ -1013,21 +1174,43 @@ function CenterPanel({ variant = "section" }) {
       setUpdating(u.name, true);
       try {
         const v = await rpc("update", { name: u.name, version: u.toVersion });
-        const durationMs = typeof v === "object" && v !== null ? v.durationMs : void 0;
-        if (v !== true && durationMs === void 0) throw new Error(t("updateNotApplied"));
+        const value = typeof v === "object" && v !== null ? v : null;
+        if (value === null || value.durationMs === void 0 && value.command === void 0) throw new Error(t("updateNotApplied"));
         okCount++;
-        okNames.push(durationMs !== void 0 ? `${u.name}\uFF08${(durationMs / 1e3).toFixed(1)}s\uFF09` : u.name);
+        if (value.command !== void 0 && value.command !== "") {
+          commands.push(value.command);
+          continue;
+        }
+        if (value.pending === true) {
+          readyPending.current.push(u.name);
+          okNames.push(`${u.name}\uFF08\u5F85\u91CD\u542F\uFF09`);
+          continue;
+        }
+        pendingInstall.add(u.name);
+        markDoneUpdate({
+          name: u.name,
+          fromVersion: u.fromVersion,
+          toVersion: u.toVersion
+        });
+        okNames.push(value.durationMs !== void 0 ? `${u.name}\uFF08${(value.durationMs / 1e3).toFixed(1)}s\uFF09` : u.name);
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setUpdating(u.name, false);
       }
     }
+    inUpdateAll.current = false;
     setBusyUpdate(null);
-    if (failures.length === 0) {
-      showToast(t("updatedMany", { n: okCount }) + `\uFF08${okNames.join("\u3001")}\uFF09`, "ok", 6e3);
-    } else {
+    if (commands.length > 0) {
+      setCommandDialog(commands.join("\n"));
+      setCopied(false);
+    } else if (readyPending.current.length > 0) {
+      flushReady();
+    }
+    if (failures.length > 0) {
       showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 15e3);
+    } else if (commands.length === 0 && readyPending.current.length === 0) {
+      showToast(t("updatedMany", { n: okCount }) + `\uFF08${okNames.join("\u3001")}\uFF09`, "ok", 6e3);
     }
     refreshUpdates();
   };
@@ -1117,28 +1300,58 @@ function CenterPanel({ variant = "section" }) {
   const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     view === "installed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstalledView, { search, category: installedCategory, source: installedSource, onToggle: handleToggle, togglingId }),
     view === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MarketView, { category, single, source, search: marketSearch, onCount: handleMarketCount }),
-    view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate }),
+    view === "updates" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesView, { updates, refresh: refreshUpdates, updateOne, busy: busyUpdate, doneUpdates: doneUpdatesStore, onDoneClick: () => {
+      askRestart(1);
+    } }),
     view === "diagnose" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnoseView, {})
   ] });
   if (variant === "overlay") {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: "none" }, children: [
-        head(false),
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: "none" }, children: [
+          head(false),
+          tabs,
+          installedToolbar,
+          marketToolbar
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-scroll", children: body })
+      ] }),
+      commandDialog !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandDialog, { command: commandDialog, copied, onCopy: () => {
+        setCopied(true);
+      }, onClose: () => {
+        setCommandDialog(null);
+      } }),
+      restartAsk > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RestartDialog, { count: restartAsk, onRestart: () => {
+        const n = restartAsk;
+        setRestartAsk(0);
+        runRestartNow(n);
+      }, onClose: () => {
+        setRestartAsk(0);
+      } })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: "none", paddingBottom: "4px" }, children: [
+        head(true),
         tabs,
         installedToolbar,
         marketToolbar
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-scroll", children: body })
-    ] });
-  }
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: "none", paddingBottom: "4px" }, children: [
-      head(true),
-      tabs,
-      installedToolbar,
-      marketToolbar
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-scroll", children: body })
+    commandDialog !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandDialog, { command: commandDialog, copied, onCopy: () => {
+      setCopied(true);
+    }, onClose: () => {
+      setCommandDialog(null);
+    } }),
+    restartAsk > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RestartDialog, { count: restartAsk, onRestart: () => {
+      const n = restartAsk;
+      setRestartAsk(0);
+      runRestartNow(n);
+    }, onClose: () => {
+      setRestartAsk(0);
+    } })
   ] });
 }
 function HeaderButton() {
@@ -1186,8 +1399,17 @@ function WhatsNewDialog() {
     for (const u of whatsNewDigests) {
       try {
         const v = await rpc("update", { name: u.name, version: u.toVersion });
-        if (v !== true) throw new Error(t("updateNotApplied"));
+        const value = typeof v === "object" && v !== null ? v : null;
+        if (value === null || value.durationMs === void 0 && value.command === void 0) throw new Error(t("updateNotApplied"));
+        if (value.command !== void 0 && value.command !== "") {
+          failures.push(`${u.name}\uFF1A${t("commandHint")}`);
+          continue;
+        }
         okCount++;
+        if (value.pending === true || value.direct === true) {
+          pendingInstall.add(u.name);
+          markDoneUpdate({ name: u.name, fromVersion: u.fromVersion, toVersion: u.toVersion });
+        }
       } catch (e) {
         failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
       }

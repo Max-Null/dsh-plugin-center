@@ -1,4 +1,4 @@
-/**
+﻿/**
  * dsh-plugin-center browser half. Third-party client bundle — components live
  * in the apply closure to reach the loopback RPC seam. Styles live in one
  * injected <style> sheet (so :hover/:focus work) and use var(--dsw-*) tokens
@@ -8,12 +8,12 @@
 // compiled to `import_react.createPortal` which is undefined at runtime —
 // 2026-08-22 slot crash). react-dom is bundled by build-client.mjs.
 import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `
-.pc-title { font-size: 18px; font-weight: 600; line-height: 26px; color: var(--dsw-alias-label-primary); }
-.pc-sub { font-size: 13px; line-height: 20px; margin-top: 4px; color: var(--dsw-alias-label-tertiary); }
+.pc-title { font-size: 16px; font-weight: 600; line-height: 24px; color: var(--dsw-alias-label-primary); }
+.pc-sub { font-size: 13px; line-height: 20px; margin-top: 4px; color: var(--dsw-alias-label-secondary); }
 .pc-head { display: flex; align-items: center; gap: 10px; }
 .pc-head .pc-sub { margin-top: 0; }
 .pc-head .pc-btn { flex: none; }
@@ -291,6 +291,28 @@ function usePendingVersion(): number {
   }, [])
   return v
 }
+// ---- 已更新待重启卡片（2026-08-22，模块级：跨面板重开保留，重启后清空）----
+// 直装/pending 的更新完成后，checkUpdates 会因磁盘版本已最新而清空更新列表，
+// 但用户需要看到「已更新待重启」卡片并点击触发重启。模块级数组 + 版本号
+// 驱动重渲染（同 pendingInstall 模式）。重启应用后此数组随页面重载清空。
+const doneUpdatesStore: Array<{ name: string, fromVersion: string, toVersion: string }> = []
+let doneUpdatesVersion = 0
+const doneUpdatesListeners = new Set<() => void>()
+function markDoneUpdate(entry: { name: string, fromVersion: string, toVersion: string }): void {
+  if (doneUpdatesStore.some(d => d.name === entry.name)) return
+  doneUpdatesStore.push(entry)
+  doneUpdatesVersion++
+  doneUpdatesListeners.forEach(l => l())
+}
+function useDoneUpdatesVersion(): number {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    doneUpdatesListeners.add(l)
+    return () => { doneUpdatesListeners.delete(l) }
+  }, [])
+  return v
+}
 // ---- installed-list refresh signal: toggle/install invalidate the module
 // cache and bump this, and InstalledView refetches on the change ----
 let installedVersion = 0
@@ -398,9 +420,19 @@ const STRINGS = {
     disabledTag: '已禁用', requiresDsh: '要求 DSH {r}',
     installQueued: '已发起安装 {n}，重启 dsh web 后生效', installFailed: '安装失败：{e}',
     installNotApplied: '安装未生效',
-    updatedOne: '已更新 {n}，重启 dsh web 后生效', updateFailed: '更新失败：{e}',
+    updatedOne: '已更新 {n}，重启后生效', updateFailed: '更新失败：{e}',
     updateNotApplied: '更新未生效',
-    updatedMany: '已更新 {n} 个插件，重启 dsh web 后生效',
+    updatedMany: '已更新 {n} 个插件，重启后生效',
+    commandTitle: '在终端执行以下命令',
+    commandHint: '当前应用正在运行，被锁定的文件无法在应用内替换。请先关闭应用，再在终端执行：',
+    commandCopy: '复制命令', commandCopied: '已复制',
+    updateRestartNow: '已下载 {n} 个更新，重启思灵后自动安装。立即重启？',
+    updateRestartBusy: '有 {n} 个会话正在进行中，未执行重启；更新已准备好，稍后手动重启即可',
+    updatedPendingTag: '已更新待重启',
+    restartUnavailable: '当前环境不支持自动重启，请手动重启应用',
+    restartAskTitle: '需要重启生效',
+    restartAskBody: '已更新 {n} 个插件，重启思灵后生效（有进行中的会话时会先检查）',
+    restartNowBtn: '立即重启',
     updateSummary: '更新完成：成功 {a}，失败 {b}（{c}）',
     whatsNewTitle: '插件更新', whatsNewSub: '{n} 个插件有新版本',
     later: '稍后', markAllRead: '全部标记已读', updateNow: '立即更新', close: '关闭',
@@ -432,9 +464,19 @@ const STRINGS = {
     disabledTag: 'Disabled', requiresDsh: 'Requires DSH {r}',
     installQueued: 'Install of {n} started; restart dsh web to take effect', installFailed: 'Install failed: {e}',
     installNotApplied: 'Install did not take effect',
-    updatedOne: 'Updated {n}; restart dsh web to take effect', updateFailed: 'Update failed: {e}',
+    updatedOne: 'Updated {n}; restart to take effect', updateFailed: 'Update failed: {e}',
     updateNotApplied: 'Update did not take effect',
-    updatedMany: 'Updated {n} plugins; restart dsh web to take effect',
+    updatedMany: 'Updated {n} plugin(s); restart to take effect',
+    commandTitle: 'Run this command in a terminal',
+    commandHint: 'The app is running and locked files cannot be replaced in-place. Close the app first, then run:',
+    commandCopy: 'Copy command', commandCopied: 'Copied',
+    updateRestartNow: '{n} update(s) downloaded; auto-installs after restarting SSiD. Restart now?',
+    updateRestartBusy: '{n} session(s) still in progress — no restart; updates ready, restart manually later',
+    updatedPendingTag: 'Updated — restart pending',
+    restartUnavailable: 'Auto-restart unavailable here; please restart manually',
+    restartAskTitle: 'Restart required',
+    restartAskBody: '{n} plugin(s) updated; takes effect after restarting SSiD (active sessions are checked first)',
+    restartNowBtn: 'Restart now',
     updateSummary: 'Update done: {a} succeeded, {b} failed ({c})',
     whatsNewTitle: 'Plugin updates', whatsNewSub: '{n} plugins have new versions',
     later: 'Later', markAllRead: 'Mark all read', updateNow: 'Update now', close: 'Close',
@@ -713,18 +755,23 @@ function MarketView({ category, single, source, search, onCount }: { category: s
   )
 }
 
-function UpdatesView({ updates, refresh, updateOne, busy }: {
+function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneClick }: {
   updates: UpdateDigest[] | null
   refresh: () => void
   updateOne: (name: string, version: string) => void
   busy: string | null
+  doneUpdates: Array<{ name: string, fromVersion: string, toVersion: string }>
+  onDoneClick: (name: string) => void
 }) {
   const t = useT()
   // Module-level in-flight set: keeps "Updating…" visible even when the panel
   // was remounted while a host update was still running (2026-08-22).
   useUpdatingVersion()
   if (updates === null) return <p className="pc-sub">{t('checkingUpdates')}</p>
-  if (updates.length === 0) return (
+  // 已更新（直装/pending）的卡片：磁盘已最新，checkUpdates 会清空更新列表，
+  // 但用户需要保留卡片并点击触发重启（「已更新待重启」窗口期）。
+  const doneOnly = doneUpdates.filter(d => !(updates ?? []).some(u => u.name === d.name))
+  if (updates.length === 0 && doneOnly.length === 0) return (
     <div>
       <p className="pc-sub">{t('noUpdates')}</p>
       <button className="pc-btn" onClick={refresh}>{t('recheck')}</button>
@@ -740,14 +787,27 @@ function UpdatesView({ updates, refresh, updateOne, busy }: {
             <span className="pc-ver">→</span>
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
+            {pendingInstall.has(u.name) && <span className="pc-tag">{t('pendingRestart')}</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
+            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
               {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
             </ul>
           )}
+        </div>
+      ))}
+      {doneOnly.map(d => (
+        <div key={d.name} className="pc-card">
+          <div className="pc-row">
+            <span className="pc-name">{d.name}</span>
+            {d.fromVersion !== '' && (<><span className="pc-ver">{d.fromVersion}</span><span className="pc-ver">→</span></>)}
+            <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{d.toVersion}</span>
+            <span className="pc-tag">{t('updatedPendingTag')}</span>
+            <span className="pc-spacer" />
+            <button className="pc-btn primary" onClick={() => { onDoneClick(d.name) }}>{t('updatedPendingTag')}</button>
+          </div>
         </div>
       ))}
     </div>
@@ -847,6 +907,52 @@ function DiagnoseView() {
 
 type View = 'installed' | 'market' | 'updates' | 'diagnose'
 
+/** 撞锁回退（官方 dsh web 等无持久消费方）：指令复制弹窗。 */
+function CommandDialog({ command, copied, onCopy, onClose }: { command: string, copied: boolean, onCopy: () => void, onClose: () => void }) {
+  const t = useT()
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+      <div style={{ width: 'min(560px, 92vw)', background: 'var(--dsw-alias-bg-layer-1, #131a26)', border: '1px solid var(--dsw-alias-border-l2, #1e2836)', borderRadius: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary, #d8e0ea)' }}>{t('commandTitle')}</div>
+        <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)', lineHeight: 1.5 }}>{t('commandHint')}</div>
+        <textarea readOnly value={command} rows={Math.min(8, command.split('\n').length + 1)}
+          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--dsw-alias-bg-module-platform, rgba(128,148,168,.12))', color: 'var(--dsw-alias-label-primary, #d8e0ea)', border: '1px solid var(--dsw-alias-border-l2, #1e2836)', borderRadius: 6, padding: '8px 10px', fontSize: 12, fontFamily: 'monospace', resize: 'vertical' }} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="pc-btn" onClick={() => { void navigator.clipboard.writeText(command).then(onCopy).catch(() => {}) }}>{copied ? t('commandCopied') : t('commandCopy')}</button>
+          <button type="button" className="pc-btn primary" onClick={onClose}>{t('close')}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/** 自绘「立即重启 / 稍后」确认弹窗（同 CommandDialog 样式，DSH 主题变量）。 */
+function RestartDialog({ count, onRestart, onClose }: { count: number, onRestart: () => void, onClose: () => void }) {
+  const t = useT()
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+      <div style={{ width: 'min(420px, 92vw)', background: 'var(--dsw-alias-bg-layer-1, #131a26)', border: '1px solid var(--dsw-alias-border-l2, #1e2836)', borderRadius: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary, #d8e0ea)' }}>{t('restartAskTitle')}</div>
+        <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)', lineHeight: 1.5 }}>{t('restartAskBody', { n: count })}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="pc-btn" onClick={onClose}>{t('later')}</button>
+          <button
+            type="button"
+            style={{
+              padding: '3px 12px', fontSize: 11.5, border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600,
+              background: 'var(--dsw-alias-button-primary-fill)',
+              color: 'var(--dsw-alias-label-primary-foreground)',
+            }}
+            onClick={onRestart}
+          >{t('restartNowBtn')}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' }) {
   const t = useT()
   const [view, setView] = useState<View>('installed')
@@ -863,6 +969,37 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  // 三段式更新 UI（2026-08-22）：直装成功 toast / 撞锁转 pending 后「立即/稍后
+  // 重启」、多更新统一弹窗 / web 撞锁给指令复制弹窗。
+  const [commandDialog, setCommandDialog] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const readyPending = useRef<string[]>([])
+  const inUpdateAll = useRef(false)
+  // 本次会话「已更新，待重启生效」的卡片（直装/pending 都进）：checkUpdates
+  // 会因磁盘版本已最新而清空更新列表，但用户需要看到卡片并点击触发重启。
+  // 模块级（doneUpdatesStore + useDoneUpdatesVersion），跨面板重开保留。
+  useDoneUpdatesVersion()
+  // 自绘「立即重启」确认弹窗（不再用原生 window.confirm，保持与 DSH 主题一致）。
+  const [restartAsk, setRestartAsk] = useState(0)
+  // SSiD「立即重启」：复用 dsh-ssid-panels 的 /ssid/api/sessionRoot.restart
+  // （含进行中会话 busy 保护）。失败（非 SSiD / 通道缺失）仅提示。
+  const runRestartNow = (n: number): void => {
+    void fetch('/ssid/api/sessionRoot.restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+      .then(res => res.json())
+      .then((body: { value?: { code?: string, activeSessions?: number } }) => {
+        if (body.value?.code === 'busy') {
+          showToast(t('updateRestartBusy', { n: body.value.activeSessions ?? 0 }), 'error', 8000)
+        }
+      })
+      .catch(() => showToast(t('restartUnavailable'), 'error', 8000))
+  }
+  const askRestart = (n: number): void => { setRestartAsk(n) }
+  const flushReady = (): void => {
+    const n = readyPending.current.length
+    if (n === 0) return
+    readyPending.current = []
+    askRestart(n)
+  }
 
   const handleToggle = (p: InstalledPlugin) => {
     if (togglingId !== null) return
@@ -982,12 +1119,34 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     setUpdating(name, true)
     void rpc('update', { name, version }).then(
       v => {
-        const durationMs = typeof v === 'object' && v !== null ? (v as { durationMs?: number }).durationMs : undefined
-        if (v !== true && durationMs === undefined) throw new Error(t('updateNotApplied'))
+        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string } : null
+        if (value === null || (value.durationMs === undefined && value.command === undefined)) throw new Error(t('updateNotApplied'))
         setUpdating(name, false)
         setBusyUpdate(null)
-        showToast(t('updatedOne', { n: name }) + (durationMs !== undefined ? `（${(durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 5000)
-        refreshUpdates(true) // 更新完成：列表立即反映新版本，无需手动检查
+        if (value.command !== undefined && value.command !== '') {
+          // 撞锁且无持久消费方（官方 dsh web 等）：给 CLI 指令，用户自行执行
+          setCommandDialog(value.command)
+          setCopied(false)
+          return
+        }
+        if (value.pending === true) {
+          // SSiD 撞锁 → 预下载完成，重启时自动安装：打 tag + 弹「立即/稍后重启」
+          pendingInstall.add(name)
+          readyPending.current.push(name)
+          if (!inUpdateAll.current) flushReady()
+          refreshUpdates(true)
+          return
+        }
+        // 直装成功：文件已更新，重启后生效 → 卡片保留为「已更新待重启」，
+        // 点击卡片按钮触发重启确认（checkUpdates 会自然清空更新列表）。
+        pendingInstall.add(name)
+        markDoneUpdate({
+          name,
+          fromVersion: updates?.find(u => u.name === name)?.fromVersion ?? '',
+          toVersion: version,
+        })
+        showToast(t('updatedOne', { n: name }) + (value.durationMs !== undefined ? `（${(value.durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 5000)
+        refreshUpdates(true)
       },
       e => {
         setUpdating(name, false)
@@ -1000,28 +1159,54 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const updateAll = async () => {
     if (updates === null || updates.length === 0) return
     setBusyUpdate('__all__')
+    inUpdateAll.current = true
+    readyPending.current = []
+    const commands: string[] = []
     let okCount = 0
     const okNames: string[] = []
     const failures: string[] = []
     for (const u of updates) {
       setUpdating(u.name, true)
       try {
-        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean | { durationMs?: number }
-        const durationMs = typeof v === 'object' && v !== null ? v.durationMs : undefined
-        if (v !== true && durationMs === undefined) throw new Error(t('updateNotApplied'))
+        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean | object
+        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string } : null
+        if (value === null || (value.durationMs === undefined && value.command === undefined)) throw new Error(t('updateNotApplied'))
         okCount++
-        okNames.push(durationMs !== undefined ? `${u.name}（${(durationMs / 1000).toFixed(1)}s）` : u.name)
+        if (value.command !== undefined && value.command !== '') {
+          commands.push(value.command)
+          continue
+        }
+        if (value.pending === true) {
+          readyPending.current.push(u.name)
+          okNames.push(`${u.name}（待重启）`)
+          continue
+        }
+        pendingInstall.add(u.name)
+        markDoneUpdate({
+          name: u.name,
+          fromVersion: u.fromVersion,
+          toVersion: u.toVersion,
+        })
+        okNames.push(value.durationMs !== undefined ? `${u.name}（${(value.durationMs / 1000).toFixed(1)}s）` : u.name)
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
       } finally {
         setUpdating(u.name, false)
       }
     }
+    inUpdateAll.current = false
     setBusyUpdate(null)
-    if (failures.length === 0) {
-      showToast(t('updatedMany', { n: okCount }) + `（${okNames.join('、')}）`, 'ok', 6000)
-    } else {
+    // 统一弹窗（多更新全部 ready 后只弹一次；指令同理合并展示）
+    if (commands.length > 0) {
+      setCommandDialog(commands.join('\n'))
+      setCopied(false)
+    } else if (readyPending.current.length > 0) {
+      flushReady()
+    }
+    if (failures.length > 0) {
       showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 15000)
+    } else if (commands.length === 0 && readyPending.current.length === 0) {
+      showToast(t('updatedMany', { n: okCount }) + `（${okNames.join('、')}）`, 'ok', 6000)
     }
     refreshUpdates()
   }
@@ -1105,28 +1290,36 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     <>
       {view === 'installed' && <InstalledView search={search} category={installedCategory} source={installedSource} onToggle={handleToggle} togglingId={togglingId} />}
       {view === 'market' && <MarketView category={category} single={single} source={source} search={marketSearch} onCount={handleMarketCount} />}
-      {view === 'updates' && <UpdatesView updates={updates} refresh={refreshUpdates} updateOne={updateOne} busy={busyUpdate} />}
+      {view === 'updates' && <UpdatesView updates={updates} refresh={refreshUpdates} updateOne={updateOne} busy={busyUpdate} doneUpdates={doneUpdatesStore} onDoneClick={() => { askRestart(1) }} />}
       {view === 'diagnose' && <DiagnoseView />}
     </>
   )
   if (variant === 'overlay') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 'none' }}>{head(false)}{tabs}{installedToolbar}{marketToolbar}</div>
-        <div className="pc-scroll">{body}</div>
-      </div>
+      <>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 'none' }}>{head(false)}{tabs}{installedToolbar}{marketToolbar}</div>
+          <div className="pc-scroll">{body}</div>
+        </div>
+        {commandDialog !== null && <CommandDialog command={commandDialog} copied={copied} onCopy={() => { setCopied(true) }} onClose={() => { setCommandDialog(null) }} />}
+        {restartAsk > 0 && <RestartDialog count={restartAsk} onRestart={() => { const n = restartAsk; setRestartAsk(0); runRestartNow(n) }} onClose={() => { setRestartAsk(0) }} />}
+      </>
     )
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div style={{ flex: 'none', paddingBottom: '4px' }}>
-        {head(true)}
-        {tabs}
-        {installedToolbar}
-        {marketToolbar}
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+        <div style={{ flex: 'none', paddingBottom: '4px' }}>
+          {head(true)}
+          {tabs}
+          {installedToolbar}
+          {marketToolbar}
+        </div>
+        <div className="pc-scroll">{body}</div>
       </div>
-      <div className="pc-scroll">{body}</div>
-    </div>
+      {commandDialog !== null && <CommandDialog command={commandDialog} copied={copied} onCopy={() => { setCopied(true) }} onClose={() => { setCommandDialog(null) }} />}
+      {restartAsk > 0 && <RestartDialog count={restartAsk} onRestart={() => { const n = restartAsk; setRestartAsk(0); runRestartNow(n) }} onClose={() => { setRestartAsk(0) }} />}
+    </>
   )
 }
 
@@ -1186,9 +1379,23 @@ function WhatsNewDialog() {
     const failures: string[] = []
     for (const u of whatsNewDigests) {
       try {
-        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean
-        if (v !== true) throw new Error(t('updateNotApplied'))
+        const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean | object
+        // 与插件中心页同款三段式解析（直装/pending/指令），2026-08-22：
+        // 旧检查 `v !== true` 在新 host（返回 { durationMs, direct, pending,
+        // command }）下必然抛“更新未生效”。
+        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string } : null
+        if (value === null || (value.durationMs === undefined && value.command === undefined)) throw new Error(t('updateNotApplied'))
+        if (value.command !== undefined && value.command !== '') {
+          // 撞锁且无消费方（官方 dsh web）：指引去插件中心查看命令（弹窗内不铺指令 UI）
+          failures.push(`${u.name}：${t('commandHint')}`)
+          continue
+        }
         okCount++
+        if (value.pending === true || value.direct === true) {
+          // 与插件中心页一致：打「待重启生效」记录，卡片保留可点击重启
+          pendingInstall.add(u.name)
+          markDoneUpdate({ name: u.name, fromVersion: u.fromVersion, toVersion: u.toVersion })
+        }
       } catch (e) {
         failures.push(`${u.name}：${e instanceof Error ? e.message : String(e)}`)
       }
