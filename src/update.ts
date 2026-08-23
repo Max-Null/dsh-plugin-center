@@ -318,6 +318,15 @@ export async function runPnpm(args: readonly string[], cwd: string): Promise<Pnp
     last = await runOne(command, args, cwd)
     if (last.ok) break
   }
+  // 自更新鸡生蛋兜底提示：所有候选都失败且是 store 版本不匹配时，把可复制
+  // 的手动命令放进 detail，用户按提示在 profile 目录执行即可（2026-08-23
+  // 另一台电脑 v10/v11 实测——旧 host 无自动兜底，需要一条显式命令）。
+  if (!last.ok && last.detail.includes('ERR_PNPM_UNEXPECTED_STORE')) {
+    const major = detectStoreMajor(cwd)
+    if (major !== undefined) {
+      last.detail += `\n\nHint: 在 profile 目录（${cwd}）执行：\n  npx --yes pnpm@${major} ${args.join(' ')}`
+    }
+  }
   logPnpm(cwd, args, last)
   return last
 }
