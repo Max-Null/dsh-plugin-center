@@ -89,6 +89,7 @@ body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,
 .pc-panel { width: 760px; max-width: 94vw; max-height: 86vh; background: var(--dsw-alias-bg-base); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.24); display: flex; flex-direction: column; overflow: hidden; }
 .pc-panel-head { flex: none; display: flex; align-items: center; padding: 20px 28px 0; }
 .pc-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 28px 20px; }
+.pc-panel-footer { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--dsw-alias-border-l2); }
 .pc-scroll { flex: 1; min-height: 0; overflow: auto; }
 .pc-close { background: none; border: none; color: var(--dsw-alias-label-tertiary); font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px; font-family: inherit; }
 .pc-close:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
@@ -1433,11 +1434,11 @@ function WhatsNewDialog() {
               )}
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-            <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>
-            <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
-            <button className="pc-btn primary" disabled={busy} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
-          </div>
+        </div>
+        <div className="pc-panel-footer">
+          <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>
+          <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
+          <button className="pc-btn primary" disabled={busy} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
         </div>
       </div>
     </div>
