@@ -983,11 +983,16 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   // 自绘「立即重启」确认弹窗（不再用原生 window.confirm，保持与 DSH 主题一致）。
   const [restartAsk, setRestartAsk] = useState(0)
   // SSiD「立即重启」：复用 dsh-ssid-panels 的 /ssid/api/sessionRoot.restart
-  // （含进行中会话 busy 保护）。失败（非 SSiD / 通道缺失）仅提示。
+  // （含进行中会话 busy 保护）。失败（非 SSiD / 通道缺失）明确提示——
+  // Web GUI 下该端点返回 HTTP 503 + {ok:false}，不能静默无反应。
   const runRestartNow = (n: number): void => {
     void fetch('/ssid/api/sessionRoot.restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
       .then(res => res.json())
-      .then((body: { value?: { code?: string, activeSessions?: number } }) => {
+      .then((body: { ok?: boolean, value?: { code?: string, activeSessions?: number } }) => {
+        if (body.ok !== true) {
+          showToast(t('restartUnavailable'), 'error', 8000)
+          return
+        }
         if (body.value?.code === 'busy') {
           showToast(t('updateRestartBusy', { n: body.value.activeSessions ?? 0 }), 'error', 8000)
         }

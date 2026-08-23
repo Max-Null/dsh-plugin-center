@@ -1014,6 +1014,10 @@ function CenterPanel({ variant = "section" }) {
   const [restartAsk, setRestartAsk] = (0, import_react.useState)(0);
   const runRestartNow = (n) => {
     void fetch("/ssid/api/sessionRoot.restart", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((res) => res.json()).then((body2) => {
+      if (body2.ok !== true) {
+        showToast(t("restartUnavailable"), "error", 8e3);
+        return;
+      }
       if (body2.value?.code === "busy") {
         showToast(t("updateRestartBusy", { n: body2.value.activeSessions ?? 0 }), "error", 8e3);
       }
