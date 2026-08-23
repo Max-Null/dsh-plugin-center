@@ -61,13 +61,11 @@ var CSS = `
 .pc-badge.local, .pc-badge.builtin { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-tertiary); }
 .pc-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 6px; font-size: 12px; line-height: 1; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
-.pc-switch { position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,.22); cursor: pointer; transition: background .2s ease; padding: 0; }
-.pc-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .2s ease; }
-.pc-switch.on { background: var(--dsw-alias-state-success-primary); }
-.pc-switch.on::after { left: 18px; }
+.pc-switch { position: relative; flex: none; width: 40px; height: 22px; border-radius: 11px; border: none; background: var(--dsw-alias-bg-module-platform, rgba(128,148,168,.2)); cursor: pointer; transition: background .15s ease; padding: 0; }
+.pc-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s ease; }
+.pc-switch.on { background: var(--dsw-alias-state-business-primary, #4FC3F7); }
+.pc-switch.on::after { left: 21px; }
 .pc-switch:disabled { opacity: .6; cursor: default; }
-body[data-ds-dark-theme] .pc-switch { background: rgba(255,255,255,.28); }
-body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-success-primary); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
 /* \u7B5B\u9009\u533A\u7EB5\u5411\u5BB9\u5668\uFF1AAI \u63A8\u8350\u884C / \u4E3B\u7B5B\u9009\u884C / \u5206\u7C7B\u884C\u4E09\u6BB5\uFF0C\u95F4\u8DDD\u7EDF\u4E00\u3002 */

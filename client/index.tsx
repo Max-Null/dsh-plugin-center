@@ -1,4 +1,4 @@
-﻿/**
+/**
  * dsh-plugin-center browser half. Third-party client bundle — components live
  * in the apply closure to reach the loopback RPC seam. Styles live in one
  * injected <style> sheet (so :hover/:focus work) and use var(--dsw-*) tokens
@@ -39,13 +39,11 @@ const CSS = `
 .pc-badge.local, .pc-badge.builtin { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-tertiary); }
 .pc-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 6px; font-size: 12px; line-height: 1; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
-.pc-switch { position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,.22); cursor: pointer; transition: background .2s ease; padding: 0; }
-.pc-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .2s ease; }
-.pc-switch.on { background: var(--dsw-alias-state-success-primary); }
-.pc-switch.on::after { left: 18px; }
+.pc-switch { position: relative; flex: none; width: 40px; height: 22px; border-radius: 11px; border: none; background: var(--dsw-alias-bg-module-platform, rgba(128,148,168,.2)); cursor: pointer; transition: background .15s ease; padding: 0; }
+.pc-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s ease; }
+.pc-switch.on { background: var(--dsw-alias-state-business-primary, #4FC3F7); }
+.pc-switch.on::after { left: 21px; }
 .pc-switch:disabled { opacity: .6; cursor: default; }
-body[data-ds-dark-theme] .pc-switch { background: rgba(255,255,255,.28); }
-body[data-ds-dark-theme] .pc-switch.on { background: var(--dsw-alias-state-success-primary); }
 
 .pc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; }
 /* 筛选区纵向容器：AI 推荐行 / 主筛选行 / 分类行三段，间距统一。 */
