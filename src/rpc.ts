@@ -44,7 +44,15 @@ export class PluginCenterRpc extends Service {
             if (typeof version !== 'string' || version === '') return internal('update: version is required')
             const result = await ctx.pluginCenter.update(name, version)
             if (!result.ok) return internal(`update ${name} 失败：${result.detail}`)
-            return { ok: true, value: { durationMs: result.durationMs } }
+            return {
+              ok: true,
+              value: {
+                durationMs: result.durationMs,
+                direct: result.direct === true,
+                pending: result.pending === true,
+                command: result.command,
+              },
+            }
           }
           case 'toggle': {
             const id = (payload as { id?: string; disabled?: boolean } | null)?.id

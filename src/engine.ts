@@ -8,7 +8,7 @@
 import { Service, type Context, type FiberState } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { buildInstalledPlugin, clearPackageCache, resolvePackage, type InstalledPlugin, type PluginSource } from './meta.ts'
@@ -16,7 +16,7 @@ import {
   fetchAwesomePluginsJson, fetchDshMarketPlugins, fetchOhMyDshOverrides, fetchOhMyDshPlugins,
   mapConcurrent, mergePlugins, type MarketPlugin,
 } from './market.ts'
-import { detectUpdate, installPlugin, updatePlugin, type PnpmResult, type UpdateDigest } from './update.ts'
+import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, type PnpmResult, type UpdateDigest } from './update.ts'
 import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
 import { readDisabledState, setDisabled } from './toggle.ts'
 
@@ -370,9 +370,25 @@ export class PluginCenterEngine extends Service {
     })
   }
 
-  /** Update one installed plugin to the detected target version (exact — see update.ts). */
+  /** Update one installed plugin to the detected target version (exact — see update.ts).
+   *  三段式（2026-08-22）：
+   *  1. 先尝试直装（绝大多数成功：纯 JS 包、或原生模块未被宿主加载——无锁）；
+   *  2. 直装失败且是文件锁（EPERM/rename）→ 特殊路径：
+   *     - SSiD（kernel 声明 SSID_PENDING_CONSUMER=1）→ 转两段式：预下载到
+   *       ~/.ssid/pending-plugin-updates/，重启时由 kernel 在 boot DSH 前安装；
+   *     - 官方 dsh web（无消费方）→ 仿社区市场返回可复制 CLI 指令；
+   *  3. 非锁失败（网络/版本）→ 原样报错。 */
   async update(name: string, version: string): Promise<PnpmResult> {
-    return this.enqueuePnpm(() => updatePlugin(name, version, this.baseUrl))
+    // 1) 直装：成败都在这一步见分晓（锁只发生在最后「替换已加载原生模块」）。
+    const direct = await this.enqueuePnpm(() => updatePlugin(name, version, this.baseUrl))
+    if (direct.ok) return { ...direct, direct: true }
+    // 2) 锁类失败 → 特殊路径；其余失败原样返回。
+    if (!/EPERM|operation not permitted|EBUSY|rename/i.test(direct.detail)) return direct
+    if (process.env.SSID_PENDING_CONSUMER === '1') {
+      return this.enqueuePnpm(() => preparePluginUpdate(name, version, this.baseUrl))
+    }
+    const profileName = basename(this.baseUrl) || 'web'
+    return { ok: true, detail: '', durationMs: direct.durationMs, command: `dsh plugin --profile ${profileName} add ${name}@${version}` }
   }
 
   /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */

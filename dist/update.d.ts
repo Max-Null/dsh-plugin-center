@@ -23,7 +23,31 @@ export interface PnpmResult {
     detail: string;
     /** Wall-clock duration of the pnpm process (slow-but-successful is common). */
     durationMs: number;
+    /** True when the update was installed DIRECTLY (files on disk now; a
+     *  restart makes the running DSH pick them up), no locks were hit. */
+    direct?: boolean;
+    /** True when the update was only PREPARED (downloaded to the pending dir)
+     *  and the real install is queued for the next SSiD/DSH startup. */
+    pending?: boolean;
+    /** Non-SSiD locked-update fallback: the CLI command the user should run
+     *  after closing DSH (community-market style). */
+    command?: string;
 }
+/** One queued update: prepared tarball + install spec for the next boot. */
+export interface PendingUpdate {
+    name: string;
+    version: string;
+    tgz: string;
+    at: number;
+}
+/** npm pack 生成的 tgz 文件名（scope 包的 @ 与 / 均转 -）。 */
+export declare function tarballNameOf(name: string, version: string): string;
+export declare function pendingUpdateDir(): string;
+export declare function readPendingUpdates(): PendingUpdate[];
+export declare function writePendingUpdates(entries: PendingUpdate[]): void;
+/** Run `npm pack <spec>` into the pending dir and record the queued update.
+ *  @returns the pnpm-style result with `pending: true` on success. */
+export declare function preparePluginUpdate(name: string, version: string, profileDir: string): Promise<PnpmResult>;
 /**
  * Append one pnpm operation to `<profileDir>/plugin-center-pnpm.log`: time,
  * command, cwd, exit, duration, and the captured output tail. Every install

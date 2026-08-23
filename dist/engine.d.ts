@@ -96,7 +96,14 @@ export declare class PluginCenterEngine extends Service {
     /** Detect updates for every installed third-party/local plugin, TTL-cached. */
     checkUpdates(sinceIso: string): Promise<UpdateDigest[]>;
     install(spec: string): Promise<PnpmResult>;
-    /** Update one installed plugin to the detected target version (exact — see update.ts). */
+    /** Update one installed plugin to the detected target version (exact — see update.ts).
+     *  三段式（2026-08-22）：
+     *  1. 先尝试直装（绝大多数成功：纯 JS 包、或原生模块未被宿主加载——无锁）；
+     *  2. 直装失败且是文件锁（EPERM/rename）→ 特殊路径：
+     *     - SSiD（kernel 声明 SSID_PENDING_CONSUMER=1）→ 转两段式：预下载到
+     *       ~/.ssid/pending-plugin-updates/，重启时由 kernel 在 boot DSH 前安装；
+     *     - 官方 dsh web（无消费方）→ 仿社区市场返回可复制 CLI 指令；
+     *  3. 非锁失败（网络/版本）→ 原样报错。 */
     update(name: string, version: string): Promise<PnpmResult>;
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     private enqueuePnpm;

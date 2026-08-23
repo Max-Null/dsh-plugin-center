@@ -4,7 +4,7 @@
  * first (many community repos ship no release/tag/CHANGELOG — verified §7.2).
  */
 import { spawn } from 'node:child_process'
-import { appendFileSync, existsSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { compareVersions, satisfies } from './semver.ts'
@@ -94,6 +94,105 @@ export interface PnpmResult {
   detail: string
   /** Wall-clock duration of the pnpm process (slow-but-successful is common). */
   durationMs: number
+  /** True when the update was installed DIRECTLY (files on disk now; a
+   *  restart makes the running DSH pick them up), no locks were hit. */
+  direct?: boolean
+  /** True when the update was only PREPARED (downloaded to the pending dir)
+   *  and the real install is queued for the next SSiD/DSH startup. */
+  pending?: boolean
+  /** Non-SSiD locked-update fallback: the CLI command the user should run
+   *  after closing DSH (community-market style). */
+  command?: string
+}
+
+// ── 两段式更新（2026-08-22）：预下载 + 重启时安装 ────────────────────────
+// SSiD/DSH 运行中替换 node_modules 里的原生模块（node-pty 的 conpty.node
+// 等）会被 Windows 锁死（EPERM：rename tmp -> 目标 失败）。与「禁用插件
+// 写 patch + 重启生效」同款两段式：
+//   1. 现在：npm pack 把 <name>@<version> 下载到 ~/.ssid/pending-plugin-updates/
+//      （不动 node_modules，无锁；网络/版本问题此刻暴露）；
+//   2. 重启（SSiD 启动、boot DSH 之前）：shell/kernel.ts 消费清单，用
+//      `pnpm add -w <name>@<version>` 安装（无锁窗口、store 已缓存）。
+// 注意：pnpm pack 只能打当前项目，远程 registry 包必须用 npm pack
+// （2026-08-22 实测两者行为差异）。tgz 命名（npm pack 实测）：
+//   普通包 <name>-<version>.tgz；scope 包 <scope>-<name>-<version>.tgz。
+const PENDING_DIR = join(homedir(), '.ssid', 'pending-plugin-updates')
+const PENDING_INDEX = join(PENDING_DIR, 'index.json')
+
+/** One queued update: prepared tarball + install spec for the next boot. */
+export interface PendingUpdate {
+  name: string
+  version: string
+  tgz: string
+  at: number
+}
+
+/** npm pack 生成的 tgz 文件名（scope 包的 @ 与 / 均转 -）。 */
+export function tarballNameOf(name: string, version: string): string {
+  return `${name.startsWith('@') ? name.slice(1).replace('/', '-') : name}-${version}.tgz`
+}
+
+export function pendingUpdateDir(): string {
+  return PENDING_DIR
+}
+
+export function readPendingUpdates(): PendingUpdate[] {
+  try {
+    const parsed = JSON.parse(readFileSync(PENDING_INDEX, 'utf8')) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry: unknown): entry is PendingUpdate => {
+      const e = entry as Partial<PendingUpdate> | null
+      return e !== null && typeof e.name === 'string' && typeof e.version === 'string' && typeof e.tgz === 'string'
+    })
+  } catch {
+    return []
+  }
+}
+
+export function writePendingUpdates(entries: PendingUpdate[]): void {
+  mkdirSync(PENDING_DIR, { recursive: true })
+  writeFileSync(PENDING_INDEX, JSON.stringify(entries, null, 2) + '\n')
+}
+
+/** npm 候选命令：优先 PATH，回退用户级 npm 全局目录（同 pnpmCandidates 策略）。 */
+function npmCandidates(): string[] {
+  const commands = ['npm', 'npm.cmd']
+  const userNpm = join(homedir(), 'AppData', 'Roaming', 'npm')
+  for (const name of ['npm.cmd', 'npm.exe', 'npm']) {
+    const candidate = join(userNpm, name)
+    if (existsSync(candidate)) commands.push(candidate)
+  }
+  return commands
+}
+
+/** Run `npm pack <spec>` into the pending dir and record the queued update.
+ *  @returns the pnpm-style result with `pending: true` on success. */
+export async function preparePluginUpdate(name: string, version: string, profileDir: string): Promise<PnpmResult> {
+  const spec = `${name}@${version}`
+  const tgz = join(PENDING_DIR, tarballNameOf(name, version))
+  // 清理同包其他版本的残留 tgz（保留同 name 最新一次准备）
+  try {
+    for (const file of readdirSync(PENDING_DIR)) {
+      if (file.endsWith('.tgz') && file !== tarballNameOf(name, version)) {
+        rmSync(join(PENDING_DIR, file), { force: true })
+      }
+    }
+  } catch { /* pending dir absent is fine */ }
+
+  let last: PnpmResult = { ok: false, detail: 'no npm candidate found', durationMs: 0 }
+  for (const command of npmCandidates()) {
+    last = await runOne(command, ['pack', spec, '--pack-destination', PENDING_DIR], profileDir)
+    if (last.ok) break
+  }
+  logPnpm(profileDir, ['npm', 'pack', spec, '--pack-destination', PENDING_DIR], last)
+  if (last.ok && existsSync(tgz)) {
+    const entries = readPendingUpdates().filter(entry => !(entry.name === name && entry.version === version))
+    entries.push({ name, version, tgz, at: Date.now() })
+    writePendingUpdates(entries)
+    return { ...last, pending: true }
+  }
+  // 失败：detail 里已带 npm 输出（网络/版本问题此时暴露，无需重启才发现）
+  return last
 }
 
 /**
