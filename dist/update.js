@@ -184,16 +184,50 @@ export function pnpmCandidates() {
     }
     return commands;
 }
+/** 归档 profile 的 node_modules 由 pnpm `<major>` 生成（SSiD 部署时把构建机
+ *  store 元数据改写成本机路径且保留 major 后缀——shell/main.mjs rewire）。
+ *  若执行机全局 pnpm 是另一个 major（常见：机器装 pnpm 10，归档是 pnpm 11
+ *  打的），任何 pnpm 操作都报 ERR_PNPM_UNEXPECTED_STORE（不同 major 的 store
+ *  目录不兼容）。这里从 `.modules.yaml` 探测布局用的 major，候选命令里追
+ *  加 `npx --yes pnpm@<major>`（npx 拉取同 major CLI，之后走 npm 缓存），
+ *  保证以「与布局一致」的 pnpm 执行更新。
+ *  @returns 布局的 pnpm major（如 11），读不到时 undefined。
+ */
+export function detectStoreMajor(profileDir) {
+    try {
+        const meta = readFileSync(join(profileDir, 'node_modules', '.modules.yaml'), 'utf8');
+        // JSON 转义（\\v11）与 YAML 字面（\v11）两种形态都覆盖。
+        const match = /storeDir[^\n]*store[\\/]+v?(\d+)/.exec(meta);
+        if (match === null)
+            return undefined;
+        return Number(match[1]);
+    }
+    catch {
+        return undefined;
+    }
+}
+/** 完整 pnpm 命令候选序列：本地 pnpm（PATH/用户级）在前，布局 major 一致的
+ *  npx 兜底在后（前序全部失败时才会走到，且仅当探测到布局 major）。 */
+export function pnpmCommandCandidates(profileDir) {
+    const commands = pnpmCandidates();
+    const major = detectStoreMajor(profileDir);
+    if (major !== undefined) {
+        commands.push(`npx --yes pnpm@${major}`);
+    }
+    return commands;
+}
 function runOne(command, args, cwd) {
     return new Promise((resolve) => {
         let child;
         try {
             // shell: true —— Windows 下 .cmd shim 必须经 shell 才能 spawn；
+            // command 与 args 合并为整行（command 可能是多词命令，如
+            // `npx --yes pnpm@11`；args 是内部生成的固定形态，无注入面）。
             // windowsHide —— GUI 宿主下不弹 cmd 窗口（2026-08-18 用户实测闪烁）。
             // stdio 走默认 pipe：捕获 pnpm 输出，失败时把尾部输出放进 detail
             // （2026-08-22 起——此前 inherit 只有 exit code，SSiD 下更新失败
             // 无法诊断；宿主进程（web/electron）非 DSH 工具沙箱，pipe 可用）。
-            child = spawn(command, [...args], { cwd, shell: true, windowsHide: true });
+            child = spawn([command, ...args].join(' '), { cwd, shell: true, windowsHide: true });
         }
         catch (e) {
             resolve({ ok: false, detail: e instanceof Error ? e.message : String(e), durationMs: 0 });
@@ -231,7 +265,7 @@ function runOne(command, args, cwd) {
  */
 export async function runPnpm(args, cwd) {
     let last = { ok: false, detail: 'no pnpm candidate found', durationMs: 0 };
-    for (const command of pnpmCandidates()) {
+    for (const command of pnpmCommandCandidates(cwd)) {
         last = await runOne(command, args, cwd);
         if (last.ok)
             break;
