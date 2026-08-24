@@ -1,85 +1,85 @@
 {
-    "name":  "@max-null/dsh-plugin-center",
-    "version":  "0.2.11",
-    "description":  "Plugin center for DeepSeek Harness 閳?installed metadata, community market, update detection, and What\u0027s New",
-    "license":  "MIT",
-    "publishConfig":  {
-                          "access":  "public"
-                      },
-    "type":  "module",
-    "main":  "dist/index.js",
-    "types":  "dist/index.d.ts",
-    "exports":  {
-                    ".":  {
-                              "types":  "./dist/index.d.ts",
-                              "default":  "./dist/index.js"
-                          },
-                    "./client":  "./client.js",
-                    "./cordis.patch.yml":  "./cordis.patch.yml",
-                    "./package.json":  "./package.json"
-                },
-    "files":  [
-                  "dist",
-                  "client.js",
-                  "cordis.patch.yml",
-                  "assets"
-              ],
-    "dsh":  {
-                "bundle":  {
-                               "patch":  "./cordis.patch.yml"
-                           },
-                "client":  {
-                               "inject":  [
-                                              "@deepseek-ai/dsh-client-connection",
-                                              "@deepseek-ai/dsh-client-runtime",
-                                              "@deepseek-ai/dsh-client-locale",
-                                              "@deepseek-ai/dsh-client-ui-settings",
-                                              "@deepseek-ai/dsh-client-ui-conversation",
-                                              "@deepseek-ai/dsh-client-ui-slots",
-                                              "@deepseek-ai/dsh-api-remotes"
-                                          ],
-                               "platform":  "web",
-                               "immediately":  true
-                           }
-            },
-    "keywords":  [
-                     "deepseek",
-                     "harness",
-                     "dsh",
-                     "dsh-plugin",
-                     "deepseek-harness",
-                     "plugin",
-                     "market",
-                     "update",
-                     "cordis"
-                 ],
-    "repository":  {
-                       "type":  "git",
-                       "url":  "git+https://github.com/Max-Null/dsh-plugin-center.git"
-                   },
-    "scripts":  {
-                    "build":  "tsc -p tsconfig.json \u0026\u0026 node build-client.mjs",
-                    "typecheck":  "tsc --noEmit -p tsconfig.json"
-                },
-    "dependencies":  {
-                         "js-yaml":  "^4.1.0"
-                     },
-    "peerDependencies":  {
-                             "@deepseek-ai/cordis":  "^4.0.1",
-                             "@deepseek-ai/cordis-plugin-loader":  "^1.0.2",
-                             "@deepseek-ai/dsh-client-connection":  "^0.1.1-rc.1",
-                             "@deepseek-ai/dsh-host-apiproxy":  "^0.1.1-rc.1"
-                         },
-    "devDependencies":  {
-                            "@deepseek-ai/cordis":  "^4.0.1",
-                            "@deepseek-ai/cordis-plugin-loader":  "^1.0.2",
-                            "@deepseek-ai/dsh-client-connection":  "^0.1.1-rc.1",
-                            "@deepseek-ai/dsh-host-apiproxy":  "^0.1.1-rc.1",
-                            "@types/js-yaml":  "^4.0.9",
-                            "@types/node":  "^26.2.0",
-                            "@types/react":  "~18.3.1",
-                            "esbuild":  "^0.24.0",
-                            "react":  "^18.2.0",
-                            "typescript":  "^5.5.0"
-                        }
+  "name": "@max-null/dsh-plugin-center",
+  "version": "0.2.12",
+  "description": "Plugin center for DeepSeek Harness 閳?installed metadata, community market, update detection, and What's New",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "client.js",
+    "cordis.patch.yml",
+    "assets"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "plugin",
+    "market",
+    "update",
+    "cordis"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Max-Null/dsh-plugin-center.git"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build-client.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis-plugin-loader": "^1.0.2",
+    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.1",
+    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis-plugin-loader": "^1.0.2",
+    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.1",
+    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.2.0",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.24.0",
+    "react": "^18.2.0",
+    "typescript": "^5.5.0"
+  }
 }

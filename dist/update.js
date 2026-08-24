@@ -424,6 +424,23 @@ export async function updatePlugin(packageName, version, profileDir) {
     const pkgDir = join(profileDir, 'node_modules', packageName);
     const before = snapshotHostFiles(pkgDir);
     const result = await runPnpm(['add', '-w', `${packageName}@${version}`], profileDir);
+    if (result.ok) {
+        // no-op 识破：pnpm add 可能 exit 0 但什么都不装（2026-08-25 SSiD 内实测：
+        // 连续三次 142ms 静默成功、spec/版本均未变，hot 判定把「没变化」误报成
+        // 「已热生效」）。逐一核对已安装版本，不一致即报真实错误并附手动命令，
+        // 而不是继续走 hot / 待重启链路。
+        let installed = null;
+        try {
+            const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+            installed = typeof pkg.version === 'string' ? pkg.version : null;
+        }
+        catch { /* 包目录缺失：视为未生效 */ }
+        if (installed !== version) {
+            result.ok = false;
+            result.detail = `pnpm add 未生效（exit 0，安装版本仍为 ${installed ?? '缺失'}）。若重试仍失败，请在 profile 目录（${profileDir}）手动执行：pnpm add -w ${packageName}@${version}`;
+            return result;
+        }
+    }
     if (result.ok && before !== null && before.length > 0) {
         const after = snapshotHostFiles(pkgDir);
         if (after !== null && !hostFilesChanged(before, after)) {
