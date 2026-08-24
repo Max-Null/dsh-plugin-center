@@ -26,6 +26,10 @@ export interface PnpmResult {
     /** True when the update was installed DIRECTLY (files on disk now; a
      *  restart makes the running DSH pick them up), no locks were hit. */
     direct?: boolean;
+    /** True when the update changed no host-side files (only the browser
+     *  bundle, which client-hmr hot-swaps): no restart is needed. Absent when
+     *  the package dir is missing or the snapshot could not be taken. */
+    hot?: boolean;
     /** True when the update was only PREPARED (downloaded to the pending dir)
      *  and the real install is queued for the next SSiD/DSH startup. */
     pending?: boolean;
@@ -60,6 +64,20 @@ export declare function logPnpm(profileDir: string, args: readonly string[], res
  *  CreateProcess 只找 pnpm.exe（.cmd/.ps1 必须经 shell）——2026-08-17 实测
  *  spawn('pnpm', shell:false) 直接 ENOENT，更新永远假成功。 */
 export declare function pnpmCandidates(): string[];
+/** 归档 profile 的 node_modules 由 pnpm `<major>` 生成（SSiD 部署时把构建机
+ *  store 元数据改写成本机路径且保留 major 后缀——shell/main.mjs rewire）。
+ *  若执行机全局 pnpm 是另一个 major（常见：机器装 pnpm 10，归档是 pnpm 11
+ *  打的），任何 pnpm 操作都报 ERR_PNPM_UNEXPECTED_STORE（不同 major 的 store
+ *  目录不兼容）。这里从 `.modules.yaml` 探测布局用的 major，候选命令里追
+ *  加 `npx --yes pnpm@<major>`（npx 拉取同 major CLI，之后走 npm 缓存），
+ *  保证以「与布局一致」的 pnpm 执行更新。
+ *  @returns 布局的 pnpm major（如 11），读不到时 undefined。
+ */
+export declare function detectStoreMajor(profileDir: string): number | undefined;
+/** 完整 pnpm 命令候选序列：壳内捆绑 pnpm（SSID_PNPM，与归档 store 布局同
+ *  major）最优先；本地 pnpm（PATH/用户级）其次；最终以 npx pnpm@<major>
+ *  兜底（仅当探测到布局 major）。 */
+export declare function pnpmCommandCandidates(profileDir: string): string[];
 /**
  * Run pnpm in the profile directory, trying each candidate command in turn.
  * Output is captured (no named-pipe stdio — the host process is the web or
@@ -70,6 +88,22 @@ export declare function pnpmCandidates(): string[];
 export declare function runPnpm(args: readonly string[], cwd: string): Promise<PnpmResult>;
 /** Install a package into the web profile, mirroring `dsh plugin add` semantics. */
 export declare function installPlugin(packageSpec: string, profileDir: string): Promise<PnpmResult>;
+/** One host-side file identity: relative path + content hash. */
+export interface FileIdentity {
+    path: string;
+    hash: string;
+}
+/** Hash every host-runtime file under a package dir, excluding the browser
+ *  bundle (hot-swappable via client-hmr) and doc/type artifacts. The installed
+ *  package lives inside the running profile's node_modules, so the diff tells
+ *  whether the update touched only bundle files or also host code. The
+ *  package.json version bump is normalized away — installed-version metadata
+ *  changes on every update and has no runtime effect. Returns null when the
+ *  dir is absent or unreadable.
+ */
+export declare function snapshotHostFiles(pkgDir: string): FileIdentity[] | null;
+/** True when the two snapshots disagree (host-side code changed). */
+export declare function hostFilesChanged(before: FileIdentity[], after: FileIdentity[]): boolean;
 /**
  * Update a package to the given version, mirroring `dsh plugin add <pkg>`.
  * The exact version is required: with a bare package name, pnpm 11's

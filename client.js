@@ -408,9 +408,11 @@ var STRINGS = {
     installFailed: "\u5B89\u88C5\u5931\u8D25\uFF1A{e}",
     installNotApplied: "\u5B89\u88C5\u672A\u751F\u6548",
     updatedOne: "\u5DF2\u66F4\u65B0 {n}\uFF0C\u91CD\u542F\u540E\u751F\u6548",
+    updatedHot: "\u5DF2\u66F4\u65B0 {n}\uFF0C\u524D\u7AEF\u5DF2\u70ED\u751F\u6548\uFF0C\u65E0\u9700\u91CD\u542F",
     updateFailed: "\u66F4\u65B0\u5931\u8D25\uFF1A{e}",
     updateNotApplied: "\u66F4\u65B0\u672A\u751F\u6548",
     updatedMany: "\u5DF2\u66F4\u65B0 {n} \u4E2A\u63D2\u4EF6\uFF0C\u91CD\u542F\u540E\u751F\u6548",
+    updatedManyHot: "\u5DF2\u66F4\u65B0 {n} \u4E2A\u63D2\u4EF6\uFF0C\u524D\u7AEF\u5DF2\u70ED\u751F\u6548",
     commandTitle: "\u5728\u7EC8\u7AEF\u6267\u884C\u4EE5\u4E0B\u547D\u4EE4",
     commandHint: "\u5F53\u524D\u5E94\u7528\u6B63\u5728\u8FD0\u884C\uFF0C\u88AB\u9501\u5B9A\u7684\u6587\u4EF6\u65E0\u6CD5\u5728\u5E94\u7528\u5185\u66FF\u6362\u3002\u8BF7\u5148\u5173\u95ED\u5E94\u7528\uFF0C\u518D\u5728\u7EC8\u7AEF\u6267\u884C\uFF1A",
     commandCopy: "\u590D\u5236\u547D\u4EE4",
@@ -493,9 +495,11 @@ var STRINGS = {
     installFailed: "Install failed: {e}",
     installNotApplied: "Install did not take effect",
     updatedOne: "Updated {n}; restart to take effect",
+    updatedHot: "Updated {n}; hot-applied in the browser, no restart needed",
     updateFailed: "Update failed: {e}",
     updateNotApplied: "Update did not take effect",
     updatedMany: "Updated {n} plugin(s); restart to take effect",
+    updatedManyHot: "Updated {n} plugin(s); hot-applied, no restart needed",
     commandTitle: "Run this command in a terminal",
     commandHint: "The app is running and locked files cannot be replaced in-place. Close the app first, then run:",
     commandCopy: "Copy command",
@@ -1143,6 +1147,11 @@ function CenterPanel({ variant = "section" }) {
           setCopied(false);
           return;
         }
+        if (value.hot === true) {
+          showToast(t("updatedHot", { n: name }) + (value.durationMs !== void 0 ? `\uFF08${(value.durationMs / 1e3).toFixed(1)}s\uFF09` : ""), "ok", 5e3);
+          refreshUpdates(true);
+          return;
+        }
         if (value.pending === true) {
           pendingInstall.add(name);
           readyPending.current.push(name);
@@ -1173,6 +1182,7 @@ function CenterPanel({ variant = "section" }) {
     readyPending.current = [];
     const commands = [];
     let okCount = 0;
+    let hotCount = 0;
     const okNames = [];
     const failures = [];
     for (const u of updates) {
@@ -1184,6 +1194,11 @@ function CenterPanel({ variant = "section" }) {
         okCount++;
         if (value.command !== void 0 && value.command !== "") {
           commands.push(value.command);
+          continue;
+        }
+        if (value.hot === true) {
+          hotCount++;
+          okNames.push(value.durationMs !== void 0 ? `${u.name}\uFF08${(value.durationMs / 1e3).toFixed(1)}s\uFF09` : u.name);
           continue;
         }
         if (value.pending === true) {
@@ -1214,6 +1229,8 @@ function CenterPanel({ variant = "section" }) {
     }
     if (failures.length > 0) {
       showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 15e3);
+    } else if (commands.length === 0 && readyPending.current.length === 0 && hotCount === okCount) {
+      showToast(t("updatedManyHot", { n: okCount }) + `\uFF08${okNames.join("\u3001")}\uFF09`, "ok", 6e3);
     } else if (commands.length === 0 && readyPending.current.length === 0) {
       showToast(t("updatedMany", { n: okCount }) + `\uFF08${okNames.join("\u3001")}\uFF09`, "ok", 6e3);
     }
@@ -1400,6 +1417,7 @@ function WhatsNewDialog() {
   const updateNow = async () => {
     setBusy(true);
     let okCount = 0;
+    let hotCount = 0;
     const failures = [];
     for (const u of whatsNewDigests) {
       try {
@@ -1411,6 +1429,10 @@ function WhatsNewDialog() {
           continue;
         }
         okCount++;
+        if (value.hot === true) {
+          hotCount++;
+          continue;
+        }
         if (value.pending === true || value.direct === true) {
           pendingInstall.add(u.name);
           markDoneUpdate({ name: u.name, fromVersion: u.fromVersion, toVersion: u.toVersion });
@@ -1421,7 +1443,7 @@ function WhatsNewDialog() {
     }
     setBusy(false);
     if (failures.length === 0) {
-      showToast(t("updatedMany", { n: okCount }), "ok", 6e3);
+      showToast(hotCount === okCount ? t("updatedManyHot", { n: okCount }) : t("updatedMany", { n: okCount }), "ok", 6e3);
       closeWhatsNew();
     } else {
       showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 8e3);

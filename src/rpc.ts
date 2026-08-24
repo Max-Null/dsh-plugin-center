@@ -51,6 +51,7 @@ export class PluginCenterRpc extends Service {
                 direct: result.direct === true,
                 pending: result.pending === true,
                 command: result.command,
+                hot: result.hot === true,
               },
             }
           }

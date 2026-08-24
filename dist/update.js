@@ -4,7 +4,8 @@
  * first (many community repos ship no release/tag/CHANGELOG — verified §7.2).
  */
 import { spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { compareVersions, satisfies } from "./semver.js";
@@ -292,6 +293,125 @@ export async function installPlugin(packageSpec, profileDir) {
     // `-w` is required: every profile ships a pnpm-workspace.yaml.
     return runPnpm(['add', '-w', packageSpec], profileDir);
 }
+/** Resolve `exports["./client"]` exactly like client-modules does (string or
+ *  { default }): the browser bundle path, relative to the package dir. */
+function clientBundleRel(pkgDir) {
+    try {
+        const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+        const exp = pkg.exports;
+        if (exp !== null && typeof exp === 'object') {
+            const client = exp['./client'];
+            if (typeof client === 'string')
+                return client.replace(/^\.\//, '');
+            if (client !== null && typeof client === 'object') {
+                const d = client.default;
+                if (typeof d === 'string')
+                    return d.replace(/^\.\//, '');
+            }
+        }
+    }
+    catch { /* unreadable package.json: fall through to name-based rules */ }
+    return null;
+}
+/** True when the file never needs a host restart: the browser bundle (exact
+ *  exports path or legacy name), source maps, type declarations, docs/assets,
+ *  images. Conservative direction: a missed exclusion only adds a restart
+ *  (false negative), never removes one (false positive). */
+function snapshotExcluded(rel, isDir, clientRels) {
+    // join() produces backslashes on Windows; normalize for set membership.
+    const norm = rel.replace(/\\/g, '/');
+    const name = norm.split('/').pop();
+    if (name === 'node_modules' || name === 'docs' || name === 'assets')
+        return true;
+    if (isDir)
+        return false;
+    if (clientRels.has(norm))
+        return true;
+    if (name === 'client.js' || name === 'client.mjs')
+        return true;
+    if (name.endsWith('.map') || name.endsWith('.d.ts'))
+        return true;
+    if (/[.](png|jpe?g|gif|webp|svg|ico)$/i.test(name))
+        return true;
+    if (/^(README|LICENSE|CHANGELOG|UNLICENSE)(\..*)?$/i.test(name))
+        return true;
+    return false;
+}
+/** Hash every host-runtime file under a package dir, excluding the browser
+ *  bundle (hot-swappable via client-hmr) and doc/type artifacts. The installed
+ *  package lives inside the running profile's node_modules, so the diff tells
+ *  whether the update touched only bundle files or also host code. The
+ *  package.json version bump is normalized away — installed-version metadata
+ *  changes on every update and has no runtime effect. Returns null when the
+ *  dir is absent or unreadable.
+ */
+export function snapshotHostFiles(pkgDir) {
+    try {
+        if (!existsSync(pkgDir) || !statSync(pkgDir).isDirectory())
+            return null;
+    }
+    catch {
+        return null;
+    }
+    const clientRels = new Set();
+    const clientRel = clientBundleRel(pkgDir);
+    if (clientRel !== null)
+        clientRels.add(clientRel);
+    const out = [];
+    const walk = (dir, prefix) => {
+        let entries = [];
+        try {
+            entries = readdirSync(dir);
+        }
+        catch {
+            return;
+        }
+        for (const name of entries) {
+            const full = join(dir, name);
+            const rel = prefix === '' ? name : join(prefix, name);
+            let st;
+            try {
+                st = statSync(full);
+            }
+            catch {
+                continue;
+            }
+            if (snapshotExcluded(rel, st.isDirectory(), clientRels))
+                continue;
+            if (st.isDirectory()) {
+                walk(full, rel);
+                continue;
+            }
+            try {
+                let data = readFileSync(full);
+                if (name === 'package.json') {
+                    // Installed-version metadata changes on every update; strip it so a
+                    // pure bundle update still compares equal.
+                    const pkg = JSON.parse(data.toString('utf8'));
+                    delete pkg.version;
+                    data = Buffer.from(JSON.stringify(pkg), 'utf8');
+                }
+                const hash = createHash('sha256').update(data).digest('hex');
+                out.push({ path: rel, hash });
+            }
+            catch { /* unreadable file: ignore */ }
+        }
+    };
+    walk(pkgDir, '');
+    return out;
+}
+/** True when the two snapshots disagree (host-side code changed). */
+export function hostFilesChanged(before, after) {
+    const a = new Map(before.map(i => [i.path, i.hash]));
+    const b = new Map(after.map(i => [i.path, i.hash]));
+    if (a.size !== b.size)
+        return true;
+    for (const [path, hash] of a) {
+        if (b.get(path) !== hash)
+            return true;
+    }
+    return false;
+}
 /**
  * Update a package to the given version, mirroring `dsh plugin add <pkg>`.
  * The exact version is required: with a bare package name, pnpm 11's
@@ -301,5 +421,14 @@ export async function installPlugin(packageSpec, profileDir) {
  * `minimumReleaseAgeExclude` itself (2026-08-18, reproduced in-process).
  */
 export async function updatePlugin(packageName, version, profileDir) {
-    return runPnpm(['add', '-w', `${packageName}@${version}`], profileDir);
+    const pkgDir = join(profileDir, 'node_modules', packageName);
+    const before = snapshotHostFiles(pkgDir);
+    const result = await runPnpm(['add', '-w', `${packageName}@${version}`], profileDir);
+    if (result.ok && before !== null && before.length > 0) {
+        const after = snapshotHostFiles(pkgDir);
+        if (after !== null && !hostFilesChanged(before, after)) {
+            result.hot = true;
+        }
+    }
+    return result;
 }

@@ -421,9 +421,9 @@ const STRINGS = {
     disabledTag: '已禁用', requiresDsh: '要求 DSH {r}',
     installQueued: '已发起安装 {n}，重启 dsh web 后生效', installFailed: '安装失败：{e}',
     installNotApplied: '安装未生效',
-    updatedOne: '已更新 {n}，重启后生效', updateFailed: '更新失败：{e}',
+    updatedOne: '已更新 {n}，重启后生效', updatedHot: '已更新 {n}，前端已热生效，无需重启', updateFailed: '更新失败：{e}',
     updateNotApplied: '更新未生效',
-    updatedMany: '已更新 {n} 个插件，重启后生效',
+    updatedMany: '已更新 {n} 个插件，重启后生效', updatedManyHot: '已更新 {n} 个插件，前端已热生效',
     commandTitle: '在终端执行以下命令',
     commandHint: '当前应用正在运行，被锁定的文件无法在应用内替换。请先关闭应用，再在终端执行：',
     commandCopy: '复制命令', commandCopied: '已复制',
@@ -465,9 +465,9 @@ const STRINGS = {
     disabledTag: 'Disabled', requiresDsh: 'Requires DSH {r}',
     installQueued: 'Install of {n} started; restart dsh web to take effect', installFailed: 'Install failed: {e}',
     installNotApplied: 'Install did not take effect',
-    updatedOne: 'Updated {n}; restart to take effect', updateFailed: 'Update failed: {e}',
+    updatedOne: 'Updated {n}; restart to take effect', updatedHot: 'Updated {n}; hot-applied in the browser, no restart needed', updateFailed: 'Update failed: {e}',
     updateNotApplied: 'Update did not take effect',
-    updatedMany: 'Updated {n} plugin(s); restart to take effect',
+    updatedMany: 'Updated {n} plugin(s); restart to take effect', updatedManyHot: 'Updated {n} plugin(s); hot-applied, no restart needed',
     commandTitle: 'Run this command in a terminal',
     commandHint: 'The app is running and locked files cannot be replaced in-place. Close the app first, then run:',
     commandCopy: 'Copy command', commandCopied: 'Copied',
@@ -1125,7 +1125,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     setUpdating(name, true)
     void rpc('update', { name, version }).then(
       v => {
-        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string } : null
+        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string, hot?: boolean } : null
         if (value === null || (value.durationMs === undefined && value.command === undefined)) throw new Error(t('updateNotApplied'))
         setUpdating(name, false)
         setBusyUpdate(null)
@@ -1133,6 +1133,13 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
           // 撞锁且无持久消费方（官方 dsh web 等）：给 CLI 指令，用户自行执行
           setCommandDialog(value.command)
           setCopied(false)
+          return
+        }
+        if (value.hot === true) {
+          // 纯前端更新：client-hmr 已把新 bundle 热替换进浏览器，无需重启，
+          // 不进入「已更新待重启」卡片（2026-08-24）。
+          showToast(t('updatedHot', { n: name }) + (value.durationMs !== undefined ? `（${(value.durationMs / 1000).toFixed(1)}s）` : ''), 'ok', 5000)
+          refreshUpdates(true)
           return
         }
         if (value.pending === true) {
@@ -1169,17 +1176,24 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     readyPending.current = []
     const commands: string[] = []
     let okCount = 0
+    let hotCount = 0
     const okNames: string[] = []
     const failures: string[] = []
     for (const u of updates) {
       setUpdating(u.name, true)
       try {
         const v = await rpc('update', { name: u.name, version: u.toVersion }) as boolean | object
-        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string } : null
+        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string, hot?: boolean } : null
         if (value === null || (value.durationMs === undefined && value.command === undefined)) throw new Error(t('updateNotApplied'))
         okCount++
         if (value.command !== undefined && value.command !== '') {
           commands.push(value.command)
+          continue
+        }
+        if (value.hot === true) {
+          // 纯前端更新已热生效：不进入「待重启」集合
+          hotCount++
+          okNames.push(value.durationMs !== undefined ? `${u.name}（${(value.durationMs / 1000).toFixed(1)}s）` : u.name)
           continue
         }
         if (value.pending === true) {
@@ -1211,6 +1225,8 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     }
     if (failures.length > 0) {
       showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 15000)
+    } else if (commands.length === 0 && readyPending.current.length === 0 && hotCount === okCount) {
+      showToast(t('updatedManyHot', { n: okCount }) + `（${okNames.join('、')}）`, 'ok', 6000)
     } else if (commands.length === 0 && readyPending.current.length === 0) {
       showToast(t('updatedMany', { n: okCount }) + `（${okNames.join('、')}）`, 'ok', 6000)
     }
@@ -1382,6 +1398,7 @@ function WhatsNewDialog() {
   const updateNow = async () => {
     setBusy(true)
     let okCount = 0
+    let hotCount = 0
     const failures: string[] = []
     for (const u of whatsNewDigests) {
       try {
@@ -1389,7 +1406,7 @@ function WhatsNewDialog() {
         // 与插件中心页同款三段式解析（直装/pending/指令），2026-08-22：
         // 旧检查 `v !== true` 在新 host（返回 { durationMs, direct, pending,
         // command }）下必然抛“更新未生效”。
-        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string } : null
+        const value = typeof v === 'object' && v !== null ? v as { durationMs?: number, direct?: boolean, pending?: boolean, command?: string, hot?: boolean } : null
         if (value === null || (value.durationMs === undefined && value.command === undefined)) throw new Error(t('updateNotApplied'))
         if (value.command !== undefined && value.command !== '') {
           // 撞锁且无消费方（官方 dsh web）：指引去插件中心查看命令（弹窗内不铺指令 UI）
@@ -1397,6 +1414,11 @@ function WhatsNewDialog() {
           continue
         }
         okCount++
+        if (value.hot === true) {
+          // 纯前端更新已热生效：不标记「待重启」
+          hotCount++
+          continue
+        }
         if (value.pending === true || value.direct === true) {
           // 与插件中心页一致：打「待重启生效」记录，卡片保留可点击重启
           pendingInstall.add(u.name)
@@ -1408,7 +1430,7 @@ function WhatsNewDialog() {
     }
     setBusy(false)
     if (failures.length === 0) {
-      showToast(t('updatedMany', { n: okCount }), 'ok', 6000)
+      showToast(hotCount === okCount ? t('updatedManyHot', { n: okCount }) : t('updatedMany', { n: okCount }), 'ok', 6000)
       closeWhatsNew()
     } else {
       showToast(t('updateSummary', { a: okCount, b: failures.length, c: failures.join('；') }), 'error', 8000)
