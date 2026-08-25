@@ -64,6 +64,15 @@ export declare function logPnpm(profileDir: string, args: readonly string[], res
  *  CreateProcess 只找 pnpm.exe（.cmd/.ps1 必须经 shell）——2026-08-17 实测
  *  spawn('pnpm', shell:false) 直接 ENOENT，更新永远假成功。 */
 export declare function pnpmCandidates(): string[];
+/** Wrap a bundled pnpm CLI path into a runnable command line. SSID_PNPM
+ *  (SSiD 捆绑 pnpm) points at `pnpm.cjs` — a node script. On Windows,
+ *  spawning it directly through `shell: true` makes cmd hand the .cjs to
+ *  its file association (ShellExecute): cmd returns exit 0 immediately and
+ *  node never runs (2026-08-25 another machine: 142ms fake success, npm
+ *  add 未生效; output redirection test produced a 0-byte file). Non-.cjs
+ *  paths (e.g. pnpm.exe) are used as-is.
+ */
+export declare function pnpmExecCommand(bundled: string): string;
 /** 归档 profile 的 node_modules 由 pnpm `<major>` 生成（SSiD 部署时把构建机
  *  store 元数据改写成本机路径且保留 major 后缀——shell/main.mjs rewire）。
  *  若执行机全局 pnpm 是另一个 major（常见：机器装 pnpm 10，归档是 pnpm 11

@@ -235,6 +235,31 @@ export function pnpmCandidates(): string[] {
   return commands
 }
 
+/** One node executable that can run pnpm scripts.
+ *  SSiD 注入的 SSID_MCP_NODE（与 SSID_PNPM 同模式注入，存在即用）→ 本进程
+ *  execPath（官方 dsh 是 node 进程）→ PATH 的 node。 */
+function nodeCandidate(): string {
+  const fromEnv = process.env.SSID_MCP_NODE
+  if (fromEnv !== undefined && fromEnv !== '') return fromEnv
+  const exe = process.execPath
+  if (/node(?:\.exe)?$/i.test(exe)) return exe
+  return 'node'
+}
+
+/** Wrap a bundled pnpm CLI path into a runnable command line. SSID_PNPM
+ *  (SSiD 捆绑 pnpm) points at `pnpm.cjs` — a node script. On Windows,
+ *  spawning it directly through `shell: true` makes cmd hand the .cjs to
+ *  its file association (ShellExecute): cmd returns exit 0 immediately and
+ *  node never runs (2026-08-25 another machine: 142ms fake success, npm
+ *  add 未生效; output redirection test produced a 0-byte file). Non-.cjs
+ *  paths (e.g. pnpm.exe) are used as-is.
+ */
+export function pnpmExecCommand(bundled: string): string {
+  if (!/\.(cjs|mjs|js)$/i.test(bundled)) return bundled
+  const node = nodeCandidate()
+  return node === null ? bundled : `"${node}" "${bundled}"`
+}
+
 /** 归档 profile 的 node_modules 由 pnpm `<major>` 生成（SSiD 部署时把构建机
  *  store 元数据改写成本机路径且保留 major 后缀——shell/main.mjs rewire）。
  *  若执行机全局 pnpm 是另一个 major（常见：机器装 pnpm 10，归档是 pnpm 11
@@ -262,7 +287,7 @@ export function detectStoreMajor(profileDir: string): number | undefined {
 export function pnpmCommandCandidates(profileDir: string): string[] {
   const commands: string[] = []
   const bundled = process.env.SSID_PNPM
-  if (bundled !== undefined && bundled !== '') commands.push(bundled)
+  if (bundled !== undefined && bundled !== '') commands.push(pnpmExecCommand(bundled))
   commands.push(...pnpmCandidates())
   const major = detectStoreMajor(profileDir)
   if (major !== undefined) {
