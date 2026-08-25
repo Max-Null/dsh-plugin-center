@@ -116,8 +116,12 @@ export declare class PluginCenterEngine extends Service {
             source: string;
         }[];
     }>;
-    /** Disable/enable one loader entry through the profile patch layer. */
-    toggle(id: string, disabled: boolean): Promise<{
+    /** Disable/enable one loader entry through the profile patch layer.
+     *  2026-08-25 禁用失效：`dsh plugin add` 清单的 insert 子条目无 id，loader
+     *  每次启动分配随机运行时 id，按它写禁用行重启后永远匹配不到。当 patch
+     *  文件中没有 `- id: <entryId>` 行时，改用该条目的包名 name 作寻址键
+     *  （setDisabled 内按 name 把 insert 子条目升级为稳定 id 后再写禁用行）。 */
+    toggle(id: string, name: string, disabled: boolean): Promise<{
         ok: boolean;
         detail: string;
         nowDisabled: boolean | null;

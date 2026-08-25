@@ -56,10 +56,13 @@ export class PluginCenterRpc extends Service {
             }
           }
           case 'toggle': {
-            const id = (payload as { id?: string; disabled?: boolean } | null)?.id
-            const disabled = (payload as { id?: string; disabled?: boolean } | null)?.disabled
+            const payload2 = payload as { id?: string; name?: string; disabled?: boolean } | null
+            const id = payload2?.id
+            const name = payload2?.name
+            const disabled = payload2?.disabled
             if (typeof id !== 'string' || id === '') return internal('toggle: id is required')
-            const result = await ctx.pluginCenter.toggle(id, disabled === true)
+            // name 用于无稳定 id 条目的 seek-by-name 寻址（2026-08-25 禁用失效修复）。
+            const result = await ctx.pluginCenter.toggle(id, typeof name === 'string' ? name : '', disabled === true)
             if (!result.ok) return internal(`toggle ${id} 失败：${result.detail}`)
             return { ok: true, value: { nowDisabled: result.nowDisabled } }
           }

@@ -18,7 +18,7 @@ import {
 } from './market.ts'
 import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, type PnpmResult, type UpdateDigest } from './update.ts'
 import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
-import { readDisabledState, setDisabled } from './toggle.ts'
+import { readDisabledState, setDisabled, escapeRegExp } from './toggle.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -414,9 +414,29 @@ export class PluginCenterEngine extends Service {
     }
   }
 
-  /** Disable/enable one loader entry through the profile patch layer. */
-  async toggle(id: string, disabled: boolean): Promise<{ ok: boolean; detail: string; nowDisabled: boolean | null }> {
-    const result = await setDisabled(this.baseUrl, id, disabled)
+  /** Disable/enable one loader entry through the profile patch layer.
+   *  2026-08-25 禁用失效：`dsh plugin add` 清单的 insert 子条目无 id，loader
+   *  每次启动分配随机运行时 id，按它写禁用行重启后永远匹配不到。当 patch
+   *  文件中没有 `- id: <entryId>` 行时，改用该条目的包名 name 作寻址键
+   *  （setDisabled 内按 name 把 insert 子条目升级为稳定 id 后再写禁用行）。 */
+  async toggle(id: string, name: string, disabled: boolean): Promise<{ ok: boolean; detail: string; nowDisabled: boolean | null }> {
+    // 老调用方（未透传 name 的 client）兜底：从 loader 实时取包名。
+    const entryName = name !== '' ? name : [...this.ctx.loader.entries()].find(e => e.id === id)?.options.name ?? ''
+    if (entryName === '') {
+      return { ok: false, detail: `entry "${id}" not found in loader`, nowDisabled: null }
+    }
+    // 寻址键：patch 文件中已有 `- id: <id>` 行 → 稳定 id 直接用；否则是该
+    // 条目的随机运行时 id → 只能用 name 找到它的 insert 子条目。
+    const patchId = id.replace(/^include:/u, '')
+    let key = entryName
+    try {
+      const patchPath = join(this.baseUrl, 'cordis.patch.yml')
+      if (existsSync(patchPath)
+        && new RegExp(`^- id: ${escapeRegExp(patchId)}$`, 'm').test(readFileSync(patchPath, 'utf8'))) {
+        key = patchId
+      }
+    } catch { /* 读失败：走 name 寻址，由 setDisabled 报具体错误 */ }
+    const result = await setDisabled(this.baseUrl, key, entryName, disabled)
     this.installedNamesCache = null
     return result
   }

@@ -1041,9 +1041,9 @@ function CenterPanel({ variant = "section" }) {
     const id = p.entryId;
     const nextEnabled = !p.enabled;
     const wasPending = pendingToggles.has(id);
-    console.log("[plugin-center] toggle", { id, fromEnabled: p.enabled, toEnabled: nextEnabled, wasPending });
+    console.log("[plugin-center] toggle", { id, name: p.name, fromEnabled: p.enabled, toEnabled: nextEnabled, wasPending });
     setTogglingId(p.name);
-    void rpc("toggle", { id, disabled: !nextEnabled }).then(
+    void rpc("toggle", { id, name: p.name, disabled: !nextEnabled }).then(
       (v) => {
         setTogglingId(null);
         const nowDisabled = typeof v === "object" && v !== null ? v.nowDisabled : null;

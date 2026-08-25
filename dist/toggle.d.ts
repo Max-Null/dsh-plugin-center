@@ -10,6 +10,15 @@
  * followed by an optional `disabled:` line), serialized so concurrent
  * toggles cannot interleave a read-modify-write, refused when the file is
  * not a plain entry list, and protected for host-infrastructure rows.
+ *
+ * Stable ids: `dsh plugin add` install lists mount entries as id-less
+ * `insert` children (`- name: X`), which the Loader gives a RANDOM runtime
+ * id on every boot (cordis-plugin-loader ensureId). Toggling by that
+ * runtime id writes a row no later boot matches (applyEntryPatches warns
+ * and skips) — the 2026-08-25 disable-broken bug. When no `- id:` row
+ * matches, this module addresses the entry by `name` instead: the id-less
+ * insert child is upgraded in place to a stable `- id: X` so the appended
+ * disable row actually hits. It never guesses: no match = refused write.
  */
 export interface ToggleResult {
     ok: boolean;
@@ -19,13 +28,18 @@ export interface ToggleResult {
 }
 /** What the user patch layer currently says about every row id. */
 export declare function readDisabledState(patchPath: string): Map<string, boolean>;
+/** Escape a literal for use inside a RegExp (plugin names may contain `.` etc.). */
+export declare function escapeRegExp(text: string): string;
 /**
  * Set one entry's disabled stance in the profile patch layer. The file is
  * only touched when the stance changes; a malformed file (not a plain
  * entry list) is reported instead of being made worse.
  * @param profileDir - the profile directory holding cordis.patch.yml.
  * @param id - the loader entry id to toggle.
+ * @param name - the entry's package name; used as the addressing key when
+ *   `id` is a Loader-assigned random runtime id with no `- id:` row in the
+ *   patch file (id-less insert children of `dsh plugin add` lists).
  * @param disabled - the target stance.
  * @returns the outcome; `nowDisabled` mirrors the stance or null when refused.
  */
-export declare function setDisabled(profileDir: string, entryId: string, disabled: boolean): Promise<ToggleResult>;
+export declare function setDisabled(profileDir: string, entryId: string, name: string, disabled: boolean): Promise<ToggleResult>;

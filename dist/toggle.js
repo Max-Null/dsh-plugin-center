@@ -10,6 +10,15 @@
  * followed by an optional `disabled:` line), serialized so concurrent
  * toggles cannot interleave a read-modify-write, refused when the file is
  * not a plain entry list, and protected for host-infrastructure rows.
+ *
+ * Stable ids: `dsh plugin add` install lists mount entries as id-less
+ * `insert` children (`- name: X`), which the Loader gives a RANDOM runtime
+ * id on every boot (cordis-plugin-loader ensureId). Toggling by that
+ * runtime id writes a row no later boot matches (applyEntryPatches warns
+ * and skips) — the 2026-08-25 disable-broken bug. When no `- id:` row
+ * matches, this module addresses the entry by `name` instead: the id-less
+ * insert child is upgraded in place to a stable `- id: X` so the appended
+ * disable row actually hits. It never guesses: no match = refused write.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -89,6 +98,46 @@ export function readDisabledState(patchPath) {
     }
     return state;
 }
+/** Escape a literal for use inside a RegExp (plugin names may contain `.` etc.). */
+export function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+/**
+ * Address a `dsh plugin add` install-list insert child by name: an id-less
+ * child (`    - name: X`, 4-space indent under `- insert:`) gets upgraded in
+ * place to a stable-id form (`    - id: X` + `      name: X`), then a
+ * `- id: X / disabled: <bool>` row is appended. A child that already carries
+ * the stable id (`    - id: X`) just gets the row appended (the upgrade must
+ * not regress to a random runtime id). The insert block always stays before
+ * the appended row, so applyEntryPatches registers the id before the toggle
+ * row reads it. Returns false when nothing matches (or `name` is empty) —
+ * callers must refuse the write, never append blindly.
+ */
+function patchInsertChildByName(lines, name, disabled) {
+    if (name === '')
+        return false;
+    const idPattern = new RegExp(`^ {4}- id: ${escapeRegExp(name)}$`, 'u');
+    const namePattern = new RegExp(`^ {4}- name: ${escapeRegExp(name)}$`, 'u');
+    let found = false;
+    for (let i = 0; i < lines.length; i++) {
+        if (namePattern.test(lines[i])) {
+            // 无 id 子条目 → 原地升级为稳定 id（4 空格 + 6 空格 name）。
+            lines[i] = `    - id: ${name}\n      name: ${name}`;
+            found = true;
+            break;
+        }
+        if (idPattern.test(lines[i])) {
+            // 已是稳定 id 子条目 → 无需升级，直接追加禁用行。
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+    const tail = lines.length > 0 && lines[lines.length - 1] !== '' ? '\n' : '';
+    lines.push(`${tail}- id: ${name}\n  disabled: ${String(disabled)}`);
+    return true;
+}
 /** Serialize toggles so concurrent writes cannot interleave. */
 let toggleChain = Promise.resolve();
 /**
@@ -97,10 +146,13 @@ let toggleChain = Promise.resolve();
  * entry list) is reported instead of being made worse.
  * @param profileDir - the profile directory holding cordis.patch.yml.
  * @param id - the loader entry id to toggle.
+ * @param name - the entry's package name; used as the addressing key when
+ *   `id` is a Loader-assigned random runtime id with no `- id:` row in the
+ *   patch file (id-less insert children of `dsh plugin add` lists).
  * @param disabled - the target stance.
  * @returns the outcome; `nowDisabled` mirrors the stance or null when refused.
  */
-export function setDisabled(profileDir, entryId, disabled) {
+export function setDisabled(profileDir, entryId, name, disabled) {
     const run = toggleChain.then(async () => {
         // Loader runtime ids (include:<id>) never match patch composition —
         // always address rows by their original patch id.
@@ -157,9 +209,22 @@ export function setDisabled(profileDir, entryId, disabled) {
             out.push(line);
         }
         if (!patched) {
-            // Append a new row (the file ends with a newline when non-empty).
-            const tail = out.length > 0 && out[out.length - 1] !== '' ? '\n' : '';
-            out.push(`${tail}- id: ${id}\n  disabled: ${String(disabled)}`);
+            // 2026-08-25 禁用失效根因：id-less insert 子条目每次启动拿随机运行时
+            // id，按它追加的禁用行重启后永远匹配不到（applyEntryPatches warn 后
+            // 静默跳过）。所以这里绝不静默追加：先按 name 寻址 insert 子条目行，
+            // 原地升级为稳定 id 再追加；都找不到 → 拒绝（不写文件）。
+            if (!patchInsertChildByName(out, name, disabled)) {
+                if (/^[0-9a-f]{8}$/u.test(id)) {
+                    return {
+                        ok: false,
+                        detail: `entry "${id}" has no stable patch id (random runtime id); ` +
+                            'edit cordis.patch.yml to give its insert child an explicit id',
+                        nowDisabled: null,
+                    };
+                }
+                return { ok: false, detail: `no patch row or insert child matches "${id}"`, nowDisabled: null };
+            }
+            patched = true;
         }
         try {
             writeFileSync(patchPath, out.join('\n') + '\n');

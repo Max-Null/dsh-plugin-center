@@ -1018,9 +1018,11 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
     // patch returns to its previous stance, so no restart is involved and
     // the toast must not claim one.
     const wasPending = pendingToggles.has(id)
-    console.log('[plugin-center] toggle', { id, fromEnabled: p.enabled, toEnabled: nextEnabled, wasPending })
+    console.log('[plugin-center] toggle', { id, name: p.name, fromEnabled: p.enabled, toEnabled: nextEnabled, wasPending })
     setTogglingId(p.name)
-    void rpc('toggle', { id, disabled: !nextEnabled }).then(
+    // name 透传给 host：无稳定 patch id 的条目（dsh plugin add 的 insert
+    // 子条目）按 name 寻址，避免随机运行时 id 写禁用行（2026-08-25 修复）。
+    void rpc('toggle', { id, name: p.name, disabled: !nextEnabled }).then(
       v => {
         setTogglingId(null)
         const nowDisabled = typeof v === 'object' && v !== null ? (v as { nowDisabled?: boolean | null }).nowDisabled : null
