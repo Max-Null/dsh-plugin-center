@@ -1,6 +1,6 @@
 # 插件中心更新假成功 v2：SSID_PNPM 指向 pnpm.cjs，Windows 假执行
 
-> 决策日期：2026-08-25 · 状态：已实施（dsh-plugin-center v0.2.13，未发布）
+> 决策日期：2026-08-25 · 状态：已实施并发布（dsh-plugin-center v0.2.13）
 > 关联：2026-08-18《插件中心更新假成功-pnpm最小发布年龄政策》（第一轮，根因不同，未覆盖本问题）
 > 波及：全部 SSiD v0.1.11+ 安装版（SSID_PNPM 注入后），插件中心更新 + 重启消费 pending + 首启 pnpm install
 
