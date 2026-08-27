@@ -352,20 +352,13 @@ function useToast() {
   }, [t]);
   return t;
 }
-var WHATS_NEW_DAILY_KEY = "ssid-wn-daily";
 var wnToday = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+var wnShownTodayCache = null;
 function wnShownToday() {
-  try {
-    return localStorage.getItem(WHATS_NEW_DAILY_KEY) === wnToday();
-  } catch {
-    return false;
+  if (wnShownTodayCache === null) {
+    wnShownTodayCache = rpc("whatsNewDaily").then((v) => String(v?.day ?? "") === wnToday()).catch(() => false);
   }
-}
-function wnMarkToday() {
-  try {
-    localStorage.setItem(WHATS_NEW_DAILY_KEY, wnToday());
-  } catch {
-  }
+  return wnShownTodayCache;
 }
 async function checkWhatNew() {
   try {
@@ -373,10 +366,10 @@ async function checkWhatNew() {
     const digests = await rpc("checkUpdates", { since });
     readCache = await rpc("readVersions");
     const fresh = digests.filter((d) => readCache[d.name] !== d.toVersion);
-    if (fresh.length > 0 && !wnShownToday()) {
+    if (fresh.length > 0 && !await wnShownToday()) {
       whatsNewDigests = fresh;
       whatsNewOpen = true;
-      wnMarkToday();
+      void rpc("markWhatsNewDaily", { day: wnToday() });
       whatsNewListeners.forEach((l) => l());
     }
   } catch {

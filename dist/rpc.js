@@ -89,6 +89,14 @@ export class PluginCenterRpc extends Service {
                         const versions = payload?.versions ?? {};
                         return { ok: true, value: await ctx.pluginCenter.markRead(versions) };
                     }
+                    case 'whatsNewDaily':
+                        return { ok: true, value: await ctx.pluginCenter.whatsNewDaily() };
+                    case 'markWhatsNewDaily': {
+                        const day = payload?.day;
+                        if (typeof day !== 'string' || day === '')
+                            return internal('markWhatsNewDaily: day is required');
+                        return { ok: true, value: await ctx.pluginCenter.markWhatsNewDaily(day) };
+                    }
                     default:
                         return internal(`unknown endpoint "${endpoint}"`);
                 }

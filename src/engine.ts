@@ -178,6 +178,31 @@ export class PluginCenterEngine extends Service {
     } catch { /* best-effort */ }
   }
 
+  /** 弹窗当天已展示标记（2026-08-27）：host 文件（DSH web 端口随机，
+   *  localStorage 按 origin 隔离会丢；文件侧稳定）。 */
+  private get whatsNewDailyPath(): string {
+    return join(this.dshHome, 'plugin-center-whatsnew-daily.json')
+  }
+
+  async whatsNewDaily(): Promise<string> {
+    try {
+      const parsed = JSON.parse(await readFile(this.whatsNewDailyPath, 'utf8')) as unknown
+      return typeof parsed === 'object' && parsed !== null && typeof (parsed as { day?: unknown }).day === 'string'
+        ? (parsed as { day: string }).day
+        : ''
+    } catch {
+      return ''
+    }
+  }
+
+  async markWhatsNewDaily(day: string): Promise<void> {
+    try {
+      const path = this.whatsNewDailyPath
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, JSON.stringify({ day, at: new Date().toISOString() }), 'utf8')
+    } catch { /* best-effort */ }
+  }
+
   /** Current DSH version, read from the installed @deepseek-ai/dsh package. */
   async dshVersion(): Promise<string> {
     const resolved = await resolvePackage(this.baseUrl, '@deepseek-ai/dsh')

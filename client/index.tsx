@@ -384,15 +384,17 @@ function useToast(): { message: string; kind: 'ok' | 'error' } | null {
 }
 
 // ---- 插件更新弹窗频率（2026-08-27 用户需求：一天最多一次）----
-// daily key 控制「当天最多弹一次」（展示即写，未点关闭直接退出/重启也不重复弹）；
-// 版本已读（markRead）仍由 closeWhatsNew 显式关闭时持久化——次日 fresh 仍在则再弹。
-const WHATS_NEW_DAILY_KEY = 'ssid-wn-daily'
+// daily 标记存 host 侧文件（DSH web 端口随机，localStorage 按 origin 隔离会丢标记）；
+// 展示即写当天；版本已读（markRead）仍由显式关闭时持久化——次日未读尚在则再弹。
 const wnToday = (): string => new Date().toISOString().slice(0, 10)
-function wnShownToday(): boolean {
-  try { return localStorage.getItem(WHATS_NEW_DAILY_KEY) === wnToday() } catch { return false }
-}
-function wnMarkToday(): void {
-  try { localStorage.setItem(WHATS_NEW_DAILY_KEY, wnToday()) } catch { /* 忽略 */ }
+let wnShownTodayCache: Promise<boolean> | null = null
+function wnShownToday(): Promise<boolean> {
+  if (wnShownTodayCache === null) {
+    wnShownTodayCache = rpc('whatsNewDaily')
+      .then(v => String((v as { day?: string } | null)?.day ?? '') === wnToday())
+      .catch(() => false)
+  }
+  return wnShownTodayCache
 }
 
 async function checkWhatNew(): Promise<void> {
@@ -401,11 +403,11 @@ async function checkWhatNew(): Promise<void> {
     const digests = await rpc('checkUpdates', { since }) as UpdateDigest[]
     readCache = await rpc('readVersions') as Record<string, string>
     const fresh = digests.filter(d => readCache[d.name] !== d.toVersion)
-    // 有未读更新且今日未弹过 → 弹（展示即写 daily 标记）
-    if (fresh.length > 0 && !wnShownToday()) {
+    // 有未读更新且今日未弹过 → 弹（展示即写 daily 标记，跨重启/端口一致）
+    if (fresh.length > 0 && !(await wnShownToday())) {
       whatsNewDigests = fresh
       whatsNewOpen = true
-      wnMarkToday()
+      void rpc('markWhatsNewDaily', { day: wnToday() })
       whatsNewListeners.forEach(l => l())
     }
   } catch { /* silent */ }

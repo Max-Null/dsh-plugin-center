@@ -75,6 +75,11 @@ export declare class PluginCenterEngine extends Service {
     readVersions(): Promise<Record<string, string>>;
     /** Persist the read-mark (best-effort; a quota/IO failure just loses the mark). */
     markRead(versions: Record<string, string>): Promise<void>;
+    /** 弹窗当天已展示标记（2026-08-27）：host 文件（DSH web 端口随机，
+     *  localStorage 按 origin 隔离会丢；文件侧稳定）。 */
+    private get whatsNewDailyPath();
+    whatsNewDaily(): Promise<string>;
+    markWhatsNewDaily(day: string): Promise<void>;
     /** Current DSH version, read from the installed @deepseek-ai/dsh package. */
     dshVersion(): Promise<string>;
     /** Non-group Loader entries, cross-matched with market categories. */
