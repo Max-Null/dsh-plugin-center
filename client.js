@@ -352,15 +352,31 @@ function useToast() {
   }, [t]);
   return t;
 }
+var WHATS_NEW_DAILY_KEY = "ssid-wn-daily";
+var wnToday = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+function wnShownToday() {
+  try {
+    return localStorage.getItem(WHATS_NEW_DAILY_KEY) === wnToday();
+  } catch {
+    return false;
+  }
+}
+function wnMarkToday() {
+  try {
+    localStorage.setItem(WHATS_NEW_DAILY_KEY, wnToday());
+  } catch {
+  }
+}
 async function checkWhatNew() {
   try {
     const since = new Date(Date.now() - 30 * 864e5).toISOString();
     const digests = await rpc("checkUpdates", { since });
     readCache = await rpc("readVersions");
     const fresh = digests.filter((d) => readCache[d.name] !== d.toVersion);
-    if (fresh.length > 0) {
+    if (fresh.length > 0 && !wnShownToday()) {
       whatsNewDigests = fresh;
       whatsNewOpen = true;
+      wnMarkToday();
       whatsNewListeners.forEach((l) => l());
     }
   } catch {

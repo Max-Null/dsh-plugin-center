@@ -383,15 +383,29 @@ function useToast(): { message: string; kind: 'ok' | 'error' } | null {
   return t
 }
 
+// ---- 插件更新弹窗频率（2026-08-27 用户需求：一天最多一次）----
+// daily key 控制「当天最多弹一次」（展示即写，未点关闭直接退出/重启也不重复弹）；
+// 版本已读（markRead）仍由 closeWhatsNew 显式关闭时持久化——次日 fresh 仍在则再弹。
+const WHATS_NEW_DAILY_KEY = 'ssid-wn-daily'
+const wnToday = (): string => new Date().toISOString().slice(0, 10)
+function wnShownToday(): boolean {
+  try { return localStorage.getItem(WHATS_NEW_DAILY_KEY) === wnToday() } catch { return false }
+}
+function wnMarkToday(): void {
+  try { localStorage.setItem(WHATS_NEW_DAILY_KEY, wnToday()) } catch { /* 忽略 */ }
+}
+
 async function checkWhatNew(): Promise<void> {
   try {
     const since = new Date(Date.now() - 30 * 86400_000).toISOString()
     const digests = await rpc('checkUpdates', { since }) as UpdateDigest[]
     readCache = await rpc('readVersions') as Record<string, string>
     const fresh = digests.filter(d => readCache[d.name] !== d.toVersion)
-    if (fresh.length > 0) {
+    // 有未读更新且今日未弹过 → 弹（展示即写 daily 标记）
+    if (fresh.length > 0 && !wnShownToday()) {
       whatsNewDigests = fresh
       whatsNewOpen = true
+      wnMarkToday()
       whatsNewListeners.forEach(l => l())
     }
   } catch { /* silent */ }
