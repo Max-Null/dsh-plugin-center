@@ -379,11 +379,14 @@ export class PluginCenterEngine extends Service {
       // 同名异源保护(2026-08-29):本地自定义来源(依赖声明 vendor/tarball/
       // local-file)时,校验 npm 同名包是否同一上游——不一致(如 dream12347
       // 定制 vs hkkz9522 独立同名项目)排除出更新列表,防误报与覆盖定制。
+      // 无法判定(任一侧缺 repository,如 dsh-session-manager 0.2.2 作者未
+      // 声明)同样排除:宁少报不漏报——漏报只少一个提示,误报是 LLM 白跑 +
+      // 用户被误导;人工核对入口见 InstalledView/LLM 会话。
       const spec = dependencySpecifierOf(this.baseUrl, p.name)
       const src = spec === null ? 'npm' : sourceOf(spec, this.baseUrl)
       if (src === 'vendor' || src === 'tarball' || src === 'local-file') {
         const same = await isSameUpstream(p.repoUrl, p.name)
-        if (same === false) return null
+        if (same !== true) return null
       }
       return detectUpdate(p.name, p.version!, p.repoUrl, p.compatRange, localDsh, sinceIso)
     }))
