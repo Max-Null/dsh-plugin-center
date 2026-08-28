@@ -1448,6 +1448,9 @@ function LlmPromptFallbackDialog() {
 function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' }) {
   const t = useT()
   const [view, setView] = useState<View>('installed')
+  // 活跃 LLM 更新数:执行中且尚未收敛终态的插件(与 llmResults 互斥,
+  // 防止 ended/成功残留把「执行中」态挂在 head/弹窗按钮上)。
+  const activeLlmCount = [...llmUpdating].filter(n => !llmResults.has(n)).length
   const [category, setCategory] = useState<string | null>(null)
   const [single, setSingle] = useState(false)
   const [source, setSource] = useState<string>('awesome')
@@ -1457,6 +1460,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [installedSource, setInstalledSource] = useState<PluginSource | null>(null)
   // Module-level counts (survive panel remounts; never flash back to 0).
   const counts = useCounts()
+  // LLM 执行中/结果订阅(head 与卡片同源,不再裸读集合——修复状态脱节)。
+  useLlmUpdatingVersion()
+  useLlmResultVersion()
   const [updates, setUpdates] = useState<UpdateDigest[] | null>(updatesCache)
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
@@ -1751,7 +1757,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? t('checking') : t('check')}</button>
       {/* 机械「更新全部」先注释(2026-08-29 只保留 LLM 入口),改为 LLM 批量。 */}
       {/* <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{updates === null ? t('checking') : t('updateAll', { n: updates.length })}</button> */}
-      <button className="pc-btn primary" disabled={updates === null || updates.length === 0 || busyUpdate !== null || llmUpdating.size > 0} onClick={() => { llmPrepareAll((updates ?? []).map(u => u.name)) }}>{updates === null ? t('checking') : llmUpdating.size > 0 ? t('llmBusy') : t('llmUpdateAll', { n: updates.length })}</button>
+      <button className="pc-btn primary" disabled={updates === null || updates.length === 0 || busyUpdate !== null || activeLlmCount > 0} onClick={() => { llmPrepareAll((updates ?? []).map(u => u.name)) }}>{updates === null ? t('checking') : activeLlmCount > 0 ? t('llmBusy') : t('llmUpdateAll', { n: updates.length })}</button>
     </div>
   )
   const installedToolbar = view === 'installed' ? (
@@ -1893,7 +1899,10 @@ function WhatsNewDialog() {
   const [busy, setBusy] = useState(false)
   // LLM 更新状态：模块级（批量进行中/确认面板打开时禁掉两个按钮，防重复发起）。
   useLlmUpdatingVersion()
+  useLlmResultVersion()
   useLlmConfirm()
+  // 活跃(未收敛)执行中数量——防止 ended 残留挂住按钮。
+  const activeLlmCount = [...llmUpdating].filter(n => !llmResults.has(n)).length
   if (!open || whatsNewDigests.length === 0) return null
   // 弹窗内串行更新全部（2026-08-17 用户反馈弹窗缺更新入口；串行防 pnpm 并发）
   const updateNow = async () => {
@@ -1968,7 +1977,7 @@ function WhatsNewDialog() {
           <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
           {/* 机械「立即更新」先注释,只保留 LLM 更新入口(2026-08-29);updateNow 保留未删。 */}
           {/* <button className="pc-btn" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button> */}
-          <button className="pc-btn primary" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { llmPrepareAll(whatsNewDigests.map(u => u.name)) }}>{llmUpdating.size > 0 ? t('llmBusy') : t('llmUpdateAll', { n: whatsNewDigests.length })}</button>
+          <button className="pc-btn primary" disabled={busy || activeLlmCount > 0 || llmConfirm !== null} onClick={() => { llmPrepareAll(whatsNewDigests.map(u => u.name)) }}>{activeLlmCount > 0 ? t('llmBusy') : t('llmUpdateAll', { n: whatsNewDigests.length })}</button>
         </div>
       </div>
     </div>

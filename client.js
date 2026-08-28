@@ -1428,6 +1428,7 @@ function LlmPromptFallbackDialog() {
 function CenterPanel({ variant = "section" }) {
   const t = useT();
   const [view, setView] = (0, import_react.useState)("installed");
+  const activeLlmCount = [...llmUpdating].filter((n) => !llmResults.has(n)).length;
   const [category, setCategory] = (0, import_react.useState)(null);
   const [single, setSingle] = (0, import_react.useState)(false);
   const [source, setSource] = (0, import_react.useState)("awesome");
@@ -1436,6 +1437,8 @@ function CenterPanel({ variant = "section" }) {
   const [marketSearch, setMarketSearch] = (0, import_react.useState)("");
   const [installedSource, setInstalledSource] = (0, import_react.useState)(null);
   const counts = useCounts();
+  useLlmUpdatingVersion();
+  useLlmResultVersion();
   const [updates, setUpdates] = (0, import_react.useState)(updatesCache);
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
   const [checking, setChecking] = (0, import_react.useState)(false);
@@ -1688,9 +1691,9 @@ function CenterPanel({ variant = "section" }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: checking, onClick: () => {
       refreshUpdates();
     }, children: checking ? t("checking") : t("check") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: updates === null || updates.length === 0 || busyUpdate !== null || llmUpdating.size > 0, onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: updates === null || updates.length === 0 || busyUpdate !== null || activeLlmCount > 0, onClick: () => {
       llmPrepareAll((updates ?? []).map((u) => u.name));
-    }, children: updates === null ? t("checking") : llmUpdating.size > 0 ? t("llmBusy") : t("llmUpdateAll", { n: updates.length }) })
+    }, children: updates === null ? t("checking") : activeLlmCount > 0 ? t("llmBusy") : t("llmUpdateAll", { n: updates.length }) })
   ] });
   const installedToolbar = view === "installed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-filter", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar pc-toolbar-main", children: [
@@ -1847,7 +1850,9 @@ function WhatsNewDialog() {
   const open = useWhatsNewOpen();
   const [busy, setBusy] = (0, import_react.useState)(false);
   useLlmUpdatingVersion();
+  useLlmResultVersion();
   useLlmConfirm();
+  const activeLlmCount = [...llmUpdating].filter((n) => !llmResults.has(n)).length;
   if (!open || whatsNewDigests.length === 0) return null;
   const updateNow = async () => {
     setBusy(true);
@@ -1903,9 +1908,9 @@ function WhatsNewDialog() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("later") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("markAllRead") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy || llmUpdating.size > 0 || llmConfirm !== null, onClick: () => {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy || activeLlmCount > 0 || llmConfirm !== null, onClick: () => {
         llmPrepareAll(whatsNewDigests.map((u) => u.name));
-      }, children: llmUpdating.size > 0 ? t("llmBusy") : t("llmUpdateAll", { n: whatsNewDigests.length }) })
+      }, children: activeLlmCount > 0 ? t("llmBusy") : t("llmUpdateAll", { n: whatsNewDigests.length }) })
     ] })
   ] }) });
 }
