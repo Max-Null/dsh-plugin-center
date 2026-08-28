@@ -46,3 +46,17 @@ export function llmResultLabelKey(status: string, action: string): string {
   return 'llmRes_running'
 }
 
+/** 选出应归档的旧「插件更新」会话:同插件标题(或批量标题)、非本次会话、
+ *  且未在运行中——侧栏不堆积,进行中的绝不归档。 */
+export function pickLlmArchives(
+  rows: Array<{ id?: string, title?: string, displayTitle?: string, running?: boolean }>,
+  name: string,
+  isBatch: boolean,
+  keepId: string,
+): string[] {
+  const marker = isBatch ? '插件更新(批量)' : `插件更新: ${name}`
+  return rows
+    .filter(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes(marker) && r.id !== undefined && r.id !== keepId && r.running !== true)
+    .map(r => r.id!)
+}
+

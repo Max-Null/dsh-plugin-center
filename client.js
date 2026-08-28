@@ -54,6 +54,10 @@ function llmResultLabelKey(status, action) {
   if (status === "success") return action === "keep" ? "llmRes_keep" : "llmRes_success";
   return "llmRes_running";
 }
+function pickLlmArchives(rows, name, isBatch, keepId) {
+  const marker = isBatch ? "\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)" : `\u63D2\u4EF6\u66F4\u65B0: ${name}`;
+  return rows.filter((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes(marker) && r.id !== void 0 && r.id !== keepId && r.running !== true).map((r) => r.id);
+}
 
 // client/index.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
@@ -1303,7 +1307,7 @@ async function ensureLlmUpdateSession(isBatch, profileDir) {
   if (profileDir !== void 0 && profileDir !== "") {
     try {
       const wsv = await workspacesSvc?.create?.({ path: profileDir });
-      wsId = typeof wsv === "string" ? wsv : wsv?.id;
+      wsId = typeof wsv === "string" ? wsv : wsv?.workspaceId;
       if (wsId !== void 0) void workspacesSvc?.rename?.(wsId, "\u63D2\u4EF6\u66F4\u65B0").catch(() => {
       });
     } catch {
@@ -1340,6 +1344,11 @@ async function llmExecute(pkgs, name) {
     });
     else session.rename?.(`\u63D2\u4EF6\u66F4\u65B0: ${pkgs[0].name}`).catch(() => {
     });
+    const rows = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {});
+    for (const oldId of pickLlmArchives(rows, pkgs[0]?.name ?? "", isBatch, id)) {
+      void workspacesSvc?.archiveSession?.(oldId).catch(() => {
+      });
+    }
     setLlmSessionId(id);
     for (const p of pkgs) llmSessionByPlugin.set(p.name, id);
     for (const p of pkgs) startLlmPolling(p.name);

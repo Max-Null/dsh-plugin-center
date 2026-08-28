@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideLlmState, decideLlmRestore, llmResultLabelKey } from '../client/llm-decision.ts'
+import { decideLlmState, decideLlmRestore, llmResultLabelKey, pickLlmArchives } from '../client/llm-decision.ts'
 
 describe('decideLlmState(轮询收敛:LLM 更新状态机的核心)', () => {
   it('JSONL 无记录 → continue', () => {
@@ -77,5 +77,30 @@ describe('llmResultLabelKey(结果文案映射:keep 绝不能显示成已更新)
   it('running/pending → 执行中', () => {
     expect(llmResultLabelKey('running', '')).toBe('llmRes_running')
     expect(llmResultLabelKey('pending', '')).toBe('llmRes_running')
+  })
+})
+
+describe('pickLlmArchives(旧「插件更新」会话归档)', () => {
+  const rows = [
+    { id: 'a1', title: '插件更新: ds-harness-remote', running: false },
+    { id: 'a2', title: '插件更新: ds-harness-remote', running: true },
+    { id: 'b1', title: '插件更新: dsh-context', running: false },
+    { id: 'c1', title: '插件更新(批量)', running: false },
+  ]
+
+  it('归档同插件已结束旧会话,排除本次与进行中', () => {
+    expect(pickLlmArchives(rows, 'ds-harness-remote', false, 'a1')).toEqual([])
+    expect(pickLlmArchives(rows, 'ds-harness-remote', false, 'new1')).toEqual(['a1'])
+    expect(pickLlmArchives(rows, 'dsh-context', false, 'x')).toEqual(['b1'])
+  })
+
+  it('批量只归档批量标题的旧会话', () => {
+    expect(pickLlmArchives(rows, 'any', true, 'c1')).toEqual([])
+    expect(pickLlmArchives(rows, 'any', true, 'new')).toEqual(['c1'])
+  })
+
+  it('进行中的绝不归档(即使标题匹配)', () => {
+    const out = pickLlmArchives([{ id: 'a2', title: '插件更新: ds-harness-remote', running: true }], 'ds-harness-remote', false, 'new')
+    expect(out).toEqual([])
   })
 })

@@ -9,7 +9,7 @@
 // 2026-08-22 slot crash). react-dom is bundled by build-client.mjs.
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decideLlmState, decideLlmRestore, llmResultLabelKey } from './llm-decision.ts'
+import { decideLlmState, decideLlmRestore, llmResultLabelKey, pickLlmArchives } from './llm-decision.ts'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `
@@ -375,10 +375,12 @@ interface LlmSessionsSvc {
 interface LlmWorkspacesSvc {
   list?: { getSnapshot?: () => { recentWorkspaceId?: string, items?: Array<{ id?: string }> } }
   connectWorkspace?: (workspaceId: string) => Promise<string>
-  /** 注册一个 path 为 workspace(幂等:已存在则返回既有),返回 WorkspaceView({id,...})。 */
-  create?: (input: { path: string }) => Promise<{ id?: string } | string>
+  /** 注册一个 path 为 workspace(幂等:已存在则返回既有),返回 WorkspaceView。 */
+  create?: (input: { path: string }) => Promise<{ workspaceId?: string } | string>
   /** 重命名 workspace(幂等)。 */
   rename?: (workspaceId: string, title: string) => Promise<unknown>
+  /** 归档会话(分组视图隐藏,日志保留)。 */
+  archiveSession?: (sessionId: string) => Promise<unknown>
 }
 let sessionsSvc: LlmSessionsSvc | null = null
 let workspacesSvc: LlmWorkspacesSvc | null = null
@@ -1322,7 +1324,9 @@ async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | und
   if (profileDir !== undefined && profileDir !== '') {
     try {
       const wsv = await workspacesSvc?.create?.({ path: profileDir })
-      wsId = typeof wsv === 'string' ? wsv : wsv?.id
+      // WorkspaceView 的 id 字段是 workspaceId(不是 id)——2026-08-29 实测修复,
+      // 此前 wsv?.id 恒 undefined 导致静默回退到用户最近工作区。
+      wsId = typeof wsv === 'string' ? wsv : wsv?.workspaceId
       if (wsId !== undefined) void workspacesSvc?.rename?.(wsId, '插件更新').catch(() => {})
     } catch { /* 注册失败退回默认 workspace */ }
   }
@@ -1362,6 +1366,11 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
     // 批量「插件更新(批量)」(统一会话)。restore 按标题精确匹配。
     if (isBatch) session.rename?.('插件更新(批量)').catch(() => {})
     else session.rename?.(`插件更新: ${pkgs[0].name}`).catch(() => {})
+    // 归档同插件已结束的旧会话(进行中的绝不归档;侧栏不堆积)。
+    const rows = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {})
+    for (const oldId of pickLlmArchives(rows, pkgs[0]?.name ?? '', isBatch, id)) {
+      void workspacesSvc?.archiveSession?.(oldId).catch(() => {})
+    }
     setLlmSessionId(id)
     // 保持「执行中」直到 host JSONL 出现终态(轮询收敛);会话 id 供查看跳转。
     for (const p of pkgs) llmSessionByPlugin.set(p.name, id)
