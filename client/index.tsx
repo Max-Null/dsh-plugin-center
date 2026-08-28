@@ -1095,7 +1095,9 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
               if (id === undefined) return
               // 校验会话仍在列表(重启/删除后)再跳转,避免静默失效。
               if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== undefined) {
-                // 跳转会话并关闭设置面板,让用户直接看到会话内容(2026-08-29)。
+                // 关闭设置抽屉(官方 settings.section owner props 的 close)+
+                // 关闭插件中心浮层,再切换会话——用户直接看到会话内容。
+                settingsClose?.()
                 closeOverlay()
                 sessionsSvc?.open?.(id)
               } else {
@@ -1476,8 +1478,17 @@ function LlmPromptFallbackDialog() {
   )
 }
 
-function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' }) {
+/** 设置抽屉的关闭回调(settings.section owner props 注入;浮层 variant 无)。
+ *  供「查看会话」等"离开设置"流程调用——官方契约明确此用途。 */
+let settingsClose: (() => void) | null = null
+
+function CenterPanel({ variant = 'section', close }: { variant?: 'section' | 'overlay', close?: () => void }) {
   const t = useT()
+  // 保存设置抽屉关闭回调(供「查看会话」等离开设置流程;卸载清空)。
+  useEffect(() => {
+    settingsClose = close ?? null
+    return () => { settingsClose = null }
+  }, [close])
   const [view, setView] = useState<View>('installed')
   // 活跃 LLM 更新数:执行中且尚未收敛终态的插件(与 llmResults 互斥,
   // 防止 ended/成功残留把「执行中」态挂在 head/弹窗按钮上)。

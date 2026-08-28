@@ -1095,6 +1095,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           const id = llmSessionByPlugin.get(u.name);
           if (id === void 0) return;
           if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== void 0) {
+            settingsClose?.();
             closeOverlay();
             sessionsSvc?.open?.(id);
           } else {
@@ -1450,8 +1451,15 @@ function LlmPromptFallbackDialog() {
     document.body
   );
 }
-function CenterPanel({ variant = "section" }) {
+var settingsClose = null;
+function CenterPanel({ variant = "section", close }) {
   const t = useT();
+  (0, import_react.useEffect)(() => {
+    settingsClose = close ?? null;
+    return () => {
+      settingsClose = null;
+    };
+  }, [close]);
   const [view, setView] = (0, import_react.useState)("installed");
   const activeLlmCount = [...llmUpdating].filter((n) => !llmResults.has(n)).length;
   const [category, setCategory] = (0, import_react.useState)(null);
