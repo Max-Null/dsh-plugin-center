@@ -41,6 +41,7 @@ const CSS = `
 .pc-badge.local, .pc-badge.builtin { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-tertiary); }
 .pc-tag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 17px; white-space: nowrap; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
+.pc-tag.warn { background: var(--dsw-alias-bg-module-warning); color: var(--dsw-alias-state-warning-primary); }
 .pc-switch { position: relative; flex: none; width: 40px; height: 22px; border-radius: 11px; border: none; background: var(--dsw-alias-border-l4, rgba(0,0,0,.16)); cursor: pointer; transition: background .15s ease; padding: 0; }
 .pc-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s ease; }
 .pc-switch.on { background: var(--dsw-alias-state-business-primary, #4FC3F7); }
@@ -197,6 +198,21 @@ interface UpdateDigest {
   compatRange: string | null
 }
 
+/** LLM 更新信息包(host 采集,只读;执行由 LLM 会话完成)。 */
+interface LlmUpdatePackage {
+  name: string
+  fromVersion: string
+  toVersion: string | null
+  changelog: string[]
+  compat: 'compatible' | 'incompatible' | 'unknown'
+  compatRange: string | null
+  source: 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file'
+  specifier: string | null
+  isVendorModified: boolean
+  /** 已组装的 Agent prompt(host buildLlmPrompt 单一来源)。 */
+  prompt: string
+}
+
 type Rpc = (endpoint: string, payload?: unknown) => Promise<unknown>
 
 // ---- module-level rpc + overlay state ----
@@ -270,6 +286,91 @@ function setUpdating(name: string, on: boolean): void {
   else updatingPlugins.delete(name)
   updatingListeners.forEach(l => l())
 }
+
+// ---- LLM 更新状态 (2026-08-28,模块级:跨面板重开保留,机械更新同款模式) ----
+// 与 updatingPlugins(机械更新)分离:LLM 更新经会话执行,进行中/已发起/失败
+// 状态独立追踪,避免两个入口(更新弹窗/插件中心)按钮状态互相覆盖。
+const llmUpdating = new Set<string>()
+const llmUpdatingListeners = new Set<() => void>()
+function setLlmUpdating(name: string, on: boolean): void {
+  if (on) llmUpdating.add(name)
+  else llmUpdating.delete(name)
+  llmUpdatingListeners.forEach(l => l())
+}
+function useLlmUpdatingVersion(): number {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    llmUpdatingListeners.add(l)
+    return () => { llmUpdatingListeners.delete(l) }
+  }, [])
+  return v
+}
+/** LLM 更新确认面板:采集到信息包后弹出,用户确认才发起会话。 */
+interface LlmConfirmState {
+  /** 入口标记:单插件为插件名;'__all__' 为更新弹窗批量入口。 */
+  name: string
+  /** 采集到的信息包(批量入口为多个;失败时为 0)。 */
+  pkgs: LlmUpdatePackage[]
+  /** 致命错误(全部失败时显示,替换面板正文)。 */
+  error: string | null
+  /** 批量入口中采集失败的部分(带插件名)。 */
+  skipped: string[]
+  preparing: boolean
+}
+let llmConfirm: LlmConfirmState | null = null
+const llmConfirmListeners = new Set<() => void>()
+function setLlmConfirm(state: LlmConfirmState | null): void {
+  llmConfirm = state
+  llmConfirmListeners.forEach(l => l())
+}
+function useLlmConfirm(): LlmConfirmState | null {
+  const [state, setState] = useState(llmConfirm)
+  useEffect(() => {
+    const l = () => { setState(llmConfirm) }
+    llmConfirmListeners.add(l)
+    return () => { llmConfirmListeners.delete(l) }
+  }, [])
+  return state
+}
+/** LLM 更新会话 id(发起成功后供「查看会话」链接跳转)。 */
+let llmSessionId: string | null = null
+function setLlmSessionId(id: string | null): void { llmSessionId = id }
+
+/** 自动发起失败时的降级模态:展示 prompt 让用户粘贴到会话执行。 */
+let llmFallbackPrompt: string | null = null
+const llmFallbackListeners = new Set<() => void>()
+function setLlmFallback(prompt: string | null): void {
+  llmFallbackPrompt = prompt
+  llmFallbackListeners.forEach(l => l())
+}
+function useLlmFallback(): string | null {
+  const [p, setP] = useState(llmFallbackPrompt)
+  useEffect(() => {
+    const l = () => { setP(llmFallbackPrompt) }
+    llmFallbackListeners.add(l)
+    return () => { llmFallbackListeners.delete(l) }
+  }, [])
+  return p
+}
+
+// ---- client 半端会话/工作区服务(apply 时按 inject 注入;结构类型与
+// dsh-sidebar-preview-select/src/context-types.ts 同思路,只声明用到的字段) ----
+interface LlmSessionsSvc {
+  list?: { getSnapshot?: () => { byId?: Record<string, { id?: string, title?: string, displayTitle?: string }> } }
+  open?: (id: string) => void
+  binding?: (id: string) => { session?: {
+    prompt?: (content: Array<{ type: 'text', text: string }>, mode: 'queue' | 'steer') => Promise<{ ok: boolean, error?: { message?: string } }>
+    rename?: (title: string) => Promise<unknown>
+  } } | undefined
+}
+interface LlmWorkspacesSvc {
+  list?: { getSnapshot?: () => { recentWorkspaceId?: string, items?: Array<{ id?: string }> } }
+  connectWorkspace?: (workspaceId: string) => Promise<string>
+}
+let sessionsSvc: LlmSessionsSvc | null = null
+let workspacesSvc: LlmWorkspacesSvc | null = null
+
 // ---- pending-toggle state: a disable/enable written to the patch layer but
 // not yet applied by a restart (SSiD has no HMR). The card shows a
 // "restart pending" tag while a pending action exists; toggling back clears
@@ -432,6 +533,17 @@ const STRINGS = {
     marketLoading: '加载市场目录中…', loadMore: '正在加载更多…（已加载 {n} 个）',
     checkingUpdates: '检查更新中…', noUpdates: '没有可用的更新。', recheck: '重新检查',
     incompat: '不兼容当前 DSH', update: '更新', updating: '更新中…',
+    llmUpdate: 'LLM 更新', llmUpdating: 'LLM 决策中…', llmConfirmTitle: '确认 LLM 更新',
+    llmSourceBadge: '来源：{s}', llmVendorWarn: '本地定制!机械更新会覆盖,先核对作者是否已采纳',
+    llmConfirm: '确认并执行', llmCancel: '取消',
+    llmPromptReady: 'LLM 更新已发起：{name}。请在会话中按 dsh-plugin-upgrade skill 决策执行。',
+    llmPreparing: '采集插件信息中…', llmPreparedError: '信息包采集失败：{e}',
+    llmSessionLink: '查看会话',
+    llmUpdateAll: 'LLM 更新全部（{n}）',
+    llmConfirmBody: '以下 {n} 个插件将由 LLM Agent 按 dsh-plugin-upgrade skill 决策并执行更新。',
+    llmConfirmSkipped: '采集失败将跳过：{s}',
+    llmFallbackTitle: '将提示词粘贴到会话执行',
+    llmFallbackHint: '无法自动发起「插件更新」会话（会话/工作区服务不可用或没有可用工作区）。请复制以下提示词，在任意会话中粘贴并发送，Agent 将按 dsh-plugin-upgrade skill 决策执行。',
     install: '安装', installing: '安装中…',
     pendingRestart: '待重启生效', installedTag: '已安装',
     disabledTag: '已禁用', requiresDsh: '要求 DSH {r}',
@@ -476,6 +588,17 @@ const STRINGS = {
     marketLoading: 'Loading market catalog…', loadMore: 'Loading more… ({n} loaded)',
     checkingUpdates: 'Checking for updates…', noUpdates: 'No updates available.', recheck: 'Check again',
     incompat: 'Incompatible with current DSH', update: 'Update', updating: 'Updating…',
+    llmUpdate: 'LLM update', llmUpdating: 'LLM deciding…', llmConfirmTitle: 'Confirm LLM update',
+    llmSourceBadge: 'Source: {s}', llmVendorWarn: 'Local custom build! Mechanical update would overwrite — verify upstream adoption first',
+    llmConfirm: 'Confirm & run', llmCancel: 'Cancel',
+    llmPromptReady: 'LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.',
+    llmPreparing: 'Preparing plugin info…', llmPreparedError: 'Prepare failed: {e}',
+    llmSessionLink: 'View session',
+    llmUpdateAll: 'LLM update all（{n}）',
+    llmConfirmBody: 'LLM Agent will decide & run the update for these {n} plugin(s) per the dsh-plugin-upgrade skill.',
+    llmConfirmSkipped: 'Skipped (prepare failed): {s}',
+    llmFallbackTitle: 'Paste the prompt into a session',
+    llmFallbackHint: 'Could not auto-launch a "plugin update" session (sessions/workspaces unavailable or no workspace). Copy the prompt below and paste it into any session; the agent will decide per the dsh-plugin-upgrade skill.',
     install: 'Install', installing: 'Installing…',
     pendingRestart: 'Restart pending', installedTag: 'Installed',
     disabledTag: 'Disabled', requiresDsh: 'Requires DSH {r}',
@@ -784,6 +907,8 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   // Module-level in-flight set: keeps "Updating…" visible even when the panel
   // was remounted while a host update was still running (2026-08-22).
   useUpdatingVersion()
+  // LLM 更新 state(模块级,跨面板保留)
+  useLlmUpdatingVersion()
   if (updates === null) return <p className="pc-sub">{t('checkingUpdates')}</p>
   // 已更新（直装/pending）的卡片：磁盘已最新，checkUpdates 会清空更新列表，
   // 但用户需要保留卡片并点击触发重启（「已更新待重启」窗口期）。
@@ -806,7 +931,8 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             {pendingInstall.has(u.name) && <span className="pc-tag">{t('pendingRestart')}</span>}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
+            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) ? t('llmUpdating') : t('llmUpdate')}</button>
+            <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
@@ -963,6 +1089,180 @@ function RestartDialog({ count, onRestart, onClose }: { count: number, onRestart
             }}
             onClick={onRestart}
           >{t('restartNowBtn')}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// ---- LLM 更新编排 (2026-08-28,模块级:两个入口——插件中心 UpdatesView 与
+// 更新弹窗 WhatsNewDialog——共用同一套 prepare → 确认 → 会话发起流程) ----
+
+/** 采集单个插件的信息包并弹确认面板。 */
+function llmPrepare(name: string): void {
+  setLlmConfirm({ name, pkgs: [], error: null, skipped: [], preparing: true })
+  void rpc('llm-update.prepare', { name }).then(
+    v => setLlmConfirm({ name, pkgs: [v as LlmUpdatePackage], error: null, skipped: [], preparing: false }),
+    e => setLlmConfirm({ name, pkgs: [], error: e instanceof Error ? e.message : String(e), skipped: [], preparing: false }),
+  )
+}
+
+/** 批量采集(更新弹窗「LLM 更新全部」):串行 prepare,失败项进 skipped。 */
+function llmPrepareAll(names: string[]): void {
+  setLlmConfirm({ name: '__all__', pkgs: [], error: null, skipped: [], preparing: true })
+  void (async () => {
+    const pkgs: LlmUpdatePackage[] = []
+    const skipped: string[] = []
+    for (const n of names) {
+      try {
+        pkgs.push(await rpc('llm-update.prepare', { name: n }) as LlmUpdatePackage)
+      } catch (e) {
+        skipped.push(`${n}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    setLlmConfirm({ name: '__all__', pkgs, error: null, skipped, preparing: false })
+  })()
+}
+
+/** 寻找或创建「插件更新」会话,已打开则返回其 id;无可用工作区/服务时 null。
+ *  契约面(已核对 dsh-client-runtime):
+ *  - sessions.open(id) 只 open 已有会话,不创建;
+ *  - 创建走 workspaces.connectWorkspace(workspaceId)(复用该工作区 blank 会话);
+ *  - 注入用 ISession.prompt(content, 'queue')(binding(id).session)。 */
+async function ensureLlmUpdateSession(): Promise<string | null> {
+  // 1) 复用列表里标题含「插件更新」的会话(第一次成功后即稳定命中)。
+  const list = sessionsSvc?.list?.getSnapshot?.()
+  const rows = list?.byId === undefined ? [] : Object.values(list.byId)
+  const existing = rows.find(r => (r.displayTitle ?? '').includes('插件更新') || (r.title ?? '').includes('插件更新'))
+  if (existing?.id !== undefined) {
+    sessionsSvc?.open?.(existing.id)
+    return existing.id
+  }
+  // 2) 新建:优先 recent workspace,其次第一个 workspace。
+  const ws = workspacesSvc?.list?.getSnapshot?.()
+  const wsId = ws?.recentWorkspaceId ?? ws?.items?.[0]?.id
+  if (wsId === undefined || wsId === '') return null
+  const id = await workspacesSvc?.connectWorkspace?.(wsId)
+  if (id === undefined || id === '') return null
+  sessionsSvc?.open?.(id)
+  return id
+}
+
+/** 确认后:复用/创建「插件更新」会话并注入 prompt(LLM 按 skill 决策执行)。
+ *  自动发起失败时降级为复制 prompt 模态,不阻塞用户。 */
+async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void> {
+  const S = STRINGS[localeId]
+  setLlmConfirm(null)
+  for (const p of pkgs) setLlmUpdating(p.name, true)
+  const prompt = pkgs.length === 1
+    ? pkgs[0].prompt
+    : [
+        `请依次处理以下 ${pkgs.length} 个插件的更新(每个插件独立按 dsh-plugin-upgrade skill 决策):`,
+        '',
+        ...pkgs.flatMap((p, i) => [`===== 插件 ${i + 1}/${pkgs.length}: ${p.name} =====`, p.prompt]),
+      ].join('\n')
+  void rpc('llm-update.log', { name, action: 'prompt-sent', detail: prompt.split('\n').slice(0, 3).join(' '), status: 'running' })
+  try {
+    const id = await ensureLlmUpdateSession()
+    if (id === null) throw new Error('no-session-target')
+    const session = sessionsSvc?.binding?.(id)?.session
+    if (session?.prompt === undefined) throw new Error('no-session-face')
+    const res = await session.prompt([{ type: 'text', text: prompt }], 'queue')
+    if (res?.ok !== true) {
+      throw new Error(res?.error?.message ?? 'prompt rejected')
+    }
+    // 成功:补标题便于下次复用判断(失败忽略——空白会话仍会复用)。
+    session.rename?.('插件更新').catch(() => {})
+    setLlmSessionId(id)
+    for (const p of pkgs) setLlmUpdating(p.name, false)
+    showToast(S.llmPromptReady.replace('{name}', pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} 个插件`), 'ok', 8000)
+    if (name === '__all__') closeWhatsNew()
+  } catch (e) {
+    for (const p of pkgs) setLlmUpdating(p.name, false)
+    // 降级:提示词给用户自行粘贴(模态带复制)。
+    setLlmFallback(prompt)
+    showToast(`${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
+  }
+}
+
+/** LLM 更新确认/进度面板(共享:插件中心单插件 + 更新弹窗批量入口)。
+ *  preparing → 采集骨架;error → 失败;ok → 信息包清单 + 确认执行。 */
+function LlmConfirmDialog() {
+  const t = useT()
+  const state = useLlmConfirm()
+  if (state === null) return null
+  const skipText = state.skipped.length === 0 ? null : t('llmConfirmSkipped', { s: state.skipped.join('；') })
+  const body = state.preparing
+    ? <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)' }}>{t('llmPreparing')}</div>
+    : state.pkgs.length === 0
+      ? <div style={{ fontSize: 12, color: 'var(--dsw-alias-state-error-fill, #e5534b)', lineHeight: 1.5 }}>{t('llmPreparedError', { e: state.error ?? '(unknown)' })}</div>
+      : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '46vh', overflow: 'auto' }}>
+          <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)', lineHeight: 1.5 }}>{t('llmConfirmBody', { n: state.pkgs.length })}</div>
+          {skipText !== null && <div style={{ fontSize: 11.5, color: 'var(--dsw-alias-state-warning-fill, #d9a53f)' }}>{skipText}</div>}
+          {state.pkgs.map(p => (
+            <div key={p.name} style={{ border: '1px solid var(--dsw-alias-border-l2, #1e2836)', borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
+                <span className="pc-name">{p.name}</span>
+                <span className="pc-ver">{p.fromVersion}</span>
+                <span className="pc-ver">→</span>
+                <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{p.toVersion ?? '—'}</span>
+                <span className={`pc-tag${p.source === 'npm' || p.source === 'official' ? '' : ' warn'}`}>{t('llmSourceBadge', { s: p.source })}</span>
+                {p.isVendorModified && <span className="pc-tag warn" title={t('llmVendorWarn')}>vendor</span>}
+                {p.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
+              </div>
+              {p.changelog.length > 0 && (
+                <ul className="pc-wn-list" style={{ margin: 0 }}>
+                  {p.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )
+  const canRun = state.preparing === false && state.pkgs.length > 0
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+      <div style={{ width: 'min(560px, 92vw)', background: 'var(--dsw-alias-bg-layer-3)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary, #d8e0ea)' }}>{t('llmConfirmTitle')}</div>
+        {body}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="pc-btn" disabled={state.preparing} onClick={() => { setLlmConfirm(null) }}>{t('llmCancel')}</button>
+          <button
+            type="button"
+            style={{
+              padding: '3px 12px', fontSize: 11.5, border: 'none', borderRadius: 6, cursor: canRun ? 'pointer' : 'not-allowed', fontWeight: 600,
+              background: 'var(--dsw-alias-button-primary-fill)',
+              color: 'var(--dsw-alias-label-primary-foreground)',
+              opacity: canRun ? 1 : 0.55,
+            }}
+            disabled={!canRun}
+            onClick={() => { void llmExecute(state.pkgs, state.name) }}
+          >{t('llmConfirm')}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/** 自动发起失败降级:展示最终 prompt,用户复制后粘贴到任意会话执行。 */
+function LlmPromptFallbackDialog() {
+  const t = useT()
+  const prompt = useLlmFallback()
+  if (prompt === null) return null
+  const [copied, setCopied] = useState(false)
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+      <div style={{ width: 'min(680px, 92vw)', background: 'var(--dsw-alias-bg-layer-3)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary, #d8e0ea)' }}>{t('llmFallbackTitle')}</div>
+        <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)', lineHeight: 1.5 }}>{t('llmFallbackHint')}</div>
+        <textarea readOnly value={prompt} rows={Math.min(10, prompt.split('\n').length + 1)}
+          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--dsw-alias-bg-module-platform, rgba(128,148,168,.12))', color: 'var(--dsw-alias-label-primary, #d8e0ea)', border: '1px solid var(--dsw-alias-border-l2, #1e2836)', borderRadius: 6, padding: '8px 10px', fontSize: 12, fontFamily: 'monospace', resize: 'vertical' }} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="pc-btn" onClick={() => { void navigator.clipboard.writeText(prompt).then(() => setCopied(true)).catch(() => {}) }}>{copied ? t('commandCopied') : t('commandCopy')}</button>
+          <button type="button" className="pc-btn primary" onClick={() => { setLlmFallback(null) }}>{t('close')}</button>
         </div>
       </div>
     </div>,
@@ -1411,6 +1711,9 @@ function WhatsNewDialog() {
   const t = useT()
   const open = useWhatsNewOpen()
   const [busy, setBusy] = useState(false)
+  // LLM 更新状态：模块级（批量进行中/确认面板打开时禁掉两个按钮，防重复发起）。
+  useLlmUpdatingVersion()
+  useLlmConfirm()
   if (!open || whatsNewDigests.length === 0) return null
   // 弹窗内串行更新全部（2026-08-17 用户反馈弹窗缺更新入口；串行防 pnpm 并发）
   const updateNow = async () => {
@@ -1483,7 +1786,8 @@ function WhatsNewDialog() {
         <div className="pc-panel-footer">
           <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>
           <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
-          <button className="pc-btn primary" disabled={busy} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
+          <button className="pc-btn" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
+          <button className="pc-btn primary" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { llmPrepareAll(whatsNewDigests.map(u => u.name)) }}>{llmUpdating.size > 0 ? t('llmUpdating') : t('llmUpdateAll', { n: whatsNewDigests.length })}</button>
         </div>
       </div>
     </div>
@@ -1491,7 +1795,9 @@ function WhatsNewDialog() {
 }
 
 // ---- client plugin body ----
-const inject = ['slots', 'connection']
+// 0.2.14: 注入 sessions/workspaces —— LLM 更新需复用/创建「插件更新」会话并
+// 注入 prompt(与 dsh-sidebar-preview-select 同款硬注入,DSH 内核必供)。
+const inject = ['slots', 'connection', 'sessions', 'workspaces']
 
 // ---- 0.1.7：SSiD 标题栏统一按钮组全局控制器 ----
 // SSiD 内置插件 dsh-header-unify 监听壳派发的 `ssid:titlebar` CustomEvent，
@@ -1511,8 +1817,11 @@ function cleanupGlobals(): void {
   delete w.__pluginCenterGlobalsInstalled
 }
 
-function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void; effect?: (fn: () => (() => void) | void, name?: string) => void }): void {
+function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void; effect?: (fn: () => (() => void) | void, name?: string) => void; sessions?: LlmSessionsSvc; workspaces?: LlmWorkspacesSvc }): void {
   injectCss()
+  // LLM 更新：保存会话/工作区服务引用(模块级 llmExecute 使用)。
+  sessionsSvc = ctx.sessions ?? null
+  workspacesSvc = ctx.workspaces ?? null
   // 设置导航图标：标记本插件行后由 CSS 把默认齿轮替换为拼图（HMR-safe）。
   ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), 'dsh-plugin-center: settings navigation icon')
   // 0.1.7：暴露全局控制器（防重复安装：已安装则不重复挂监听）。
@@ -1554,6 +1863,14 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay', id: 'plugin-center-toast', order: 52,
   }, Toast))
+
+  // LLM 更新确认/降级面板(独立插槽:插件中心与更新弹窗两个入口共用)。
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'plugin-center-llm-confirm', order: 53,
+  }, LlmConfirmDialog))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'plugin-center-llm-fallback', order: 54,
+  }, LlmPromptFallbackDialog))
 
   void checkWhatNew()
 }

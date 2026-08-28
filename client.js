@@ -63,6 +63,7 @@ var CSS = `
 .pc-badge.local, .pc-badge.builtin { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-tertiary); }
 .pc-tag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 17px; white-space: nowrap; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
 .pc-tag.danger { background: var(--dsw-alias-interactive-bg-hover-danger); color: var(--dsw-alias-state-error-primary); }
+.pc-tag.warn { background: var(--dsw-alias-bg-module-warning); color: var(--dsw-alias-state-warning-primary); }
 .pc-switch { position: relative; flex: none; width: 40px; height: 22px; border-radius: 11px; border: none; background: var(--dsw-alias-border-l4, rgba(0,0,0,.16)); cursor: pointer; transition: background .15s ease; padding: 0; }
 .pc-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s ease; }
 .pc-switch.on { background: var(--dsw-alias-state-business-primary, #4FC3F7); }
@@ -241,6 +242,70 @@ function setUpdating(name, on) {
   else updatingPlugins.delete(name);
   updatingListeners.forEach((l) => l());
 }
+var llmUpdating = /* @__PURE__ */ new Set();
+var llmUpdatingListeners = /* @__PURE__ */ new Set();
+function setLlmUpdating(name, on) {
+  if (on) llmUpdating.add(name);
+  else llmUpdating.delete(name);
+  llmUpdatingListeners.forEach((l) => l());
+}
+function useLlmUpdatingVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    llmUpdatingListeners.add(l);
+    return () => {
+      llmUpdatingListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+var llmConfirm = null;
+var llmConfirmListeners = /* @__PURE__ */ new Set();
+function setLlmConfirm(state) {
+  llmConfirm = state;
+  llmConfirmListeners.forEach((l) => l());
+}
+function useLlmConfirm() {
+  const [state, setState] = (0, import_react.useState)(llmConfirm);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setState(llmConfirm);
+    };
+    llmConfirmListeners.add(l);
+    return () => {
+      llmConfirmListeners.delete(l);
+    };
+  }, []);
+  return state;
+}
+var llmSessionId = null;
+function setLlmSessionId(id) {
+  llmSessionId = id;
+}
+var llmFallbackPrompt = null;
+var llmFallbackListeners = /* @__PURE__ */ new Set();
+function setLlmFallback(prompt) {
+  llmFallbackPrompt = prompt;
+  llmFallbackListeners.forEach((l) => l());
+}
+function useLlmFallback() {
+  const [p, setP] = (0, import_react.useState)(llmFallbackPrompt);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setP(llmFallbackPrompt);
+    };
+    llmFallbackListeners.add(l);
+    return () => {
+      llmFallbackListeners.delete(l);
+    };
+  }, []);
+  return p;
+}
+var sessionsSvc = null;
+var workspacesSvc = null;
 var pendingToggles = /* @__PURE__ */ new Map();
 var pendingListeners = /* @__PURE__ */ new Set();
 function setPendingToggle(id, action) {
@@ -407,6 +472,22 @@ var STRINGS = {
     incompat: "\u4E0D\u517C\u5BB9\u5F53\u524D DSH",
     update: "\u66F4\u65B0",
     updating: "\u66F4\u65B0\u4E2D\u2026",
+    llmUpdate: "LLM \u66F4\u65B0",
+    llmUpdating: "LLM \u51B3\u7B56\u4E2D\u2026",
+    llmConfirmTitle: "\u786E\u8BA4 LLM \u66F4\u65B0",
+    llmSourceBadge: "\u6765\u6E90\uFF1A{s}",
+    llmVendorWarn: "\u672C\u5730\u5B9A\u5236!\u673A\u68B0\u66F4\u65B0\u4F1A\u8986\u76D6,\u5148\u6838\u5BF9\u4F5C\u8005\u662F\u5426\u5DF2\u91C7\u7EB3",
+    llmConfirm: "\u786E\u8BA4\u5E76\u6267\u884C",
+    llmCancel: "\u53D6\u6D88",
+    llmPromptReady: "LLM \u66F4\u65B0\u5DF2\u53D1\u8D77\uFF1A{name}\u3002\u8BF7\u5728\u4F1A\u8BDD\u4E2D\u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u6267\u884C\u3002",
+    llmPreparing: "\u91C7\u96C6\u63D2\u4EF6\u4FE1\u606F\u4E2D\u2026",
+    llmPreparedError: "\u4FE1\u606F\u5305\u91C7\u96C6\u5931\u8D25\uFF1A{e}",
+    llmSessionLink: "\u67E5\u770B\u4F1A\u8BDD",
+    llmUpdateAll: "LLM \u66F4\u65B0\u5168\u90E8\uFF08{n}\uFF09",
+    llmConfirmBody: "\u4EE5\u4E0B {n} \u4E2A\u63D2\u4EF6\u5C06\u7531 LLM Agent \u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u5E76\u6267\u884C\u66F4\u65B0\u3002",
+    llmConfirmSkipped: "\u91C7\u96C6\u5931\u8D25\u5C06\u8DF3\u8FC7\uFF1A{s}",
+    llmFallbackTitle: "\u5C06\u63D0\u793A\u8BCD\u7C98\u8D34\u5230\u4F1A\u8BDD\u6267\u884C",
+    llmFallbackHint: "\u65E0\u6CD5\u81EA\u52A8\u53D1\u8D77\u300C\u63D2\u4EF6\u66F4\u65B0\u300D\u4F1A\u8BDD\uFF08\u4F1A\u8BDD/\u5DE5\u4F5C\u533A\u670D\u52A1\u4E0D\u53EF\u7528\u6216\u6CA1\u6709\u53EF\u7528\u5DE5\u4F5C\u533A\uFF09\u3002\u8BF7\u590D\u5236\u4EE5\u4E0B\u63D0\u793A\u8BCD\uFF0C\u5728\u4EFB\u610F\u4F1A\u8BDD\u4E2D\u7C98\u8D34\u5E76\u53D1\u9001\uFF0CAgent \u5C06\u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u6267\u884C\u3002",
     install: "\u5B89\u88C5",
     installing: "\u5B89\u88C5\u4E2D\u2026",
     pendingRestart: "\u5F85\u91CD\u542F\u751F\u6548",
@@ -494,6 +575,22 @@ var STRINGS = {
     incompat: "Incompatible with current DSH",
     update: "Update",
     updating: "Updating\u2026",
+    llmUpdate: "LLM update",
+    llmUpdating: "LLM deciding\u2026",
+    llmConfirmTitle: "Confirm LLM update",
+    llmSourceBadge: "Source: {s}",
+    llmVendorWarn: "Local custom build! Mechanical update would overwrite \u2014 verify upstream adoption first",
+    llmConfirm: "Confirm & run",
+    llmCancel: "Cancel",
+    llmPromptReady: "LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.",
+    llmPreparing: "Preparing plugin info\u2026",
+    llmPreparedError: "Prepare failed: {e}",
+    llmSessionLink: "View session",
+    llmUpdateAll: "LLM update all\uFF08{n}\uFF09",
+    llmConfirmBody: "LLM Agent will decide & run the update for these {n} plugin(s) per the dsh-plugin-upgrade skill.",
+    llmConfirmSkipped: "Skipped (prepare failed): {s}",
+    llmFallbackTitle: "Paste the prompt into a session",
+    llmFallbackHint: 'Could not auto-launch a "plugin update" session (sessions/workspaces unavailable or no workspace). Copy the prompt below and paste it into any session; the agent will decide per the dsh-plugin-upgrade skill.',
     install: "Install",
     installing: "Installing\u2026",
     pendingRestart: "Restart pending",
@@ -820,6 +917,7 @@ function MarketView({ category, single, source, search, onCount }) {
 function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneClick }) {
   const t = useT();
   useUpdatingVersion();
+  useLlmUpdatingVersion();
   if (updates === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("checkingUpdates") });
   const doneOnly = doneUpdates.filter((d) => !(updates ?? []).some((u) => u.name === d.name));
   if (updates.length === 0 && doneOnly.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -836,7 +934,10 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
         pendingInstall.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("pendingRestart") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name), onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name), onClick: () => {
+          llmPrepare(u.name);
+        }, children: llmUpdating.has(u.name) ? t("llmUpdating") : t("llmUpdate") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name), onClick: () => {
           updateOne(u.name, u.toVersion);
         }, children: busy === u.name || busy === "__all__" || updatingPlugins.has(u.name) ? t("updating") : t("update") })
       ] }),
@@ -999,6 +1100,163 @@ function RestartDialog({ count, onRestart, onClose }) {
             children: t("restartNowBtn")
           }
         )
+      ] })
+    ] }) }),
+    document.body
+  );
+}
+function llmPrepare(name) {
+  setLlmConfirm({ name, pkgs: [], error: null, skipped: [], preparing: true });
+  void rpc("llm-update.prepare", { name }).then(
+    (v) => setLlmConfirm({ name, pkgs: [v], error: null, skipped: [], preparing: false }),
+    (e) => setLlmConfirm({ name, pkgs: [], error: e instanceof Error ? e.message : String(e), skipped: [], preparing: false })
+  );
+}
+function llmPrepareAll(names) {
+  setLlmConfirm({ name: "__all__", pkgs: [], error: null, skipped: [], preparing: true });
+  void (async () => {
+    const pkgs = [];
+    const skipped = [];
+    for (const n of names) {
+      try {
+        pkgs.push(await rpc("llm-update.prepare", { name: n }));
+      } catch (e) {
+        skipped.push(`${n}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    setLlmConfirm({ name: "__all__", pkgs, error: null, skipped, preparing: false });
+  })();
+}
+async function ensureLlmUpdateSession() {
+  const list = sessionsSvc?.list?.getSnapshot?.();
+  const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
+  const existing = rows.find((r) => (r.displayTitle ?? "").includes("\u63D2\u4EF6\u66F4\u65B0") || (r.title ?? "").includes("\u63D2\u4EF6\u66F4\u65B0"));
+  if (existing?.id !== void 0) {
+    sessionsSvc?.open?.(existing.id);
+    return existing.id;
+  }
+  const ws = workspacesSvc?.list?.getSnapshot?.();
+  const wsId = ws?.recentWorkspaceId ?? ws?.items?.[0]?.id;
+  if (wsId === void 0 || wsId === "") return null;
+  const id = await workspacesSvc?.connectWorkspace?.(wsId);
+  if (id === void 0 || id === "") return null;
+  sessionsSvc?.open?.(id);
+  return id;
+}
+async function llmExecute(pkgs, name) {
+  const S = STRINGS[localeId];
+  setLlmConfirm(null);
+  for (const p of pkgs) setLlmUpdating(p.name, true);
+  const prompt = pkgs.length === 1 ? pkgs[0].prompt : [
+    `\u8BF7\u4F9D\u6B21\u5904\u7406\u4EE5\u4E0B ${pkgs.length} \u4E2A\u63D2\u4EF6\u7684\u66F4\u65B0(\u6BCF\u4E2A\u63D2\u4EF6\u72EC\u7ACB\u6309 dsh-plugin-upgrade skill \u51B3\u7B56):`,
+    "",
+    ...pkgs.flatMap((p, i) => [`===== \u63D2\u4EF6 ${i + 1}/${pkgs.length}: ${p.name} =====`, p.prompt])
+  ].join("\n");
+  void rpc("llm-update.log", { name, action: "prompt-sent", detail: prompt.split("\n").slice(0, 3).join(" "), status: "running" });
+  try {
+    const id = await ensureLlmUpdateSession();
+    if (id === null) throw new Error("no-session-target");
+    const session = sessionsSvc?.binding?.(id)?.session;
+    if (session?.prompt === void 0) throw new Error("no-session-face");
+    const res = await session.prompt([{ type: "text", text: prompt }], "queue");
+    if (res?.ok !== true) {
+      throw new Error(res?.error?.message ?? "prompt rejected");
+    }
+    session.rename?.("\u63D2\u4EF6\u66F4\u65B0").catch(() => {
+    });
+    setLlmSessionId(id);
+    for (const p of pkgs) setLlmUpdating(p.name, false);
+    showToast(S.llmPromptReady.replace("{name}", pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} \u4E2A\u63D2\u4EF6`), "ok", 8e3);
+    if (name === "__all__") closeWhatsNew();
+  } catch (e) {
+    for (const p of pkgs) setLlmUpdating(p.name, false);
+    setLlmFallback(prompt);
+    showToast(`${e instanceof Error ? e.message : String(e)}`, "error", 6e3);
+  }
+}
+function LlmConfirmDialog() {
+  const t = useT();
+  const state = useLlmConfirm();
+  if (state === null) return null;
+  const skipText = state.skipped.length === 0 ? null : t("llmConfirmSkipped", { s: state.skipped.join("\uFF1B") });
+  const body = state.preparing ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)" }, children: t("llmPreparing") }) : state.pkgs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-state-error-fill, #e5534b)", lineHeight: 1.5 }, children: t("llmPreparedError", { e: state.error ?? "(unknown)" }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, maxHeight: "46vh", overflow: "auto" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)", lineHeight: 1.5 }, children: t("llmConfirmBody", { n: state.pkgs.length }) }),
+    skipText !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: "var(--dsw-alias-state-warning-fill, #d9a53f)" }, children: skipText }),
+    state.pkgs.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: p.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: p.fromVersion }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: p.toVersion ?? "\u2014" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-tag${p.source === "npm" || p.source === "official" ? "" : " warn"}`, children: t("llmSourceBadge", { s: p.source }) }),
+        p.isVendorModified && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", title: t("llmVendorWarn"), children: "vendor" }),
+        p.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") })
+      ] }),
+      p.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", style: { margin: 0 }, children: p.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
+    ] }, p.name))
+  ] });
+  const canRun = state.preparing === false && state.pkgs.length > 0;
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "min(560px, 92vw)", background: "var(--dsw-alias-bg-layer-3)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--dsw-alias-label-primary, #d8e0ea)" }, children: t("llmConfirmTitle") }),
+      body,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", disabled: state.preparing, onClick: () => {
+          setLlmConfirm(null);
+        }, children: t("llmCancel") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            style: {
+              padding: "3px 12px",
+              fontSize: 11.5,
+              border: "none",
+              borderRadius: 6,
+              cursor: canRun ? "pointer" : "not-allowed",
+              fontWeight: 600,
+              background: "var(--dsw-alias-button-primary-fill)",
+              color: "var(--dsw-alias-label-primary-foreground)",
+              opacity: canRun ? 1 : 0.55
+            },
+            disabled: !canRun,
+            onClick: () => {
+              void llmExecute(state.pkgs, state.name);
+            },
+            children: t("llmConfirm")
+          }
+        )
+      ] })
+    ] }) }),
+    document.body
+  );
+}
+function LlmPromptFallbackDialog() {
+  const t = useT();
+  const prompt = useLlmFallback();
+  if (prompt === null) return null;
+  const [copied, setCopied] = (0, import_react.useState)(false);
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "min(680px, 92vw)", background: "var(--dsw-alias-bg-layer-3)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--dsw-alias-label-primary, #d8e0ea)" }, children: t("llmFallbackTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)", lineHeight: 1.5 }, children: t("llmFallbackHint") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          readOnly: true,
+          value: prompt,
+          rows: Math.min(10, prompt.split("\n").length + 1),
+          style: { width: "100%", boxSizing: "border-box", background: "var(--dsw-alias-bg-module-platform, rgba(128,148,168,.12))", color: "var(--dsw-alias-label-primary, #d8e0ea)", border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 6, padding: "8px 10px", fontSize: 12, fontFamily: "monospace", resize: "vertical" }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", onClick: () => {
+          void navigator.clipboard.writeText(prompt).then(() => setCopied(true)).catch(() => {
+          });
+        }, children: copied ? t("commandCopied") : t("commandCopy") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn primary", onClick: () => {
+          setLlmFallback(null);
+        }, children: t("close") })
       ] })
     ] }) }),
     document.body
@@ -1422,6 +1680,8 @@ function WhatsNewDialog() {
   const t = useT();
   const open = useWhatsNewOpen();
   const [busy, setBusy] = (0, import_react.useState)(false);
+  useLlmUpdatingVersion();
+  useLlmConfirm();
   if (!open || whatsNewDigests.length === 0) return null;
   const updateNow = async () => {
     setBusy(true);
@@ -1477,13 +1737,16 @@ function WhatsNewDialog() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("later") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("markAllRead") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy, onClick: () => {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: busy || llmUpdating.size > 0 || llmConfirm !== null, onClick: () => {
         void updateNow();
-      }, children: busy ? t("updating") : t("updateNow") })
+      }, children: busy ? t("updating") : t("updateNow") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy || llmUpdating.size > 0 || llmConfirm !== null, onClick: () => {
+        llmPrepareAll(whatsNewDigests.map((u) => u.name));
+      }, children: llmUpdating.size > 0 ? t("llmUpdating") : t("llmUpdateAll", { n: whatsNewDigests.length }) })
     ] })
   ] }) });
 }
-var inject = ["slots", "connection"];
+var inject = ["slots", "connection", "sessions", "workspaces"];
 var GLOBAL_KEYS = ["__pluginCenterOpen", "__pluginCenterToggle", "__pluginCenterClose"];
 function installGlobals() {
   const w = window;
@@ -1499,6 +1762,8 @@ function cleanupGlobals() {
 }
 function apply(ctx) {
   injectCss();
+  sessionsSvc = ctx.sessions ?? null;
+  workspacesSvc = ctx.workspaces ?? null;
   ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), "dsh-plugin-center: settings navigation icon");
   if (window.__pluginCenterGlobalsInstalled !== true) {
     installGlobals();
@@ -1541,6 +1806,16 @@ function apply(ctx) {
     id: "plugin-center-toast",
     order: 52
   }, Toast));
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "plugin-center-llm-confirm",
+    order: 53
+  }, LlmConfirmDialog));
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "plugin-center-llm-fallback",
+    order: 54
+  }, LlmPromptFallbackDialog));
   void checkWhatNew();
 }
     return module.exports;

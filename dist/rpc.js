@@ -54,6 +54,30 @@ export class PluginCenterRpc extends Service {
                             },
                         };
                     }
+                    case 'llm-update.prepare': {
+                        // LLM 驱动更新信息包(只读采集):来源/版本/兼容/变更,供确认面板与
+                        // 会话 prompt。执行由 LLM Agent 在插件更新会话中按 skill 决策完成。
+                        const name = payload?.name;
+                        if (typeof name !== 'string' || name === '')
+                            return internal('llm-update.prepare: name is required');
+                        const pkg = await ctx.pluginCenter.llmUpdatePrepare(name);
+                        if (pkg === null)
+                            return internal('llm-update.prepare: 插件不存在或版本未知');
+                        return { ok: true, value: pkg };
+                    }
+                    case 'llm-update.log': {
+                        // 追加一条 LLM 更新动作日志(host JSONL,client 轮询结果展示)。
+                        const p = payload;
+                        if (typeof p?.name !== 'string' || typeof p.status !== 'string')
+                            return internal('llm-update.log: bad payload');
+                        await ctx.pluginCenter.appendLlmUpdateLog({
+                            name: p.name,
+                            action: typeof p.action === 'string' ? p.action : '',
+                            detail: typeof p.detail === 'string' ? p.detail : '',
+                            status: p.status,
+                        });
+                        return { ok: true, value: null };
+                    }
                     case 'toggle': {
                         const payload2 = payload;
                         const id = payload2?.id;

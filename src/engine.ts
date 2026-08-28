@@ -9,14 +9,18 @@ import { Service, type Context, type FiberState } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { buildInstalledPlugin, clearPackageCache, resolvePackage, type InstalledPlugin, type PluginSource } from './meta.ts'
 import {
   fetchAwesomePluginsJson, fetchDshMarketPlugins, fetchOhMyDshOverrides, fetchOhMyDshPlugins,
   mapConcurrent, mergePlugins, type MarketPlugin,
 } from './market.ts'
-import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, type PnpmResult, type UpdateDigest } from './update.ts'
+import {
+  detectUpdate, installPlugin, preparePluginUpdate, updatePlugin,
+  buildLlmPackage, type LlmUpdatePackage, type PnpmResult, type UpdateDigest,
+} from './update.ts'
 import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
 import { readDisabledState, setDisabled, escapeRegExp } from './toggle.ts'
 
@@ -414,6 +418,30 @@ export class PluginCenterEngine extends Service {
     }
     const profileName = basename(this.baseUrl) || 'web'
     return { ok: true, detail: '', durationMs: direct.durationMs, command: `dsh plugin --profile ${profileName} add ${name}@${version}` }
+  }
+
+  /** LLM 驱动更新准备：采集信息包供确认面板/会话 prompt 使用（2026-08-28）。
+   *  只读采集（npm/GitHub/本地 package.json），不执行任何安装——执行由 LLM
+   *  Agent 在「插件更新」会话中按 skill 决策后完成。 */
+  async llmUpdatePrepare(name: string): Promise<LlmUpdatePackage | null> {
+    // 从已安装列表找该插件的元数据（版本/repo/兼容范围）
+    const installed = await this.listInstalled()
+    const p = installed.find(i => i.name === name)
+    if (p === undefined || p.version === null) return null
+    const localDsh = await this.dshVersion()
+    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+    // detectUpdate 同款采集参数,复用 buildLlmPackage
+    return buildLlmPackage(p.name, p.version, p.repoUrl, p.compatRange, localDsh, since, this.baseUrl)
+  }
+
+  /** 追加一条 LLM 更新动作日志(JSONL,供 client 轮询结果展示)。 */
+  async appendLlmUpdateLog(entry: { name: string; action: string; detail: string; status: 'pending' | 'running' | 'success' | 'failed' }): Promise<void> {
+    try {
+      const file = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'plugin-center', 'llm-update-log.jsonl')
+      await mkdir(dirname(file), { recursive: true })
+      const line = JSON.stringify({ at: Date.now(), ...entry }) + '\n'
+      await appendFile(file, line, 'utf8')
+    } catch { /* 日志失败绝不影响主流程 */ }
   }
 
   /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */

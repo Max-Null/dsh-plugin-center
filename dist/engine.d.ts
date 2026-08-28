@@ -8,7 +8,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis';
 import { type InstalledPlugin } from './meta.ts';
 import { type MarketPlugin } from './market.ts';
-import { type PnpmResult, type UpdateDigest } from './update.ts';
+import { type LlmUpdatePackage, type PnpmResult, type UpdateDigest } from './update.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         /** The plugin-center engine (provided by this package's host half). */
@@ -110,6 +110,17 @@ export declare class PluginCenterEngine extends Service {
      *     - 官方 dsh web（无消费方）→ 仿社区市场返回可复制 CLI 指令；
      *  3. 非锁失败（网络/版本）→ 原样报错。 */
     update(name: string, version: string): Promise<PnpmResult>;
+    /** LLM 驱动更新准备：采集信息包供确认面板/会话 prompt 使用（2026-08-28）。
+     *  只读采集（npm/GitHub/本地 package.json），不执行任何安装——执行由 LLM
+     *  Agent 在「插件更新」会话中按 skill 决策后完成。 */
+    llmUpdatePrepare(name: string): Promise<LlmUpdatePackage | null>;
+    /** 追加一条 LLM 更新动作日志(JSONL,供 client 轮询结果展示)。 */
+    appendLlmUpdateLog(entry: {
+        name: string;
+        action: string;
+        detail: string;
+        status: 'pending' | 'running' | 'success' | 'failed';
+    }): Promise<void>;
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     private enqueuePnpm;
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */

@@ -122,3 +122,36 @@ export declare function hostFilesChanged(before: FileIdentity[], after: FileIden
  * `minimumReleaseAgeExclude` itself (2026-08-18, reproduced in-process).
  */
 export declare function updatePlugin(packageName: string, version: string, profileDir: string): Promise<PnpmResult>;
+/** 插件来源判定：依据依赖声明形态 + profile 目录（复用前置设计 §4.2 算法）。
+ *  vendor 定制是 SSiD 生态核心（open-sea-skin/genui/panels 均本地魔改），
+ *  机械更新会把 file: 覆盖回 npm —— 来源标记给 LLM 决策「保持 vendor」。 */
+export type PluginSource = 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file';
+export declare function sourceOf(specifier: string, profileDir: string): PluginSource;
+/** 读 profile dependencies 里该插件的声明形态（npm 纯净 / file: vendor / link: 等）。 */
+export declare function dependencySpecifierOf(profileDir: string, name: string): string | null;
+/** LLM 更新信息包:在 UpdateDigest 基础上补充来源/定制标记,驱动 Agent 决策。 */
+export interface LlmUpdatePackage {
+    name: string;
+    /** 当前本地版本(实体 package.json)。 */
+    fromVersion: string;
+    /** npm latest(可 null=未发布/不可达,LLM 走 GitHub commit 路径)。 */
+    toVersion: string | null;
+    /** GitHub commit changelog(更新前后差异,截前 10 条)。 */
+    changelog: string[];
+    /** DSH 兼容性(peer 检查)。 */
+    compat: 'compatible' | 'incompatible' | 'unknown';
+    /** peer 声明的 DSH 版本范围。 */
+    compatRange: string | null;
+    /** 来源判定。 */
+    source: PluginSource;
+    /** 依赖声明形态(file:/github:等等),机械更新可能覆盖定制的线索。 */
+    specifier: string | null;
+    /** 是否本地定制(vendor/tarball/local-file)。 */
+    isVendorModified: boolean;
+    /** 已组装的 Agent prompt(host 单一来源,client 直接注入会话)。 */
+    prompt: string;
+}
+/** 采集一个插件用于 LLM 更新的完整信息包。 */
+export declare function buildLlmPackage(name: string, localVersion: string, repoUrl: string | null, compatRange: string | null, localDshVersion: string, sinceIso: string, profileDir: string): Promise<LlmUpdatePackage>;
+/** 组装发给 LLM 会话的 prompt(角色设定 + 信息包 + 规则引用)。 */
+export declare function buildLlmPrompt(pkg: LlmUpdatePackage): string;

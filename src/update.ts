@@ -505,3 +505,117 @@ export async function updatePlugin(packageName: string, version: string, profile
   }
   return result
 }
+
+// ── LLM 驱动更新（2026-08-28）─────────────────────────────────────────
+// 机械更新的黑盒痛点：`^0.3.36` 被 pnpm 浮动解析到 0.4.x（实测 ds-harness-remote、
+// dsh-better-sidebar、dsh-sidebar-qa 均中招，后者缺依赖致思灵内核 DSH 启动失败）、
+// vendor 魔改插件会被覆盖回官方版。LLM 更新 = 信息包采集 → 发起会话 → Agent 按
+// skill 决策执行。本文件扩展来源判定与信息包结构。
+
+/** 插件来源判定：依据依赖声明形态 + profile 目录（复用前置设计 §4.2 算法）。
+ *  vendor 定制是 SSiD 生态核心（open-sea-skin/genui/panels 均本地魔改），
+ *  机械更新会把 file: 覆盖回 npm —— 来源标记给 LLM 决策「保持 vendor」。 */
+export type PluginSource = 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file'
+
+export function sourceOf(specifier: string, profileDir: string): PluginSource {
+  if (specifier.startsWith('@deepseek-ai/dsh-')) return 'official'
+  if (specifier.startsWith('file:./vendor/')) return 'vendor'
+  if (specifier.startsWith('file:./vendor/') && specifier.endsWith('.tgz')) return 'tarball'
+  if (specifier.startsWith('file:') || specifier.startsWith('link:')) return 'local-file'
+  if (specifier.startsWith('github:') || specifier.startsWith('git+')) return 'tarball'
+  // ^x.y.z / x.y.z / ~x.y.z → npm 源
+  return 'npm'
+}
+
+/** 读 profile dependencies 里该插件的声明形态（npm 纯净 / file: vendor / link: 等）。 */
+export function dependencySpecifierOf(profileDir: string, name: string): string | null {
+  try {
+    const pkg = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+    return pkg.dependencies?.[name] ?? null
+  } catch {
+    return null
+  }
+}
+
+/** LLM 更新信息包:在 UpdateDigest 基础上补充来源/定制标记,驱动 Agent 决策。 */
+export interface LlmUpdatePackage {
+  name: string
+  /** 当前本地版本(实体 package.json)。 */
+  fromVersion: string
+  /** npm latest(可 null=未发布/不可达,LLM 走 GitHub commit 路径)。 */
+  toVersion: string | null
+  /** GitHub commit changelog(更新前后差异,截前 10 条)。 */
+  changelog: string[]
+  /** DSH 兼容性(peer 检查)。 */
+  compat: 'compatible' | 'incompatible' | 'unknown'
+  /** peer 声明的 DSH 版本范围。 */
+  compatRange: string | null
+  /** 来源判定。 */
+  source: PluginSource
+  /** 依赖声明形态(file:/github:等等),机械更新可能覆盖定制的线索。 */
+  specifier: string | null
+  /** 是否本地定制(vendor/tarball/local-file)。 */
+  isVendorModified: boolean
+  /** 已组装的 Agent prompt(host 单一来源,client 直接注入会话)。 */
+  prompt: string
+}
+
+/** 采集一个插件用于 LLM 更新的完整信息包。 */
+export async function buildLlmPackage(
+  name: string,
+  localVersion: string,
+  repoUrl: string | null,
+  compatRange: string | null,
+  localDshVersion: string,
+  sinceIso: string,
+  profileDir: string,
+): Promise<LlmUpdatePackage> {
+  const latest = await npmLatest(name)
+  const specifier = dependencySpecifierOf(profileDir, name)
+  const source = specifier === null ? 'npm' : sourceOf(specifier, profileDir)
+  const isVendorModified = source === 'vendor' || source === 'tarball' || source === 'local-file'
+  let compat: LlmUpdatePackage['compat'] = 'unknown'
+  if (compatRange !== null) {
+    compat = satisfies(localDshVersion, compatRange) ? 'compatible' : 'incompatible'
+  }
+  const pkg = {
+    name,
+    fromVersion: localVersion,
+    toVersion: latest,
+    // 变更取 commit changelog(与 detectUpdate 一致,社区 repo 常无 release notes)
+    changelog: (await fetchCommitChangelog(repoUrl, sinceIso)).slice(0, 10),
+    compat,
+    compatRange,
+    source,
+    specifier,
+    isVendorModified,
+    prompt: '',
+  }
+  return { ...pkg, prompt: buildLlmPrompt(pkg) }
+}
+
+/** 组装发给 LLM 会话的 prompt(角色设定 + 信息包 + 规则引用)。 */
+export function buildLlmPrompt(pkg: LlmUpdatePackage): string {
+  const srcBadge = pkg.source.toUpperCase()
+  return [
+    '你是 dsh 插件更新决策 Agent。请严格按「dsh-plugin-upgrade」skill 的规则决策并执行本插件更新。',
+    '',
+    `插件: ${pkg.name}`,
+    `当前版本: ${pkg.fromVersion}`,
+    `npm 最新: ${pkg.toVersion ?? '(未发布或不可达)'}`,
+    `来源: ${srcBadge}${pkg.isVendorModified ? '(本地定制!机械更新会覆盖,需核对作者是否已采纳)' : ''}`,
+    `依赖声明: ${pkg.specifier ?? '(非 npm 依赖)'}`,
+    `DSH 兼容: ${pkg.compat} (要求 ${pkg.compatRange ?? '未知'})`,
+    `变更: ${pkg.changelog.join('; ') || '(无 changelog,查 GitHub release/tag)'}`,
+    '',
+    '规则要点(详见 skill): ',
+    '1. 本地超前于 npm → 保持本地,不升级(vendor 魔改第一优先)。',
+    '2. vendor/定制 → 下载 npm 版对比是否已被作者采纳;采纳后切 npm 版,未采纳保持 vendor。',
+    '3. peer 缺失/不兼容 → 检查依赖树,先修复或回退,禁止让 DSH 启动失败。',
+    '4. Windows EPERM 锁 → 走两段式(pending 预下载)或 CLI 指令。',
+    '5. pnpm exit 0 假执行 → 校验实体版本,不符则重试或给手动命令。',
+    '6. SSiD 预置插件升级 → 注意同步归档(profile-template/vendor)。',
+    '',
+    '完成后回传: 决策(action) + 执行摘要(detail) + 状态(upgrade/keep/switch-npm/failed)。',
+  ].join('\n')
+}
