@@ -65,7 +65,7 @@ const CSS = `
 .pc-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pc-chip.active { background: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); color: var(--dsw-alias-bg-layer-3); }
 
-.pc-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.5; cursor: pointer; font-family: inherit; }
+.pc-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.5; cursor: pointer; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
 .pc-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pc-btn.primary { border: none; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
 .pc-btn.primary:hover { background: var(--dsw-alias-button-primary-hover); }
@@ -1087,7 +1087,9 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             {pendingInstall.has(u.name) && <span className="pc-tag">{t('pendingRestart')}</span>}
-            {/* 终态优先:LLM 结果存在时不再显示「执行中」tag(互斥,2026-08-29)。 */}
+            {/* 终态优先:LLM 结果存在时不再显示「执行中」tag(互斥,2026-08-29)。
+                执行中状态只由 tag 表达,按钮固定「LLM 更新」文案(禁用),
+                避免与 tag 重复 + 长文案挤行。 */}
             {llmUpdating.has(u.name) && llmResults.get(u.name) === undefined && <span className="pc-tag">{t('llmBusy')}</span>}
             {llmResults.get(u.name) !== undefined && (() => {
               const r = llmResults.get(u.name)!
@@ -1109,7 +1111,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
                 showToast(STRINGS[localeId].llmSessionMissing, 'error', 5000)
               }
             }}>{t('llmSessionLink')}</button>}
-            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || (llmUpdating.has(u.name) && llmResults.get(u.name) === undefined)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) && llmResults.get(u.name) === undefined ? t('llmBusy') : t('llmUpdate')}</button>
+            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || (llmUpdating.has(u.name) && llmResults.get(u.name) === undefined)} onClick={() => { llmPrepare(u.name) }}>{t('llmUpdate')}</button>
             {/* 机械更新按钮:先注释,只保留 LLM 驱动入口(2026-08-29 用户确认方向)。
                 updateOne 保留未删,后续需要恢复时取消注释即可。 */}
             {/* <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button> */}

@@ -114,7 +114,7 @@ var CSS = `
 .pc-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pc-chip.active { background: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); color: var(--dsw-alias-bg-layer-3); }
 
-.pc-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.5; cursor: pointer; font-family: inherit; }
+.pc-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.5; cursor: pointer; font-family: inherit; flex-shrink: 0; white-space: nowrap; }
 .pc-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pc-btn.primary { border: none; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
 .pc-btn.primary:hover { background: var(--dsw-alias-button-primary-hover); }
@@ -1107,7 +1107,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         }, children: t("llmSessionLink") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name) && llmResults.get(u.name) === void 0, onClick: () => {
           llmPrepare(u.name);
-        }, children: llmUpdating.has(u.name) && llmResults.get(u.name) === void 0 ? t("llmBusy") : t("llmUpdate") })
+        }, children: t("llmUpdate") })
       ] }),
       u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
     ] }, u.name)),
