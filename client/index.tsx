@@ -1193,10 +1193,14 @@ function LlmConfirmDialog() {
   const state = useLlmConfirm()
   if (state === null) return null
   const skipText = state.skipped.length === 0 ? null : t('llmConfirmSkipped', { s: state.skipped.join('；') })
+  // 全失败时优先显示真实错误(skipped 携带 RPC 原始消息,避免 (unknown) 吞细节)。
+  const failText = state.error !== null && state.error !== ''
+    ? state.error
+    : (state.skipped.length > 0 ? state.skipped.join('；') : '(unknown)')
   const body = state.preparing
     ? <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)' }}>{t('llmPreparing')}</div>
     : state.pkgs.length === 0
-      ? <div style={{ fontSize: 12, color: 'var(--dsw-alias-state-error-fill, #e5534b)', lineHeight: 1.5 }}>{t('llmPreparedError', { e: state.error ?? '(unknown)' })}</div>
+      ? <div style={{ fontSize: 12, color: 'var(--dsw-alias-state-error-fill, #e5534b)', lineHeight: 1.5 }}>{t('llmPreparedError', { e: failText })}</div>
       : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '46vh', overflow: 'auto' }}>
           <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #67748a)', lineHeight: 1.5 }}>{t('llmConfirmBody', { n: state.pkgs.length })}</div>
