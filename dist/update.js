@@ -3,12 +3,63 @@
  * npm registry is the primary version source; changelog is commit-history
  * first (many community repos ship no release/tag/CHANGELOG — verified §7.2).
  */
-import { spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { compareVersions, satisfies } from "./semver.js";
+/** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
+ *  SSiD 内核(0.1.x)无 remote BFF 服务(走 /plugin-center RPC channel),
+ *  这类版本在 SSiD 上必然「pending waiting for service: remote.session」。
+ *  案例: dsh-sidebar-qa 0.4.1/0.4.2(2026-08-29 两次实崩)。 */
+export function clientBundleUsesRemote(content) {
+    return /ctx\.remote\.[a-zA-Z_$]+\./.test(content);
+}
+/** 目标版本客户端 bundle 缓存:name@version → true/false。 */
+const remoteUseCache = new Map();
+/** 下载目标 tgz 并抽取 client bundle,判定 remote 服务依赖。
+ *  仅返回 boolean 不用 pnpm(直接 registry 下载 tgz + bsdtar 抽文件)。 */
+export async function targetClientUsesRemote(name, version) {
+    const key = `${name}@${version}`;
+    const hit = remoteUseCache.get(key);
+    if (hit !== undefined)
+        return hit;
+    let result = false;
+    const tmp = mkdtempSync(join(homedir(), '.dsh', 'tmp-remoteprobe-'));
+    try {
+        const tarballName = `${name.replace(/^@.*\//, '')}-${version}.tgz`;
+        for (const registry of ['https://registry.npmjs.org', 'https://registry.npmmirror.com']) {
+            try {
+                const res = await fetch(`${registry}/${name}/-/${tarballName}`, { signal: AbortSignal.timeout(15000) });
+                if (!res.ok)
+                    continue;
+                const tgz = join(tmp, tarballName);
+                writeFileSync(tgz, Buffer.from(await res.arrayBuffer()));
+                // 找 client bundle 文件(约定 client.js / lib/client.js / client/*.js)
+                const listing = execFileSync('tar', ['-tzf', tgz], { encoding: 'utf8', timeout: 30000 });
+                const lines = (listing ?? '').split('\n').map(l => l.trim()).filter(l => l.endsWith('.js'));
+                const candidates = lines.filter(l => /(^|\/)client(\.js|\/)|\/client\//.test(l) || l.includes('/client.js'));
+                const file = candidates.find(l => l.endsWith('client.js'));
+                if (file !== undefined) {
+                    const bundle = execFileSync('tar', ['-xzOf', tgz, file], { encoding: 'utf8', timeout: 30000 });
+                    result = clientBundleUsesRemote(String(bundle));
+                }
+                break;
+            }
+            catch { /* next registry */ }
+        }
+    }
+    catch { /* 任何失败保持 false(不误伤) */ }
+    finally {
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+        catch { /* best-effort */ }
+    }
+    remoteUseCache.set(key, result);
+    return result;
+}
 const UA = { 'User-Agent': 'dsh-plugin-center' };
 /** Latest published version on the npm registry; null when unreachable/unpublished. */
 export async function npmLatest(packageName) {
@@ -117,6 +168,12 @@ export async function detectUpdate(name, localVersion, repoUrl, compatRange, loc
     let compat = 'unknown';
     if (compatRange !== null) {
         compat = satisfies(localDshVersion, compatRange) ? 'compatible' : 'incompatible';
+    }
+    // 服务面校验(SSiD 专用):目标版本客户端依赖 Remote BFF(ctx.remote.*)而
+    // SSiD 内核无该服务 → 标不兼容(否则升级后内核启动即 failed)。
+    if (compat !== 'incompatible' && process.env.SSID_PENDING_CONSUMER === '1') {
+        if (await targetClientUsesRemote(name, latest))
+            compat = 'incompatible';
     }
     return {
         name,
@@ -569,6 +626,11 @@ export async function buildLlmPackage(name, localVersion, repoUrl, compatRange, 
     let compat = 'unknown';
     if (compatRange !== null) {
         compat = satisfies(localDshVersion, compatRange) ? 'compatible' : 'incompatible';
+    }
+    // 服务面校验(SSiD 专用):目标版本依赖 Remote BFF 服务 → 不兼容(LLM 直接 keep)。
+    if (compat !== 'incompatible' && latest !== null && process.env.SSID_PENDING_CONSUMER === '1') {
+        if (await targetClientUsesRemote(name, latest))
+            compat = 'incompatible';
     }
     const pkg = {
         name,

@@ -7,6 +7,14 @@ export interface UpdateDigest {
     compat: 'compatible' | 'incompatible' | 'unknown';
     compatRange: string | null;
 }
+/** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
+ *  SSiD 内核(0.1.x)无 remote BFF 服务(走 /plugin-center RPC channel),
+ *  这类版本在 SSiD 上必然「pending waiting for service: remote.session」。
+ *  案例: dsh-sidebar-qa 0.4.1/0.4.2(2026-08-29 两次实崩)。 */
+export declare function clientBundleUsesRemote(content: string): boolean;
+/** 下载目标 tgz 并抽取 client bundle,判定 remote 服务依赖。
+ *  仅返回 boolean 不用 pnpm(直接 registry 下载 tgz + bsdtar 抽文件)。 */
+export declare function targetClientUsesRemote(name: string, version: string): Promise<boolean>;
 /** Latest published version on the npm registry; null when unreachable/unpublished. */
 export declare function npmLatest(packageName: string): Promise<string | null>;
 /** 测试用:清空 repository 缓存(生产无调用)。 */

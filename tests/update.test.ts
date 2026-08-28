@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import {
-  sourceOf, dependencySpecifierOf, buildLlmPrompt, tarballNameOf, normalizeRepoUrl, isSameUpstream, clearNpmRepoCache,
+  sourceOf, dependencySpecifierOf, buildLlmPrompt, tarballNameOf, normalizeRepoUrl, isSameUpstream, clearNpmRepoCache, clientBundleUsesRemote,
   type LlmUpdatePackage,
 } from '../src/update.ts'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 describe('sourceOf 来源判定', () => {
   it('官方包 → official', () => {
@@ -130,6 +130,18 @@ describe('normalizeRepoUrl(上游同源判定)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ repository: { url: '' } }) })))
     expect(await isSameUpstream(null, 'pkg')).toBeNull()
     expect(await isSameUpstream('https://github.com/a/b', 'pkg')).toBeNull()
+  })
+})
+
+describe('clientBundleUsesRemote(服务面校验:SSiD 无 remote BFF)', () => {
+  it('含 ctx.remote.session.* 调用 → true(0.4.2 真实 bundle 模式)', () => {
+    expect(clientBundleUsesRemote('const r = await ctx.remote.session.prompt({ content });')).toBe(true)
+    expect(clientBundleUsesRemote('ctx.remote.session.fork({ sessionId })')).toBe(true)
+  })
+
+  it('不含 remote 调用 → false', () => {
+    expect(clientBundleUsesRemote('const r = await ctx.connection.rpc.call("/x", "y", {});')).toBe(false)
+    expect(clientBundleUsesRemote('registry.remote = 1')).toBe(false) // 字符串命名不误伤
   })
 })
 
