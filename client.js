@@ -227,6 +227,7 @@ function useWhatsNewOpen() {
 var readCache = {};
 var installedCache = null;
 var marketCache = {};
+var updatesCache = null;
 var countsState = { installed: 0, market: 0, dshMarket: 0, failed: 0 };
 var countListeners = /* @__PURE__ */ new Set();
 function setCounts(partial) {
@@ -1420,7 +1421,7 @@ function CenterPanel({ variant = "section" }) {
   const [marketSearch, setMarketSearch] = (0, import_react.useState)("");
   const [installedSource, setInstalledSource] = (0, import_react.useState)(null);
   const counts = useCounts();
-  const [updates, setUpdates] = (0, import_react.useState)(null);
+  const [updates, setUpdates] = (0, import_react.useState)(updatesCache);
   const [busyUpdate, setBusyUpdate] = (0, import_react.useState)(null);
   const [checking, setChecking] = (0, import_react.useState)(false);
   const [togglingId, setTogglingId] = (0, import_react.useState)(null);
@@ -1504,6 +1505,9 @@ function CenterPanel({ variant = "section" }) {
       }
     );
   }, [t]);
+  (0, import_react.useEffect)(() => {
+    updatesCache = updates;
+  }, [updates]);
   (0, import_react.useEffect)(() => {
     void rpc("listInstalled").then(
       (v) => {
@@ -1671,7 +1675,7 @@ function CenterPanel({ variant = "section" }) {
     }, children: checking ? t("checking") : t("check") }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: !updates?.length || busyUpdate !== null, onClick: () => {
       void updateAll();
-    }, children: t("updateAll", { n: updates?.length ?? 0 }) })
+    }, children: updates === null ? t("checking") : t("updateAll", { n: updates.length }) })
   ] });
   const installedToolbar = view === "installed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-filter", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar pc-toolbar-main", children: [

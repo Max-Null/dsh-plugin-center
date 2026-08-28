@@ -260,6 +260,9 @@ let readCache: Record<string, string> = {}
 // ---- client-side caches (avoid re-fetching on every tab switch) ----
 let installedCache: InstalledPlugin[] | null = null
 const marketCache: Record<string, { plugins: MarketPlugin[]; done: boolean }> = {}
+// 更新列表缓存(2026-08-29):跨面板重开保留——检查返回前显示上次结果,
+// 不再闪 0/空;后台刷新成功后覆盖。
+let updatesCache: UpdateDigest[] | null = null
 
 // ---- header counts (module-level: survive settings panel remounts, so the
 // numbers never flash back to 0 while a fresh fetch is in flight) ----
@@ -1455,7 +1458,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const [installedSource, setInstalledSource] = useState<PluginSource | null>(null)
   // Module-level counts (survive panel remounts; never flash back to 0).
   const counts = useCounts()
-  const [updates, setUpdates] = useState<UpdateDigest[] | null>(null)
+  const [updates, setUpdates] = useState<UpdateDigest[] | null>(updatesCache)
   const [busyUpdate, setBusyUpdate] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -1569,6 +1572,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       },
     )
   }, [t])
+  useEffect(() => {
+    updatesCache = updates
+  }, [updates])
   useEffect(() => {
     void rpc('listInstalled').then(
       v => {
@@ -1744,7 +1750,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       <span className="pc-sub">{t('headSummary', { a: counts.installed, b: updates === null ? '…' : updates.length, c: counts.failed })}</span>
       <span className="pc-spacer" />
       <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? t('checking') : t('check')}</button>
-      <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{t('updateAll', { n: updates?.length ?? 0 })}</button>
+      <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{updates === null ? t('checking') : t('updateAll', { n: updates.length })}</button>
     </div>
   )
   const installedToolbar = view === 'installed' ? (
