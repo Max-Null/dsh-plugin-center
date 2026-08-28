@@ -9,6 +9,7 @@ import { Service, type Context } from '@deepseek-ai/cordis';
 import { type InstalledPlugin } from './meta.ts';
 import { type MarketPlugin } from './market.ts';
 import { type LlmUpdatePackage, type PnpmResult, type UpdateDigest } from './update.ts';
+import { type LlmLogRecord } from './llm-log.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         /** The plugin-center engine (provided by this package's host half). */
@@ -123,12 +124,7 @@ export declare class PluginCenterEngine extends Service {
     }): Promise<void>;
     /** 读取某个插件最近一条 LLM 更新动作(JSONL 逆序找 name 匹配);
      *  无记录返回 null。client 轮询据此做三态(进行中/成功/失败)。 */
-    readLlmUpdateResult(name: string): Promise<{
-        at: number;
-        action: string;
-        detail: string;
-        status: 'pending' | 'running' | 'success' | 'failed';
-    } | null>;
+    readLlmUpdateResult(name: string): Promise<LlmLogRecord | null>;
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     private enqueuePnpm;
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */

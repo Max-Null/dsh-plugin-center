@@ -59,7 +59,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node build-client.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
@@ -80,6 +81,7 @@
     "@types/react": "~18.3.1",
     "esbuild": "^0.24.0",
     "react": "^18.2.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.11"
   }
 }

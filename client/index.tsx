@@ -9,6 +9,7 @@
 // 2026-08-22 slot crash). react-dom is bundled by build-client.mjs.
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { decideLlmState, decideLlmRestore } from './llm-decision.ts'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `
@@ -417,33 +418,28 @@ function stopLlmPolling(name: string): void {
 async function convergeLlmState(name: string): Promise<boolean> {
   // 1) host JSONL 终态优先。
   const rec = await rpc('llm-update.result', { name }).catch(() => null) as LlmResult | null
-  if (rec !== null && rec.status !== 'running' && rec.status !== 'pending') {
-    stopLlmPolling(name)
-    setLlmUpdating(name, false)
-    setLlmResult(name, rec)
+  // 2) 会话活跃度判据
+  const sid = llmSessionByPlugin.get(name)
+  const sessionRunning = sid === undefined ? undefined : (sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]?.running ?? false)
+  const decision = decideLlmState({ rec, sessionRunning })
+  if (decision === 'continue') return false
+  stopLlmPolling(name)
+  setLlmUpdating(name, false)
+  if (decision === 'success' || decision === 'failed') {
+    setLlmResult(name, rec!)
     const S = STRINGS[localeId]
-    const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}…` : rec.detail
+    const brief = (rec?.detail ?? '').length > 120 ? `${(rec?.detail ?? '').slice(0, 120)}…` : (rec?.detail ?? '')
     showToast(
-      rec.status === 'success' ? S.llmDone.replace('{name}', name).replace('{d}', brief) : rec.status === 'failed' ? S.llmFailed.replace('{name}', name).replace('{d}', brief) : S.llmEnded.replace('{name}', name),
-      rec.status === 'success' ? 'ok' : 'error',
+      decision === 'success' ? S.llmDone.replace('{name}', name).replace('{d}', brief) : S.llmFailed.replace('{name}', name).replace('{d}', brief),
+      decision === 'success' ? 'ok' : 'error',
       12000,
     )
-    return true
+  } else {
+    // ended(会话已停/已清理,未回传)。
+    setLlmResult(name, { at: Date.now(), action: 'ended', detail: '', status: 'ended' })
+    showToast(STRINGS[localeId].llmEnded.replace('{name}', name), 'error', 10000)
   }
-  // 2) 会话停止判据:该插件的「插件更新」会话已结束 → ended(未回传)。
-  //    会话行不存在(被删除/清理)同样收敛——Agent 没了状态不能永远挂着。
-  const sid = llmSessionByPlugin.get(name)
-  if (sid !== undefined) {
-    const row = sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]
-    if (row === undefined || row.running === false) {
-      stopLlmPolling(name)
-      setLlmUpdating(name, false)
-      setLlmResult(name, { at: Date.now(), action: 'ended', detail: '', status: 'ended' })
-      showToast(STRINGS[localeId].llmEnded.replace('{name}', name), 'error', 10000)
-      return true
-    }
-  }
-  return false
+  return true
 }
 /** 轮询 host JSONL + 会话状态:running/pending → 继续;success/failed/ended → 清执行中。 */
 function startLlmPolling(name: string): void {
@@ -473,12 +469,13 @@ async function restoreLlmStates(names: string[]): Promise<void> {
         const exact = rows.find(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes(`插件更新: ${name}`))
         const batch = rows.find(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes('插件更新(批量)'))
         const sess = exact ?? batch
-        if (sess !== undefined && sess.running !== false && sess.id !== undefined) {
+        const decision = decideLlmRestore({ rec, sessionRunning: sess?.running ?? false })
+        if (decision === 'continue' && sess !== undefined && sess.id !== undefined) {
           setLlmUpdating(name, true)
           llmSessionByPlugin.set(name, sess.id)
           startLlmPolling(name)
         } else {
-          // 会话已结束(未回传)→ ended;防御性清执行中标记,保证互斥。
+          // 会话已结束/不存在(未回传)→ ended;防御性清执行中标记,保证互斥。
           setLlmUpdating(name, false)
           if (sess?.id !== undefined) llmSessionByPlugin.set(name, sess.id)
           setLlmResult(name, { at: rec.at, action: 'ended', detail: '', status: 'ended' })

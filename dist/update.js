@@ -478,10 +478,11 @@ export async function updatePlugin(packageName, version, profileDir) {
 export function sourceOf(specifier, profileDir) {
     if (specifier.startsWith('@deepseek-ai/dsh-'))
         return 'official';
-    if (specifier.startsWith('file:./vendor/'))
-        return 'vendor';
+    // tarball 判定必须在 vendor 之前(否则 'file:./vendor/x.tgz' 被 vendor 分支截胡)。
     if (specifier.startsWith('file:./vendor/') && specifier.endsWith('.tgz'))
         return 'tarball';
+    if (specifier.startsWith('file:./vendor/'))
+        return 'vendor';
     if (specifier.startsWith('file:') || specifier.startsWith('link:'))
         return 'local-file';
     if (specifier.startsWith('github:') || specifier.startsWith('git+'))

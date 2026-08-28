@@ -519,8 +519,9 @@ export type PluginSource = 'official' | 'npm' | 'vendor' | 'tarball' | 'local-fi
 
 export function sourceOf(specifier: string, profileDir: string): PluginSource {
   if (specifier.startsWith('@deepseek-ai/dsh-')) return 'official'
-  if (specifier.startsWith('file:./vendor/')) return 'vendor'
+  // tarball 判定必须在 vendor 之前(否则 'file:./vendor/x.tgz' 被 vendor 分支截胡)。
   if (specifier.startsWith('file:./vendor/') && specifier.endsWith('.tgz')) return 'tarball'
+  if (specifier.startsWith('file:./vendor/')) return 'vendor'
   if (specifier.startsWith('file:') || specifier.startsWith('link:')) return 'local-file'
   if (specifier.startsWith('github:') || specifier.startsWith('git+')) return 'tarball'
   // ^x.y.z / x.y.z / ~x.y.z → npm 源

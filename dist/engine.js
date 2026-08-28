@@ -8,14 +8,14 @@
 import { Service } from '@deepseek-ai/cordis';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, join } from 'node:path';
-import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { buildInstalledPlugin, clearPackageCache, resolvePackage } from "./meta.js";
 import { fetchAwesomePluginsJson, fetchDshMarketPlugins, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins, } from "./market.js";
 import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, buildLlmPackage, } from "./update.js";
 import { reconcileInstalled, readDependencyKeys } from "./reconcile.js";
 import { readDisabledState, setDisabled, escapeRegExp } from "./toggle.js";
+import { appendLlmLog, readLlmLogLatest } from "./llm-log.js";
 /** Runtime mirror of cordis FiberState (a cross-package const enum). */
 const FIBER_PHASE = {
     0: 'pending',
@@ -398,43 +398,12 @@ export class PluginCenterEngine extends Service {
     }
     /** 追加一条 LLM 更新动作日志(JSONL,供 client 轮询结果展示)。 */
     async appendLlmUpdateLog(entry) {
-        try {
-            const file = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'plugin-center', 'llm-update-log.jsonl');
-            await mkdir(dirname(file), { recursive: true });
-            const line = JSON.stringify({ at: Date.now(), ...entry }) + '\n';
-            await appendFile(file, line, 'utf8');
-        }
-        catch { /* 日志失败绝不影响主流程 */ }
+        await appendLlmLog(entry);
     }
     /** 读取某个插件最近一条 LLM 更新动作(JSONL 逆序找 name 匹配);
      *  无记录返回 null。client 轮询据此做三态(进行中/成功/失败)。 */
     async readLlmUpdateResult(name) {
-        try {
-            const file = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'plugin-center', 'llm-update-log.jsonl');
-            const text = await readFile(file, 'utf8');
-            const lines = text.split('\n');
-            for (let i = lines.length - 1; i >= 0; i--) {
-                const line = lines[i]?.trim();
-                if (line === undefined || line === '')
-                    continue;
-                try {
-                    const rec = JSON.parse(line);
-                    if (rec.name === name) {
-                        return {
-                            at: typeof rec.at === 'number' ? rec.at : 0,
-                            action: typeof rec.action === 'string' ? rec.action : '',
-                            detail: typeof rec.detail === 'string' ? rec.detail : '',
-                            status: (rec.status === 'pending' || rec.status === 'running' || rec.status === 'success' || rec.status === 'failed') ? rec.status : 'running',
-                        };
-                    }
-                }
-                catch { /* 坏行跳过 */ }
-            }
-            return null;
-        }
-        catch {
-            return null;
-        }
+        return readLlmLogLatest(name);
     }
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     enqueuePnpm(op) {

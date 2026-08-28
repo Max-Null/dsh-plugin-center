@@ -32,6 +32,24 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 var import_react_dom = require("react-dom");
 var import_react = require("react");
+
+// client/llm-decision.ts
+function decideLlmState(input) {
+  const { rec, sessionRunning } = input;
+  if (rec !== null && rec.status !== "running" && rec.status !== "pending") {
+    return rec.status === "success" ? "success" : rec.status === "failed" ? "failed" : "ended";
+  }
+  if (sessionRunning === false) return "ended";
+  return "continue";
+}
+function decideLlmRestore(input) {
+  const { rec, sessionRunning } = input;
+  if (rec === null) return "none";
+  if (rec.status !== "running" && rec.status !== "pending") return "none";
+  return sessionRunning === false ? "ended" : "continue";
+}
+
+// client/index.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
 var CSS = `
 .pc-title { font-size: 18px; font-weight: 600; line-height: 26px; color: var(--dsw-alias-label-primary); }
@@ -339,31 +357,26 @@ function stopLlmPolling(name) {
 }
 async function convergeLlmState(name) {
   const rec = await rpc("llm-update.result", { name }).catch(() => null);
-  if (rec !== null && rec.status !== "running" && rec.status !== "pending") {
-    stopLlmPolling(name);
-    setLlmUpdating(name, false);
+  const sid = llmSessionByPlugin.get(name);
+  const sessionRunning = sid === void 0 ? void 0 : sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]?.running ?? false;
+  const decision = decideLlmState({ rec, sessionRunning });
+  if (decision === "continue") return false;
+  stopLlmPolling(name);
+  setLlmUpdating(name, false);
+  if (decision === "success" || decision === "failed") {
     setLlmResult(name, rec);
     const S = STRINGS[localeId];
-    const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}\u2026` : rec.detail;
+    const brief = (rec?.detail ?? "").length > 120 ? `${(rec?.detail ?? "").slice(0, 120)}\u2026` : rec?.detail ?? "";
     showToast(
-      rec.status === "success" ? S.llmDone.replace("{name}", name).replace("{d}", brief) : rec.status === "failed" ? S.llmFailed.replace("{name}", name).replace("{d}", brief) : S.llmEnded.replace("{name}", name),
-      rec.status === "success" ? "ok" : "error",
+      decision === "success" ? S.llmDone.replace("{name}", name).replace("{d}", brief) : S.llmFailed.replace("{name}", name).replace("{d}", brief),
+      decision === "success" ? "ok" : "error",
       12e3
     );
-    return true;
+  } else {
+    setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
+    showToast(STRINGS[localeId].llmEnded.replace("{name}", name), "error", 1e4);
   }
-  const sid = llmSessionByPlugin.get(name);
-  if (sid !== void 0) {
-    const row = sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid];
-    if (row === void 0 || row.running === false) {
-      stopLlmPolling(name);
-      setLlmUpdating(name, false);
-      setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
-      showToast(STRINGS[localeId].llmEnded.replace("{name}", name), "error", 1e4);
-      return true;
-    }
-  }
-  return false;
+  return true;
 }
 function startLlmPolling(name) {
   if (llmPollTimers.has(name)) return;
@@ -388,7 +401,8 @@ async function restoreLlmStates(names) {
         const exact = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes(`\u63D2\u4EF6\u66F4\u65B0: ${name}`));
         const batch = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)"));
         const sess = exact ?? batch;
-        if (sess !== void 0 && sess.running !== false && sess.id !== void 0) {
+        const decision = decideLlmRestore({ rec, sessionRunning: sess?.running ?? false });
+        if (decision === "continue" && sess !== void 0 && sess.id !== void 0) {
           setLlmUpdating(name, true);
           llmSessionByPlugin.set(name, sess.id);
           startLlmPolling(name);
