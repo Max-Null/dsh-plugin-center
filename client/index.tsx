@@ -210,6 +210,8 @@ interface LlmUpdatePackage {
   source: 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file'
   specifier: string | null
   isVendorModified: boolean
+  /** 插件所在 profile 目录(内部:专用 workspace 注册/Agent cwd;UI 不展示)。 */
+  profileDir: string
   /** 用户可读环境标签:'SSID'(思灵应用内)/'DSH-WEB'。 */
   runtimeLabel: string
   /** 已组装的 Agent prompt(host buildLlmPrompt 单一来源)。 */
@@ -373,6 +375,10 @@ interface LlmSessionsSvc {
 interface LlmWorkspacesSvc {
   list?: { getSnapshot?: () => { recentWorkspaceId?: string, items?: Array<{ id?: string }> } }
   connectWorkspace?: (workspaceId: string) => Promise<string>
+  /** 注册一个 path 为 workspace(幂等:已存在则返回既有),返回 WorkspaceView({id,...})。 */
+  create?: (input: { path: string }) => Promise<{ id?: string } | string>
+  /** 重命名 workspace(幂等)。 */
+  rename?: (workspaceId: string, title: string) => Promise<unknown>
 }
 let sessionsSvc: LlmSessionsSvc | null = null
 let workspacesSvc: LlmWorkspacesSvc | null = null
@@ -1296,7 +1302,7 @@ function llmPrepareAll(names: string[]): void {
  *  - sessions.open(id) 只 open 已有会话,不创建;
  *  - 创建走 workspaces.connectWorkspace(workspaceId)(复用该工作区 blank 会话);
  *  - 注入用 ISession.prompt(content, 'queue')(binding(id).session)。 */
-async function ensureLlmUpdateSession(isBatch: boolean): Promise<string | null> {
+async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | undefined): Promise<string | null> {
   const list = sessionsSvc?.list?.getSnapshot?.()
   const rows = list?.byId === undefined ? [] : Object.values(list.byId)
   // 批量(更新全部):统一复用「插件更新(批量)」会话(进行中才复用,避免旧上下文混入)。
@@ -1307,12 +1313,22 @@ async function ensureLlmUpdateSession(isBatch: boolean): Promise<string | null> 
       return existing.id
     }
   }
-  // 单插件 / 批量新建:每个插件独立会话——绝不模糊复用一个会话,
-  // 互不打断(connectWorkspace 只可能碰空白会话;带过内容的会话不匹配)。
+  // 单插件 / 批量新建:每个插件独立会话——绝不模糊复用一个会话,互不打断。
+  // 会话 cwd = 插件所在 profile 目录(以 path 注册专用 workspace,幂等+重命名),
+  // 因此「插件更新」会话归入独立分组,不再出现在用户工作区(WorkStation 等)下,
+  // 且 Agent 的默认 cwd 就是插件环境(与 skill 操作域约束一致)。
   const ws = workspacesSvc?.list?.getSnapshot?.()
-  const wsId = ws?.recentWorkspaceId ?? ws?.items?.[0]?.id
-  if (wsId === undefined || wsId === '') return null
-  const id = await workspacesSvc?.connectWorkspace?.(wsId)
+  let wsId: string | undefined
+  if (profileDir !== undefined && profileDir !== '') {
+    try {
+      const wsv = await workspacesSvc?.create?.({ path: profileDir })
+      wsId = typeof wsv === 'string' ? wsv : wsv?.id
+      if (wsId !== undefined) void workspacesSvc?.rename?.(wsId, '插件更新').catch(() => {})
+    } catch { /* 注册失败退回默认 workspace */ }
+  }
+  const finalWsId = wsId ?? ws?.recentWorkspaceId ?? ws?.items?.[0]?.id
+  if (finalWsId === undefined || finalWsId === '') return null
+  const id = await workspacesSvc?.connectWorkspace?.(finalWsId)
   if (id === undefined || id === '') return null
   sessionsSvc?.open?.(id)
   return id
@@ -1334,7 +1350,7 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
   void rpc('llm-update.log', { name, action: 'prompt-sent', detail: prompt.split('\n').slice(0, 3).join(' '), status: 'running' })
   try {
     const isBatch = name === '__all__' || pkgs.length > 1
-    const id = await ensureLlmUpdateSession(isBatch)
+    const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir)
     if (id === null) throw new Error('no-session-target')
     const session = sessionsSvc?.binding?.(id)?.session
     if (session?.prompt === undefined) throw new Error('no-session-face')

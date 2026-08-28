@@ -1288,7 +1288,7 @@ function llmPrepareAll(names) {
     setLlmConfirm({ name: "__all__", pkgs, error: null, skipped, preparing: false });
   })();
 }
-async function ensureLlmUpdateSession(isBatch) {
+async function ensureLlmUpdateSession(isBatch, profileDir) {
   const list = sessionsSvc?.list?.getSnapshot?.();
   const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
   if (isBatch) {
@@ -1299,9 +1299,19 @@ async function ensureLlmUpdateSession(isBatch) {
     }
   }
   const ws = workspacesSvc?.list?.getSnapshot?.();
-  const wsId = ws?.recentWorkspaceId ?? ws?.items?.[0]?.id;
-  if (wsId === void 0 || wsId === "") return null;
-  const id = await workspacesSvc?.connectWorkspace?.(wsId);
+  let wsId;
+  if (profileDir !== void 0 && profileDir !== "") {
+    try {
+      const wsv = await workspacesSvc?.create?.({ path: profileDir });
+      wsId = typeof wsv === "string" ? wsv : wsv?.id;
+      if (wsId !== void 0) void workspacesSvc?.rename?.(wsId, "\u63D2\u4EF6\u66F4\u65B0").catch(() => {
+      });
+    } catch {
+    }
+  }
+  const finalWsId = wsId ?? ws?.recentWorkspaceId ?? ws?.items?.[0]?.id;
+  if (finalWsId === void 0 || finalWsId === "") return null;
+  const id = await workspacesSvc?.connectWorkspace?.(finalWsId);
   if (id === void 0 || id === "") return null;
   sessionsSvc?.open?.(id);
   return id;
@@ -1318,7 +1328,7 @@ async function llmExecute(pkgs, name) {
   void rpc("llm-update.log", { name, action: "prompt-sent", detail: prompt.split("\n").slice(0, 3).join(" "), status: "running" });
   try {
     const isBatch = name === "__all__" || pkgs.length > 1;
-    const id = await ensureLlmUpdateSession(isBatch);
+    const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir);
     if (id === null) throw new Error("no-session-target");
     const session = sessionsSvc?.binding?.(id)?.session;
     if (session?.prompt === void 0) throw new Error("no-session-face");
