@@ -355,7 +355,7 @@ async function convergeLlmState(name) {
   const sid = llmSessionByPlugin.get(name);
   if (sid !== void 0) {
     const row = sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid];
-    if (row !== void 0 && row.running === false) {
+    if (row === void 0 || row.running === false) {
       stopLlmPolling(name);
       setLlmUpdating(name, false);
       setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
@@ -1246,6 +1246,7 @@ function RestartDialog({ count, onRestart, onClose }) {
   );
 }
 function llmPrepare(name) {
+  if (llmConfirm?.preparing === true) return;
   setLlmConfirm({ name, pkgs: [], error: null, skipped: [], preparing: true });
   void rpc("llm-update.prepare", { name }).then(
     (v) => setLlmConfirm({ name, pkgs: [v], error: null, skipped: [], preparing: false }),
@@ -1673,9 +1674,9 @@ function CenterPanel({ variant = "section" }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: checking, onClick: () => {
       refreshUpdates();
     }, children: checking ? t("checking") : t("check") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: !updates?.length || busyUpdate !== null, onClick: () => {
-      void updateAll();
-    }, children: updates === null ? t("checking") : t("updateAll", { n: updates.length }) })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: updates === null || updates.length === 0 || busyUpdate !== null || llmUpdating.size > 0, onClick: () => {
+      llmPrepareAll((updates ?? []).map((u) => u.name));
+    }, children: updates === null ? t("checking") : llmUpdating.size > 0 ? t("llmBusy") : t("llmUpdateAll", { n: updates.length }) })
   ] });
   const installedToolbar = view === "installed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-filter", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-toolbar pc-toolbar-main", children: [

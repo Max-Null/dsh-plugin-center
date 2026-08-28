@@ -431,10 +431,11 @@ async function convergeLlmState(name: string): Promise<boolean> {
     return true
   }
   // 2) 会话停止判据:该插件的「插件更新」会话已结束 → ended(未回传)。
+  //    会话行不存在(被删除/清理)同样收敛——Agent 没了状态不能永远挂着。
   const sid = llmSessionByPlugin.get(name)
   if (sid !== undefined) {
     const row = sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]
-    if (row !== undefined && row.running === false) {
+    if (row === undefined || row.running === false) {
       stopLlmPolling(name)
       setLlmUpdating(name, false)
       setLlmResult(name, { at: Date.now(), action: 'ended', detail: '', status: 'ended' })
@@ -1260,8 +1261,9 @@ function RestartDialog({ count, onRestart, onClose }: { count: number, onRestart
 // ---- LLM 更新编排 (2026-08-28,模块级:两个入口——插件中心 UpdatesView 与
 // 更新弹窗 WhatsNewDialog——共用同一套 prepare → 确认 → 会话发起流程) ----
 
-/** 采集单个插件的信息包并弹确认面板。 */
+/** 采集单个插件的信息包并弹确认面板。准备中防重入(后点忽略,避免竞态覆盖)。 */
 function llmPrepare(name: string): void {
+  if (llmConfirm?.preparing === true) return
   setLlmConfirm({ name, pkgs: [], error: null, skipped: [], preparing: true })
   void rpc('llm-update.prepare', { name }).then(
     v => setLlmConfirm({ name, pkgs: [v as LlmUpdatePackage], error: null, skipped: [], preparing: false }),
@@ -1750,7 +1752,9 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
       <span className="pc-sub">{t('headSummary', { a: counts.installed, b: updates === null ? '…' : updates.length, c: counts.failed })}</span>
       <span className="pc-spacer" />
       <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? t('checking') : t('check')}</button>
-      <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{updates === null ? t('checking') : t('updateAll', { n: updates.length })}</button>
+      {/* 机械「更新全部」先注释(2026-08-29 只保留 LLM 入口),改为 LLM 批量。 */}
+      {/* <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{updates === null ? t('checking') : t('updateAll', { n: updates.length })}</button> */}
+      <button className="pc-btn primary" disabled={updates === null || updates.length === 0 || busyUpdate !== null || llmUpdating.size > 0} onClick={() => { llmPrepareAll((updates ?? []).map(u => u.name)) }}>{updates === null ? t('checking') : llmUpdating.size > 0 ? t('llmBusy') : t('llmUpdateAll', { n: updates.length })}</button>
     </div>
   )
   const installedToolbar = view === 'installed' ? (
