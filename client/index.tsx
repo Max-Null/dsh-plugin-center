@@ -1350,7 +1350,11 @@ async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | und
 async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void> {
   const S = STRINGS[localeId]
   setLlmConfirm(null)
-  for (const p of pkgs) setLlmUpdating(p.name, true)
+  // 重新发起:清除该插件上次的终态结果(否则旧 ended 压住新执行中)。
+  for (const p of pkgs) {
+    setLlmResult(p.name, null)
+    setLlmUpdating(p.name, true)
+  }
   const prompt = pkgs.length === 1
     ? pkgs[0].prompt
     : [

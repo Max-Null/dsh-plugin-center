@@ -1327,7 +1327,10 @@ async function ensureLlmUpdateSession(isBatch, profileDir) {
 async function llmExecute(pkgs, name) {
   const S = STRINGS[localeId];
   setLlmConfirm(null);
-  for (const p of pkgs) setLlmUpdating(p.name, true);
+  for (const p of pkgs) {
+    setLlmResult(p.name, null);
+    setLlmUpdating(p.name, true);
+  }
   const prompt = pkgs.length === 1 ? pkgs[0].prompt : [
     `\u8BF7\u4F9D\u6B21\u5904\u7406\u4EE5\u4E0B ${pkgs.length} \u4E2A\u63D2\u4EF6\u7684\u66F4\u65B0(\u6BCF\u4E2A\u63D2\u4EF6\u72EC\u7ACB\u6309 dsh-plugin-upgrade skill \u51B3\u7B56):`,
     "",
