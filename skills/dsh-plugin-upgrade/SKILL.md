@@ -109,7 +109,8 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 ## 常见陷阱
 
 - **版本比较**用数值逐段比较（0.9.10 > 0.9.9），不要用字符串或只比主版本。
-- **npm 范围漂移**：profile 声明常为 `^0.3.36`，pnpm 会把 `^0.4.0` 浮到 `0.4.1`；升级后核对实体版本，必要时把声明钉死到精确版本并在 detail 说明钉死原因。
+- **服务级依赖(致命,2026-08-29 二次血泪)**：升级前必须核对目标版本的 `client inject`/host 服务依赖是否为当前内核所提供——**SSiD 内核 0.1.1-rc.2 没有 `remote.session` Remote BFF 服务**（SSiD 走 `/plugin-center` 式 RPC channel）。dsh-sidebar-qa 0.4.1/0.4.2 的客户端依赖 `remote.session` → 装上升级后内核启动即「Failed to load plugins (pending waiting for service: remote.session)」。**peer 满足 ≠ 服务满足**:0.4.2 的 peer 全部满足,但服务缺失。判定:反编译/读目标版本 client.js 的 inject 列表,有 `remote.*` 且当前 profile 无 `@deepseek-ai/dsh-*remotes*` 对应服务 → 不兼容保持现状。
+- **npm 范围漂移**：profile 声明常为 `^0.4.0`，pnpm 会把 `^0.4.0` 浮到 `0.4.2`；升级后核对实体版本，必要时把声明钉死到精确版本并在 detail 说明钉死原因。
 - **SSiD 预置插件**：升级后需同步归档（profile-template / vendor 目录），否则打包时被旧版覆盖——在 detail 中注明「需归档同步」。
 - **hot 通道**：纯前端插件更新可能已热生效，升级成功后仍建议重启一次确认加载无错。
 
