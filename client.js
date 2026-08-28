@@ -336,41 +336,62 @@ function stopLlmPolling(name) {
     llmPollTimers.delete(name);
   }
 }
+async function convergeLlmState(name) {
+  const rec = await rpc("llm-update.result", { name }).catch(() => null);
+  if (rec !== null && rec.status !== "running" && rec.status !== "pending") {
+    stopLlmPolling(name);
+    setLlmUpdating(name, false);
+    setLlmResult(name, rec);
+    const S = STRINGS[localeId];
+    const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}\u2026` : rec.detail;
+    showToast(
+      rec.status === "success" ? S.llmDone.replace("{name}", name).replace("{d}", brief) : rec.status === "failed" ? S.llmFailed.replace("{name}", name).replace("{d}", brief) : S.llmEnded.replace("{name}", name),
+      rec.status === "success" ? "ok" : "error",
+      12e3
+    );
+    return true;
+  }
+  const sid = llmSessionByPlugin.get(name);
+  if (sid !== void 0) {
+    const row = sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid];
+    if (row !== void 0 && row.running === false) {
+      stopLlmPolling(name);
+      setLlmUpdating(name, false);
+      setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
+      showToast(STRINGS[localeId].llmEnded.replace("{name}", name), "error", 1e4);
+      return true;
+    }
+  }
+  return false;
+}
 function startLlmPolling(name) {
   if (llmPollTimers.has(name)) return;
   let count = 0;
   const timer = window.setInterval(() => {
     count++;
-    void rpc("llm-update.result", { name }).then((v) => {
-      const rec = v;
-      if (rec === null || rec.status === "running" || rec.status === "pending") {
-        if (count >= LLM_POLL_MAX) stopLlmPolling(name);
-        return;
-      }
-      stopLlmPolling(name);
-      setLlmUpdating(name, false);
-      setLlmResult(name, rec);
-      const S = STRINGS[localeId];
-      const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}\u2026` : rec.detail;
-      showToast(
-        rec.status === "success" ? S.llmDone.replace("{name}", name).replace("{d}", brief) : S.llmFailed.replace("{name}", name).replace("{d}", brief),
-        rec.status === "success" ? "ok" : "error",
-        12e3
-      );
-    }).catch(() => {
+    void convergeLlmState(name).then((done) => {
+      if (!done && count >= LLM_POLL_MAX) stopLlmPolling(name);
     });
   }, LLM_POLL_MS);
   llmPollTimers.set(name, timer);
 }
 async function restoreLlmStates(names) {
+  const list = sessionsSvc?.list?.getSnapshot?.();
+  const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
+  const updateSession = rows.find((r) => (r.displayTitle ?? "").includes("\u63D2\u4EF6\u66F4\u65B0") || (r.title ?? "").includes("\u63D2\u4EF6\u66F4\u65B0"));
   for (const name of names) {
     if (llmUpdating.has(name) || llmResults.has(name)) continue;
     try {
       const rec = await rpc("llm-update.result", { name });
       if (rec === null) continue;
       if (rec.status === "running" || rec.status === "pending") {
-        setLlmUpdating(name, true);
-        startLlmPolling(name);
+        if (updateSession !== void 0 && updateSession.running !== false && updateSession.id !== void 0) {
+          setLlmUpdating(name, true);
+          llmSessionByPlugin.set(name, updateSession.id);
+          startLlmPolling(name);
+        } else {
+          setLlmResult(name, { at: rec.at, action: "ended", detail: "", status: "ended" });
+        }
       } else {
         setLlmResult(name, rec);
       }
@@ -565,6 +586,8 @@ var STRINGS = {
     llmRes_keep: "LLM \u4FDD\u6301\u4E0D\u52A8",
     llmRes_failed: "LLM \u5931\u8D25",
     llmRes_running: "LLM \u6267\u884C\u4E2D",
+    llmRes_ended: "LLM \u5DF2\u7ED3\u675F",
+    llmEnded: "LLM \u66F4\u65B0\u5DF2\u7ED3\u675F\uFF1A{name}(\u672A\u56DE\u4F20\u51B3\u7B56,\u53EF\u67E5\u770B\u4F1A\u8BDD)",
     llmUpdateAll: "LLM \u66F4\u65B0\u5168\u90E8\uFF08{n}\uFF09",
     llmConfirmBody: "\u4EE5\u4E0B {n} \u4E2A\u63D2\u4EF6\u5C06\u7531 LLM Agent \u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u5E76\u6267\u884C\u66F4\u65B0\u3002",
     llmConfirmSkipped: "\u91C7\u96C6\u5931\u8D25\u5C06\u8DF3\u8FC7\uFF1A{s}",
@@ -677,6 +700,8 @@ var STRINGS = {
     llmRes_keep: "LLM kept",
     llmRes_failed: "LLM failed",
     llmRes_running: "LLM running",
+    llmRes_ended: "LLM ended",
+    llmEnded: "LLM update ended: {name} (no decision returned; view session)",
     llmUpdateAll: "LLM update all\uFF08{n}\uFF09",
     llmConfirmBody: "LLM Agent will decide & run the update for these {n} plugin(s) per the dsh-plugin-upgrade skill.",
     llmConfirmSkipped: "Skipped (prepare failed): {s}",

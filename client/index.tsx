@@ -359,7 +359,7 @@ function useLlmFallback(): string | null {
 // ---- client 半端会话/工作区服务(apply 时按 inject 注入;结构类型与
 // dsh-sidebar-preview-select/src/context-types.ts 同思路,只声明用到的字段) ----
 interface LlmSessionsSvc {
-  list?: { getSnapshot?: () => { byId?: Record<string, { id?: string, title?: string, displayTitle?: string }> } }
+  list?: { getSnapshot?: () => { byId?: Record<string, { id?: string, title?: string, displayTitle?: string, running?: boolean }> } }
   open?: (id: string) => void
   binding?: (id: string) => { session?: {
     prompt?: (content: Array<{ type: 'text', text: string }>, mode: 'queue' | 'steer') => Promise<{ ok: boolean, error?: { message?: string } }>
@@ -382,7 +382,7 @@ interface LlmResult {
   at: number
   action: string
   detail: string
-  status: 'pending' | 'running' | 'success' | 'failed'
+  status: 'pending' | 'running' | 'success' | 'failed' | 'ended'
 }
 const llmResults = new Map<string, LlmResult>()
 const llmResultListeners = new Set<() => void>()
@@ -409,42 +409,69 @@ function stopLlmPolling(name: string): void {
   const t = llmPollTimers.get(name)
   if (t !== undefined) { window.clearInterval(t); llmPollTimers.delete(name) }
 }
-/** 轮询 host JSONL:running/pending → 继续;success/failed → 清执行中 + 存结果 + toast。 */
+/** 轮询收敛:JSONL 终态 → success/failed;JSONL 仍 running 但「插件更新」会话
+ *  已停止 → ended(Agent 未回传,不再假装执行中)。 */
+async function convergeLlmState(name: string): Promise<boolean> {
+  // 1) host JSONL 终态优先。
+  const rec = await rpc('llm-update.result', { name }).catch(() => null) as LlmResult | null
+  if (rec !== null && rec.status !== 'running' && rec.status !== 'pending') {
+    stopLlmPolling(name)
+    setLlmUpdating(name, false)
+    setLlmResult(name, rec)
+    const S = STRINGS[localeId]
+    const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}…` : rec.detail
+    showToast(
+      rec.status === 'success' ? S.llmDone.replace('{name}', name).replace('{d}', brief) : rec.status === 'failed' ? S.llmFailed.replace('{name}', name).replace('{d}', brief) : S.llmEnded.replace('{name}', name),
+      rec.status === 'success' ? 'ok' : 'error',
+      12000,
+    )
+    return true
+  }
+  // 2) 会话停止判据:该插件的「插件更新」会话已结束 → ended(未回传)。
+  const sid = llmSessionByPlugin.get(name)
+  if (sid !== undefined) {
+    const row = sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]
+    if (row !== undefined && row.running === false) {
+      stopLlmPolling(name)
+      setLlmUpdating(name, false)
+      setLlmResult(name, { at: Date.now(), action: 'ended', detail: '', status: 'ended' })
+      showToast(STRINGS[localeId].llmEnded.replace('{name}', name), 'error', 10000)
+      return true
+    }
+  }
+  return false
+}
+/** 轮询 host JSONL + 会话状态:running/pending → 继续;success/failed/ended → 清执行中。 */
 function startLlmPolling(name: string): void {
   if (llmPollTimers.has(name)) return
   let count = 0
   const timer = window.setInterval(() => {
     count++
-    void rpc('llm-update.result', { name }).then(v => {
-      const rec = v as LlmResult | null
-      if (rec === null || rec.status === 'running' || rec.status === 'pending') {
-        if (count >= LLM_POLL_MAX) stopLlmPolling(name)
-        return
-      }
-      stopLlmPolling(name)
-      setLlmUpdating(name, false)
-      setLlmResult(name, rec)
-      const S = STRINGS[localeId]
-      const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}…` : rec.detail
-      showToast(
-        rec.status === 'success' ? S.llmDone.replace('{name}', name).replace('{d}', brief) : S.llmFailed.replace('{name}', name).replace('{d}', brief),
-        rec.status === 'success' ? 'ok' : 'error',
-        12000,
-      )
-    }).catch(() => { /* 网络抖动忽略,下一轮继续 */ })
+    void convergeLlmState(name).then(done => {
+      if (!done && count >= LLM_POLL_MAX) stopLlmPolling(name)
+    })
   }, LLM_POLL_MS)
   llmPollTimers.set(name, timer)
 }
-/** 重挂/刷新后从 host 恢复:无内存状态时读取 JSONL,running → 继续执行中。 */
+/** 重挂/刷新后从 host 恢复:JSONL running → 结合「插件更新」会话活动状态
+ *  决策(会话还在跑 → 继续执行中+轮询;会话已结束 → ended)。 */
 async function restoreLlmStates(names: string[]): Promise<void> {
+  const list = sessionsSvc?.list?.getSnapshot?.()
+  const rows = list?.byId === undefined ? [] : Object.values(list.byId)
+  const updateSession = rows.find(r => (r.displayTitle ?? '').includes('插件更新') || (r.title ?? '').includes('插件更新'))
   for (const name of names) {
     if (llmUpdating.has(name) || llmResults.has(name)) continue
     try {
       const rec = await rpc('llm-update.result', { name }) as LlmResult | null
       if (rec === null) continue
       if (rec.status === 'running' || rec.status === 'pending') {
-        setLlmUpdating(name, true)
-        startLlmPolling(name)
+        if (updateSession !== undefined && updateSession.running !== false && updateSession.id !== undefined) {
+          setLlmUpdating(name, true)
+          llmSessionByPlugin.set(name, updateSession.id)
+          startLlmPolling(name)
+        } else {
+          setLlmResult(name, { at: rec.at, action: 'ended', detail: '', status: 'ended' })
+        }
       } else {
         setLlmResult(name, rec)
       }
@@ -627,7 +654,8 @@ const STRINGS = {
     llmBusy: 'LLM 执行中…',
     llmDone: 'LLM 更新完成：{name} — {d}',
     llmFailed: 'LLM 更新失败：{name} — {d}',
-    llmRes_success: 'LLM 已更新', llmRes_keep: 'LLM 保持不动', llmRes_failed: 'LLM 失败', llmRes_running: 'LLM 执行中',
+    llmRes_success: 'LLM 已更新', llmRes_keep: 'LLM 保持不动', llmRes_failed: 'LLM 失败', llmRes_running: 'LLM 执行中', llmRes_ended: 'LLM 已结束',
+    llmEnded: 'LLM 更新已结束：{name}(未回传决策,可查看会话)',
     llmUpdateAll: 'LLM 更新全部（{n}）',
     llmConfirmBody: '以下 {n} 个插件将由 LLM Agent 按 dsh-plugin-upgrade skill 决策并执行更新。',
     llmConfirmSkipped: '采集失败将跳过：{s}',
@@ -688,7 +716,8 @@ const STRINGS = {
     llmBusy: 'LLM running…',
     llmDone: 'LLM update done: {name} — {d}',
     llmFailed: 'LLM update failed: {name} — {d}',
-    llmRes_success: 'LLM updated', llmRes_keep: 'LLM kept', llmRes_failed: 'LLM failed', llmRes_running: 'LLM running',
+    llmRes_success: 'LLM updated', llmRes_keep: 'LLM kept', llmRes_failed: 'LLM failed', llmRes_running: 'LLM running', llmRes_ended: 'LLM ended',
+    llmEnded: 'LLM update ended: {name} (no decision returned; view session)',
     llmUpdateAll: 'LLM update all（{n}）',
     llmConfirmBody: 'LLM Agent will decide & run the update for these {n} plugin(s) per the dsh-plugin-upgrade skill.',
     llmConfirmSkipped: 'Skipped (prepare failed): {s}',
