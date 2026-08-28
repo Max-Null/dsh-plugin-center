@@ -19,6 +19,14 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 | `isVendorModified` | 本地是否定制（vendor/tarball/local-file 为 true） |
 | `compat` / `compatRange` | DSH peer 兼容性（compatible / incompatible / unknown） |
 | `changelog` | GitHub commit 摘要（用于判断版本差异大小与作者改名） |
+| `profileDir` | **插件所在 profile 目录（唯一允许操作目录）**——DSH web / SSiD dev / SSiD 安装版各自 profile 不同，严禁按本会话工作目录（cwd）或任何其他 profile 操作 |
+
+## 操作域校验（开始前必做）
+
+1. `Test-Path "$profileDir\node_modules\<name>\package.json"` —— 信息包声明的安装位置必须真实存在；
+2. 若该路径与实际不一致（安装位置错误/环境串扰），**立即停止**并回传 `action: failed, detail: 安装位置不符: <声明路径> vs <实际路径>`；
+3. 所有 pnpm / npm / git / 读写操作一律以 `$profileDir` 为 cwd 执行；**禁止**对会话工作目录（如 H:\MaxNull\WorkStation）或其他 profile（~/.dsh/profiles/web、.dsh/profiles/headless 等）执行任何更新/安装。
+4. 更新前记录 `$profileDir\package.json` 的依赖声明原值；完成后回传「实际修改的目录 = <profileDir>」。
 
 ## 决策树（按优先级，自上而下——第一条命中即执行）
 
@@ -71,8 +79,8 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 
 **允许：**
 - 读: `pnpm view` / `npm view` / `git log` / 读 profile 内 package.json、node_modules、vendor
-- 写: 仅限 **当前 profile** 的依赖声明与 node_modules（`pnpm add` / `pnpm update` / `pnpm install`）
-- 报告: 插件中心 RPC `llm-update.log`（host 已接好, 通过会话工具或文本回传）
+- 写: 仅限 **信息包 `profileDir` 声明的那一个 profile** 的依赖声明与 node_modules（`pnpm add` / `pnpm update` / `pnpm install`,一律以该目录为 cwd）
+- 报告: 写 `~/.dsh/plugin-center/llm-update-log.jsonl`（见回传格式）
 
 **禁止：**
 - 改 `~/.dsh/profiles/*` 之外的其他 profile
@@ -80,20 +88,21 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 - 未知来源命令、npm install 全局包、改 CI/发布脚本
 - 未经用户确认的破坏性操作（删除 vendor 目录前必须报告）
 
-## 完成后回传格式（最后一条消息）
+## 完成后回传格式（必须执行）
 
-```
-action: upgrade | keep | switch-npm | fix-peer | failed
-detail: <一句话执行摘要, 含实体版本/命令/错误>
-status: success | pending | failed
-```
-
-示例:
-```
-action: upgrade
-detail: dsh-dream-skin 8.27.0 → 8.28.0, pnpm update 完成, 实体版本已校验
-status: success
-```
+1. **写主机状态文件（插件中心轮询的证据源）**：把决策结果以**单行 JSON** 追加到
+   `$env:DSH_HOME\plugin-center\llm-update-log.jsonl`（`~/.dsh/plugin-center/` 下）：
+   ```powershell
+   Add-Content -Path "$env:DSH_HOME\plugin-center\llm-update-log.jsonl" -Value '{"name":"<插件名>","action":"upgrade|keep|switch-npm|fix-peer|failed","detail":"<一句话摘要,含实体版本/命令/错误>","status":"success|pending|failed"}'
+   ```
+   字段要求：`status` 只允许 `success` / `pending` / `failed`；`detail` 一行内写完。
+2. 同时在会话最后一条消息用同一格式回传（供用户阅读），例如：
+   ```
+   action: upgrade
+   detail: dsh-dream-skin 8.27.0 → 8.28.0, pnpm update 完成, 实体版本已校验
+   status: success
+   ```
+   > 忘记写状态文件时,插件中心会用 20 分钟兜底保留「执行中」并提示查看会话——务必写。
 
 ## 常见陷阱
 

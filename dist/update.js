@@ -520,6 +520,7 @@ export async function buildLlmPackage(name, localVersion, repoUrl, compatRange, 
         source,
         specifier,
         isVendorModified,
+        profileDir,
         prompt: '',
     };
     return { ...pkg, prompt: buildLlmPrompt(pkg) };
@@ -535,6 +536,7 @@ export function buildLlmPrompt(pkg) {
         `npm 最新: ${pkg.toVersion ?? '(未发布或不可达)'}`,
         `来源: ${srcBadge}${pkg.isVendorModified ? '(本地定制!机械更新会覆盖,需核对作者是否已采纳)' : ''}`,
         `依赖声明: ${pkg.specifier ?? '(非 npm 依赖)'}`,
+        `安装位置: ${pkg.profileDir}(唯一允许操作目录!本会话工作区与之不同,严禁按会话 cwd 操作)`,
         `DSH 兼容: ${pkg.compat} (要求 ${pkg.compatRange ?? '未知'})`,
         `变更: ${pkg.changelog.join('; ') || '(无 changelog,查 GitHub release/tag)'}`,
         '',

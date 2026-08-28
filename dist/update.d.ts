@@ -148,6 +148,8 @@ export interface LlmUpdatePackage {
     specifier: string | null;
     /** 是否本地定制(vendor/tarball/local-file)。 */
     isVendorModified: boolean;
+    /** 插件所在 profile 目录(host 运行时锚点;LLM 只允许在此目录内操作)。 */
+    profileDir: string;
     /** 已组装的 Agent prompt(host 单一来源,client 直接注入会话)。 */
     prompt: string;
 }

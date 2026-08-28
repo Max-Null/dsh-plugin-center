@@ -78,6 +78,13 @@ export class PluginCenterRpc extends Service {
                         });
                         return { ok: true, value: null };
                     }
+                    case 'llm-update.result': {
+                        // 读某插件最近一条 LLM 更新动作(轮询三态:running/success/failed)。
+                        const name = payload?.name;
+                        if (typeof name !== 'string' || name === '')
+                            return internal('llm-update.result: name is required');
+                        return { ok: true, value: await ctx.pluginCenter.readLlmUpdateResult(name) };
+                    }
                     case 'toggle': {
                         const payload2 = payload;
                         const id = payload2?.id;

@@ -121,6 +121,14 @@ export declare class PluginCenterEngine extends Service {
         detail: string;
         status: 'pending' | 'running' | 'success' | 'failed';
     }): Promise<void>;
+    /** 读取某个插件最近一条 LLM 更新动作(JSONL 逆序找 name 匹配);
+     *  无记录返回 null。client 轮询据此做三态(进行中/成功/失败)。 */
+    readLlmUpdateResult(name: string): Promise<{
+        at: number;
+        action: string;
+        detail: string;
+        status: 'pending' | 'running' | 'success' | 'failed';
+    } | null>;
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     private enqueuePnpm;
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */

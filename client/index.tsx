@@ -209,6 +209,8 @@ interface LlmUpdatePackage {
   source: 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file'
   specifier: string | null
   isVendorModified: boolean
+  /** 插件所在 profile 目录(LLM 只允许在此目录内操作)。 */
+  profileDir: string
   /** 已组装的 Agent prompt(host buildLlmPrompt 单一来源)。 */
   prompt: string
 }
@@ -370,6 +372,87 @@ interface LlmWorkspacesSvc {
 }
 let sessionsSvc: LlmSessionsSvc | null = null
 let workspacesSvc: LlmWorkspacesSvc | null = null
+
+// ---- LLM 更新终态与轮询 (2026-08-29,模块级:执行中/成功/失败三态跨面板持久) ----
+// 事实源 = host JSONL(~/.dsh/plugin-center/llm-update-log.jsonl):
+// - llmUpdating 表示「执行中」(发起后置位,轮询到 success/failed 才清除);
+// - llmResults 记录终态(action/detail/status),供卡片展示结果 + 查看会话;
+// - 重挂/刷新后 restoreLlmStates() 从 host 恢复(running 继续轮询)。
+interface LlmResult {
+  at: number
+  action: string
+  detail: string
+  status: 'pending' | 'running' | 'success' | 'failed'
+}
+const llmResults = new Map<string, LlmResult>()
+const llmResultListeners = new Set<() => void>()
+function setLlmResult(name: string, rec: LlmResult | null): void {
+  if (rec === null) llmResults.delete(name)
+  else llmResults.set(name, rec)
+  llmResultListeners.forEach(l => l())
+}
+function useLlmResultVersion(): number {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    const l = () => { setV(x => x + 1) }
+    llmResultListeners.add(l)
+    return () => { llmResultListeners.delete(l) }
+  }, [])
+  return v
+}
+/** 每个插件的轮询定时器(名字 → interval id);终态/超时清除。 */
+const llmPollTimers = new Map<string, number>()
+const LLM_POLL_MS = 5000
+/** 20 分钟兜底:Agent 未回传时停轮询,但保留「执行中」标记(卡死可看会话)。 */
+const LLM_POLL_MAX = 240
+function stopLlmPolling(name: string): void {
+  const t = llmPollTimers.get(name)
+  if (t !== undefined) { window.clearInterval(t); llmPollTimers.delete(name) }
+}
+/** 轮询 host JSONL:running/pending → 继续;success/failed → 清执行中 + 存结果 + toast。 */
+function startLlmPolling(name: string): void {
+  if (llmPollTimers.has(name)) return
+  let count = 0
+  const timer = window.setInterval(() => {
+    count++
+    void rpc('llm-update.result', { name }).then(v => {
+      const rec = v as LlmResult | null
+      if (rec === null || rec.status === 'running' || rec.status === 'pending') {
+        if (count >= LLM_POLL_MAX) stopLlmPolling(name)
+        return
+      }
+      stopLlmPolling(name)
+      setLlmUpdating(name, false)
+      setLlmResult(name, rec)
+      const S = STRINGS[localeId]
+      const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}…` : rec.detail
+      showToast(
+        rec.status === 'success' ? S.llmDone.replace('{name}', name).replace('{d}', brief) : S.llmFailed.replace('{name}', name).replace('{d}', brief),
+        rec.status === 'success' ? 'ok' : 'error',
+        12000,
+      )
+    }).catch(() => { /* 网络抖动忽略,下一轮继续 */ })
+  }, LLM_POLL_MS)
+  llmPollTimers.set(name, timer)
+}
+/** 重挂/刷新后从 host 恢复:无内存状态时读取 JSONL,running → 继续执行中。 */
+async function restoreLlmStates(names: string[]): Promise<void> {
+  for (const name of names) {
+    if (llmUpdating.has(name) || llmResults.has(name)) continue
+    try {
+      const rec = await rpc('llm-update.result', { name }) as LlmResult | null
+      if (rec === null) continue
+      if (rec.status === 'running' || rec.status === 'pending') {
+        setLlmUpdating(name, true)
+        startLlmPolling(name)
+      } else {
+        setLlmResult(name, rec)
+      }
+    } catch { /* 单条失败不阻塞整体恢复 */ }
+  }
+}
+/** 插件名 → 本次 LLM 更新会话 id(「查看会话」跳转)。 */
+const llmSessionByPlugin = new Map<string, string>()
 
 // ---- pending-toggle state: a disable/enable written to the patch layer but
 // not yet applied by a restart (SSiD has no HMR). The card shows a
@@ -535,10 +618,15 @@ const STRINGS = {
     incompat: '不兼容当前 DSH', update: '更新', updating: '更新中…',
     llmUpdate: 'LLM 更新', llmUpdating: 'LLM 决策中…', llmConfirmTitle: '确认 LLM 更新',
     llmSourceBadge: '来源：{s}', llmVendorWarn: '本地定制!机械更新会覆盖,先核对作者是否已采纳',
+    llmProfileDir: '安装位置：{p}',
     llmConfirm: '确认并执行', llmCancel: '取消',
     llmPromptReady: 'LLM 更新已发起：{name}。请在会话中按 dsh-plugin-upgrade skill 决策执行。',
     llmPreparing: '采集插件信息中…', llmPreparedError: '信息包采集失败：{e}',
     llmSessionLink: '查看会话',
+    llmBusy: 'LLM 执行中…',
+    llmDone: 'LLM 更新完成：{name} — {d}',
+    llmFailed: 'LLM 更新失败：{name} — {d}',
+    llmRes_success: 'LLM 已更新', llmRes_keep: 'LLM 保持不动', llmRes_failed: 'LLM 失败', llmRes_running: 'LLM 执行中',
     llmUpdateAll: 'LLM 更新全部（{n}）',
     llmConfirmBody: '以下 {n} 个插件将由 LLM Agent 按 dsh-plugin-upgrade skill 决策并执行更新。',
     llmConfirmSkipped: '采集失败将跳过：{s}',
@@ -590,10 +678,15 @@ const STRINGS = {
     incompat: 'Incompatible with current DSH', update: 'Update', updating: 'Updating…',
     llmUpdate: 'LLM update', llmUpdating: 'LLM deciding…', llmConfirmTitle: 'Confirm LLM update',
     llmSourceBadge: 'Source: {s}', llmVendorWarn: 'Local custom build! Mechanical update would overwrite — verify upstream adoption first',
+    llmProfileDir: 'Install location: {p}',
     llmConfirm: 'Confirm & run', llmCancel: 'Cancel',
     llmPromptReady: 'LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.',
     llmPreparing: 'Preparing plugin info…', llmPreparedError: 'Prepare failed: {e}',
     llmSessionLink: 'View session',
+    llmBusy: 'LLM running…',
+    llmDone: 'LLM update done: {name} — {d}',
+    llmFailed: 'LLM update failed: {name} — {d}',
+    llmRes_success: 'LLM updated', llmRes_keep: 'LLM kept', llmRes_failed: 'LLM failed', llmRes_running: 'LLM running',
     llmUpdateAll: 'LLM update all（{n}）',
     llmConfirmBody: 'LLM Agent will decide & run the update for these {n} plugin(s) per the dsh-plugin-upgrade skill.',
     llmConfirmSkipped: 'Skipped (prepare failed): {s}',
@@ -909,6 +1002,12 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   useUpdatingVersion()
   // LLM 更新 state(模块级,跨面板保留)
   useLlmUpdatingVersion()
+  useLlmResultVersion()
+  // 重挂/刷新后从 host 恢复 LLM 状态(running 的继续轮询,终态的展示结果)。
+  useEffect(() => {
+    if (updates === null) return
+    void restoreLlmStates(updates.map(u => u.name))
+  }, [updates])
   if (updates === null) return <p className="pc-sub">{t('checkingUpdates')}</p>
   // 已更新（直装/pending）的卡片：磁盘已最新，checkUpdates 会清空更新列表，
   // 但用户需要保留卡片并点击触发重启（「已更新待重启」窗口期）。
@@ -930,8 +1029,15 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             {pendingInstall.has(u.name) && <span className="pc-tag">{t('pendingRestart')}</span>}
+            {llmUpdating.has(u.name) && <span className="pc-tag">{t('llmBusy')}</span>}
+            {llmResults.get(u.name) !== undefined && (() => {
+              const r = llmResults.get(u.name)!
+              const cls = r.status === 'success' ? '' : r.status === 'failed' ? 'danger' : 'warn'
+              return <span className={`pc-tag ${cls}`} title={r.detail}>{t(`llmRes_${r.status}`)}</span>
+            })()}
             <span className="pc-spacer" />
-            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) ? t('llmUpdating') : t('llmUpdate')}</button>
+            {llmSessionByPlugin.has(u.name) && <button className="pc-btn" onClick={() => { const id = llmSessionByPlugin.get(u.name); if (id !== undefined) sessionsSvc?.open?.(id) }}>{t('llmSessionLink')}</button>}
+            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) ? t('llmBusy') : t('llmUpdate')}</button>
             <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
           </div>
           {u.changelog.length > 0 && (
@@ -1175,7 +1281,9 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
     // 成功:补标题便于下次复用判断(失败忽略——空白会话仍会复用)。
     session.rename?.('插件更新').catch(() => {})
     setLlmSessionId(id)
-    for (const p of pkgs) setLlmUpdating(p.name, false)
+    // 保持「执行中」直到 host JSONL 出现终态(轮询收敛);会话 id 供查看跳转。
+    for (const p of pkgs) llmSessionByPlugin.set(p.name, id)
+    for (const p of pkgs) startLlmPolling(p.name)
     showToast(S.llmPromptReady.replace('{name}', pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} 个插件`), 'ok', 8000)
     if (name === '__all__') closeWhatsNew()
   } catch (e) {
@@ -1216,6 +1324,7 @@ function LlmConfirmDialog() {
                 {p.isVendorModified && <span className="pc-tag warn" title={t('llmVendorWarn')}>vendor</span>}
                 {p.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
               </div>
+              <div style={{ fontSize: 11, color: 'var(--dsw-alias-label-secondary, #67748a)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{t('llmProfileDir', { p: p.profileDir })}</div>
               {p.changelog.length > 0 && (
                 <ul className="pc-wn-list" style={{ margin: 0 }}>
                   {p.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
@@ -1572,7 +1681,7 @@ function CenterPanel({ variant = 'section' }: { variant?: 'section' | 'overlay' 
   const head = (showTitle: boolean) => (
     <div className="pc-head">
       {showTitle && <span className="pc-title">{t('title')}</span>}
-      <span className="pc-sub">{t('headSummary', { a: counts.installed, b: updates?.length ?? 0, c: counts.failed })}</span>
+      <span className="pc-sub">{t('headSummary', { a: counts.installed, b: updates === null ? '…' : updates.length, c: counts.failed })}</span>
       <span className="pc-spacer" />
       <button className="pc-btn" disabled={checking} onClick={() => { refreshUpdates() }}>{checking ? t('checking') : t('check')}</button>
       <button className="pc-btn primary" disabled={!(updates?.length) || busyUpdate !== null} onClick={() => { void updateAll() }}>{t('updateAll', { n: updates?.length ?? 0 })}</button>
@@ -1791,7 +1900,7 @@ function WhatsNewDialog() {
           <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>
           <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
           <button className="pc-btn" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
-          <button className="pc-btn primary" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { llmPrepareAll(whatsNewDigests.map(u => u.name)) }}>{llmUpdating.size > 0 ? t('llmUpdating') : t('llmUpdateAll', { n: whatsNewDigests.length })}</button>
+          <button className="pc-btn primary" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { llmPrepareAll(whatsNewDigests.map(u => u.name)) }}>{llmUpdating.size > 0 ? t('llmBusy') : t('llmUpdateAll', { n: whatsNewDigests.length })}</button>
         </div>
       </div>
     </div>

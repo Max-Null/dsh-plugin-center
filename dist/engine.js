@@ -406,6 +406,36 @@ export class PluginCenterEngine extends Service {
         }
         catch { /* 日志失败绝不影响主流程 */ }
     }
+    /** 读取某个插件最近一条 LLM 更新动作(JSONL 逆序找 name 匹配);
+     *  无记录返回 null。client 轮询据此做三态(进行中/成功/失败)。 */
+    async readLlmUpdateResult(name) {
+        try {
+            const file = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'plugin-center', 'llm-update-log.jsonl');
+            const text = await readFile(file, 'utf8');
+            const lines = text.split('\n');
+            for (let i = lines.length - 1; i >= 0; i--) {
+                const line = lines[i]?.trim();
+                if (line === undefined || line === '')
+                    continue;
+                try {
+                    const rec = JSON.parse(line);
+                    if (rec.name === name) {
+                        return {
+                            at: typeof rec.at === 'number' ? rec.at : 0,
+                            action: typeof rec.action === 'string' ? rec.action : '',
+                            detail: typeof rec.detail === 'string' ? rec.detail : '',
+                            status: (rec.status === 'pending' || rec.status === 'running' || rec.status === 'success' || rec.status === 'failed') ? rec.status : 'running',
+                        };
+                    }
+                }
+                catch { /* 坏行跳过 */ }
+            }
+            return null;
+        }
+        catch {
+            return null;
+        }
+    }
     /** 串行执行一次 pnpm 操作并失效缓存（无论成败都放行链条后续任务）。 */
     enqueuePnpm(op) {
         const run = this.pnpmChain.then(async () => {

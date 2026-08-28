@@ -306,6 +306,79 @@ function useLlmFallback() {
 }
 var sessionsSvc = null;
 var workspacesSvc = null;
+var llmResults = /* @__PURE__ */ new Map();
+var llmResultListeners = /* @__PURE__ */ new Set();
+function setLlmResult(name, rec) {
+  if (rec === null) llmResults.delete(name);
+  else llmResults.set(name, rec);
+  llmResultListeners.forEach((l) => l());
+}
+function useLlmResultVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    llmResultListeners.add(l);
+    return () => {
+      llmResultListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+var llmPollTimers = /* @__PURE__ */ new Map();
+var LLM_POLL_MS = 5e3;
+var LLM_POLL_MAX = 240;
+function stopLlmPolling(name) {
+  const t = llmPollTimers.get(name);
+  if (t !== void 0) {
+    window.clearInterval(t);
+    llmPollTimers.delete(name);
+  }
+}
+function startLlmPolling(name) {
+  if (llmPollTimers.has(name)) return;
+  let count = 0;
+  const timer = window.setInterval(() => {
+    count++;
+    void rpc("llm-update.result", { name }).then((v) => {
+      const rec = v;
+      if (rec === null || rec.status === "running" || rec.status === "pending") {
+        if (count >= LLM_POLL_MAX) stopLlmPolling(name);
+        return;
+      }
+      stopLlmPolling(name);
+      setLlmUpdating(name, false);
+      setLlmResult(name, rec);
+      const S = STRINGS[localeId];
+      const brief = rec.detail.length > 120 ? `${rec.detail.slice(0, 120)}\u2026` : rec.detail;
+      showToast(
+        rec.status === "success" ? S.llmDone.replace("{name}", name).replace("{d}", brief) : S.llmFailed.replace("{name}", name).replace("{d}", brief),
+        rec.status === "success" ? "ok" : "error",
+        12e3
+      );
+    }).catch(() => {
+    });
+  }, LLM_POLL_MS);
+  llmPollTimers.set(name, timer);
+}
+async function restoreLlmStates(names) {
+  for (const name of names) {
+    if (llmUpdating.has(name) || llmResults.has(name)) continue;
+    try {
+      const rec = await rpc("llm-update.result", { name });
+      if (rec === null) continue;
+      if (rec.status === "running" || rec.status === "pending") {
+        setLlmUpdating(name, true);
+        startLlmPolling(name);
+      } else {
+        setLlmResult(name, rec);
+      }
+    } catch {
+    }
+  }
+}
+var llmSessionByPlugin = /* @__PURE__ */ new Map();
 var pendingToggles = /* @__PURE__ */ new Map();
 var pendingListeners = /* @__PURE__ */ new Set();
 function setPendingToggle(id, action) {
@@ -477,12 +550,20 @@ var STRINGS = {
     llmConfirmTitle: "\u786E\u8BA4 LLM \u66F4\u65B0",
     llmSourceBadge: "\u6765\u6E90\uFF1A{s}",
     llmVendorWarn: "\u672C\u5730\u5B9A\u5236!\u673A\u68B0\u66F4\u65B0\u4F1A\u8986\u76D6,\u5148\u6838\u5BF9\u4F5C\u8005\u662F\u5426\u5DF2\u91C7\u7EB3",
+    llmProfileDir: "\u5B89\u88C5\u4F4D\u7F6E\uFF1A{p}",
     llmConfirm: "\u786E\u8BA4\u5E76\u6267\u884C",
     llmCancel: "\u53D6\u6D88",
     llmPromptReady: "LLM \u66F4\u65B0\u5DF2\u53D1\u8D77\uFF1A{name}\u3002\u8BF7\u5728\u4F1A\u8BDD\u4E2D\u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u6267\u884C\u3002",
     llmPreparing: "\u91C7\u96C6\u63D2\u4EF6\u4FE1\u606F\u4E2D\u2026",
     llmPreparedError: "\u4FE1\u606F\u5305\u91C7\u96C6\u5931\u8D25\uFF1A{e}",
     llmSessionLink: "\u67E5\u770B\u4F1A\u8BDD",
+    llmBusy: "LLM \u6267\u884C\u4E2D\u2026",
+    llmDone: "LLM \u66F4\u65B0\u5B8C\u6210\uFF1A{name} \u2014 {d}",
+    llmFailed: "LLM \u66F4\u65B0\u5931\u8D25\uFF1A{name} \u2014 {d}",
+    llmRes_success: "LLM \u5DF2\u66F4\u65B0",
+    llmRes_keep: "LLM \u4FDD\u6301\u4E0D\u52A8",
+    llmRes_failed: "LLM \u5931\u8D25",
+    llmRes_running: "LLM \u6267\u884C\u4E2D",
     llmUpdateAll: "LLM \u66F4\u65B0\u5168\u90E8\uFF08{n}\uFF09",
     llmConfirmBody: "\u4EE5\u4E0B {n} \u4E2A\u63D2\u4EF6\u5C06\u7531 LLM Agent \u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u5E76\u6267\u884C\u66F4\u65B0\u3002",
     llmConfirmSkipped: "\u91C7\u96C6\u5931\u8D25\u5C06\u8DF3\u8FC7\uFF1A{s}",
@@ -580,12 +661,20 @@ var STRINGS = {
     llmConfirmTitle: "Confirm LLM update",
     llmSourceBadge: "Source: {s}",
     llmVendorWarn: "Local custom build! Mechanical update would overwrite \u2014 verify upstream adoption first",
+    llmProfileDir: "Install location: {p}",
     llmConfirm: "Confirm & run",
     llmCancel: "Cancel",
     llmPromptReady: "LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.",
     llmPreparing: "Preparing plugin info\u2026",
     llmPreparedError: "Prepare failed: {e}",
     llmSessionLink: "View session",
+    llmBusy: "LLM running\u2026",
+    llmDone: "LLM update done: {name} \u2014 {d}",
+    llmFailed: "LLM update failed: {name} \u2014 {d}",
+    llmRes_success: "LLM updated",
+    llmRes_keep: "LLM kept",
+    llmRes_failed: "LLM failed",
+    llmRes_running: "LLM running",
     llmUpdateAll: "LLM update all\uFF08{n}\uFF09",
     llmConfirmBody: "LLM Agent will decide & run the update for these {n} plugin(s) per the dsh-plugin-upgrade skill.",
     llmConfirmSkipped: "Skipped (prepare failed): {s}",
@@ -918,6 +1007,11 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   const t = useT();
   useUpdatingVersion();
   useLlmUpdatingVersion();
+  useLlmResultVersion();
+  (0, import_react.useEffect)(() => {
+    if (updates === null) return;
+    void restoreLlmStates(updates.map((u) => u.name));
+  }, [updates]);
   if (updates === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("checkingUpdates") });
   const doneOnly = doneUpdates.filter((d) => !(updates ?? []).some((u) => u.name === d.name));
   if (updates.length === 0 && doneOnly.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -933,10 +1027,20 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
         u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
         pendingInstall.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("pendingRestart") }),
+        llmUpdating.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("llmBusy") }),
+        llmResults.get(u.name) !== void 0 && (() => {
+          const r = llmResults.get(u.name);
+          const cls = r.status === "success" ? "" : r.status === "failed" ? "danger" : "warn";
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-tag ${cls}`, title: r.detail, children: t(`llmRes_${r.status}`) });
+        })(),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+        llmSessionByPlugin.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: () => {
+          const id = llmSessionByPlugin.get(u.name);
+          if (id !== void 0) sessionsSvc?.open?.(id);
+        }, children: t("llmSessionLink") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name), onClick: () => {
           llmPrepare(u.name);
-        }, children: llmUpdating.has(u.name) ? t("llmUpdating") : t("llmUpdate") }),
+        }, children: llmUpdating.has(u.name) ? t("llmBusy") : t("llmUpdate") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name), onClick: () => {
           updateOne(u.name, u.toVersion);
         }, children: busy === u.name || busy === "__all__" || updatingPlugins.has(u.name) ? t("updating") : t("update") })
@@ -1165,7 +1269,8 @@ async function llmExecute(pkgs, name) {
     session.rename?.("\u63D2\u4EF6\u66F4\u65B0").catch(() => {
     });
     setLlmSessionId(id);
-    for (const p of pkgs) setLlmUpdating(p.name, false);
+    for (const p of pkgs) llmSessionByPlugin.set(p.name, id);
+    for (const p of pkgs) startLlmPolling(p.name);
     showToast(S.llmPromptReady.replace("{name}", pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} \u4E2A\u63D2\u4EF6`), "ok", 8e3);
     if (name === "__all__") closeWhatsNew();
   } catch (e) {
@@ -1193,6 +1298,7 @@ function LlmConfirmDialog() {
         p.isVendorModified && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", title: t("llmVendorWarn"), children: "vendor" }),
         p.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: "var(--dsw-alias-label-secondary, #67748a)", fontFamily: "monospace", wordBreak: "break-all" }, children: t("llmProfileDir", { p: p.profileDir }) }),
       p.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", style: { margin: 0 }, children: p.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
     ] }, p.name))
   ] });
@@ -1518,7 +1624,7 @@ function CenterPanel({ variant = "section" }) {
   ] });
   const head = (showTitle) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-head", children: [
     showTitle && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("title") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", children: t("headSummary", { a: counts.installed, b: updates?.length ?? 0, c: counts.failed }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", children: t("headSummary", { a: counts.installed, b: updates === null ? "\u2026" : updates.length, c: counts.failed }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: checking, onClick: () => {
       refreshUpdates();
@@ -1743,7 +1849,7 @@ function WhatsNewDialog() {
       }, children: busy ? t("updating") : t("updateNow") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy || llmUpdating.size > 0 || llmConfirm !== null, onClick: () => {
         llmPrepareAll(whatsNewDigests.map((u) => u.name));
-      }, children: llmUpdating.size > 0 ? t("llmUpdating") : t("llmUpdateAll", { n: whatsNewDigests.length }) })
+      }, children: llmUpdating.size > 0 ? t("llmBusy") : t("llmUpdateAll", { n: whatsNewDigests.length }) })
     ] })
   ] }) });
 }
