@@ -9,7 +9,7 @@
 // 2026-08-22 slot crash). react-dom is bundled by build-client.mjs.
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decideLlmState, decideLlmRestore } from './llm-decision.ts'
+import { decideLlmState, decideLlmRestore, llmResultLabelKey } from './llm-decision.ts'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `
@@ -429,11 +429,13 @@ async function convergeLlmState(name: string): Promise<boolean> {
     setLlmResult(name, rec!)
     const S = STRINGS[localeId]
     const brief = (rec?.detail ?? '').length > 120 ? `${(rec?.detail ?? '').slice(0, 120)}…` : (rec?.detail ?? '')
-    showToast(
-      decision === 'success' ? S.llmDone.replace('{name}', name).replace('{d}', brief) : S.llmFailed.replace('{name}', name).replace('{d}', brief),
-      decision === 'success' ? 'ok' : 'error',
-      12000,
-    )
+    // keep(决策=保持不动)绝不显示「已更新」——文案按 action 细分。
+    const msg = decision === 'failed'
+      ? S.llmFailed.replace('{name}', name).replace('{d}', brief)
+      : rec?.action === 'keep'
+        ? S.llmKept.replace('{name}', name).replace('{d}', brief)
+        : S.llmDone.replace('{name}', name).replace('{d}', brief)
+    showToast(msg, decision === 'success' ? 'ok' : 'error', 12000)
   } else {
     // ended(会话已停/已清理,未回传)。
     setLlmResult(name, { at: Date.now(), action: 'ended', detail: '', status: 'ended' })
@@ -663,6 +665,7 @@ const STRINGS = {
     llmBusy: 'LLM 执行中…',
     llmDone: 'LLM 更新完成：{name} — {d}',
     llmFailed: 'LLM 更新失败：{name} — {d}',
+    llmKept: 'LLM 决策：保持 {name}（未更新）— {d}',
     llmRes_success: 'LLM 已更新', llmRes_keep: 'LLM 保持不动', llmRes_failed: 'LLM 失败', llmRes_running: 'LLM 执行中', llmRes_ended: 'LLM 已结束',
     llmEnded: 'LLM 更新已结束：{name}(未回传决策,可查看会话)',
     llmUpdateAll: 'LLM 更新全部（{n}）',
@@ -726,6 +729,7 @@ const STRINGS = {
     llmBusy: 'LLM running…',
     llmDone: 'LLM update done: {name} — {d}',
     llmFailed: 'LLM update failed: {name} — {d}',
+    llmKept: 'LLM decided: keep {name} (no update) — {d}',
     llmRes_success: 'LLM updated', llmRes_keep: 'LLM kept', llmRes_failed: 'LLM failed', llmRes_running: 'LLM running', llmRes_ended: 'LLM ended',
     llmEnded: 'LLM update ended: {name} (no decision returned; view session)',
     llmUpdateAll: 'LLM update all（{n}）',
@@ -1075,7 +1079,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             {llmResults.get(u.name) !== undefined && (() => {
               const r = llmResults.get(u.name)!
               const cls = r.status === 'success' ? '' : r.status === 'failed' ? 'danger' : 'warn'
-              return <span className={`pc-tag ${cls}`} title={r.detail}>{t(`llmRes_${r.status}`)}</span>
+              return <span className={`pc-tag ${cls}`} title={r.detail}>{t(llmResultLabelKey(r.status, r.action))}</span>
             })()}
             <span className="pc-spacer" />
             {llmSessionByPlugin.has(u.name) && <button className="pc-btn" onClick={() => {

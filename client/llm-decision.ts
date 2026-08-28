@@ -35,3 +35,14 @@ export function decideLlmRestore(input: { rec: { status: string } | null, sessio
   if (rec.status !== 'running' && rec.status !== 'pending') return 'none' // 已有终态记录,restore 直接取结果
   return sessionRunning === false ? 'ended' : 'continue'
 }
+
+/** 结果 badge/toast 文案键:按 status + action 细分。
+ *  keep(保持不动)绝不可渲染成「已更新」——2026-08-29 Agent 回传 keep、
+ *  UI 显示「LLM 已更新」的事实性错误回归。 */
+export function llmResultLabelKey(status: string, action: string): string {
+  if (status === 'failed') return 'llmRes_failed'
+  if (status === 'ended') return 'llmRes_ended'
+  if (status === 'success') return action === 'keep' ? 'llmRes_keep' : 'llmRes_success'
+  return 'llmRes_running'
+}
+

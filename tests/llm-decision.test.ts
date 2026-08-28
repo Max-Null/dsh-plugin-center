@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideLlmState, decideLlmRestore } from '../client/llm-decision.ts'
+import { decideLlmState, decideLlmRestore, llmResultLabelKey } from '../client/llm-decision.ts'
 
 describe('decideLlmState(轮询收敛:LLM 更新状态机的核心)', () => {
   it('JSONL 无记录 → continue', () => {
@@ -55,5 +55,27 @@ describe('decideLlmRestore(重挂/刷新恢复)', () => {
 
   it('running 但会话已停/不存在 → ended(回归:恢复后不再卡执行中)', () => {
     expect(decideLlmRestore({ rec: { status: 'running' }, sessionRunning: false })).toBe('ended')
+  })
+})
+
+describe('llmResultLabelKey(结果文案映射:keep 绝不能显示成已更新)', () => {
+  it('success + keep → 保持不动', () => {
+    expect(llmResultLabelKey('success', 'keep')).toBe('llmRes_keep')
+  })
+
+  it('success + upgrade/switch-npm/fix-peer → 已更新', () => {
+    expect(llmResultLabelKey('success', 'upgrade')).toBe('llmRes_success')
+    expect(llmResultLabelKey('success', 'switch-npm')).toBe('llmRes_success')
+    expect(llmResultLabelKey('success', 'fix-peer')).toBe('llmRes_success')
+  })
+
+  it('failed → 失败;ended → 已结束', () => {
+    expect(llmResultLabelKey('failed', 'keep')).toBe('llmRes_failed')
+    expect(llmResultLabelKey('ended', '')).toBe('llmRes_ended')
+  })
+
+  it('running/pending → 执行中', () => {
+    expect(llmResultLabelKey('running', '')).toBe('llmRes_running')
+    expect(llmResultLabelKey('pending', '')).toBe('llmRes_running')
   })
 })

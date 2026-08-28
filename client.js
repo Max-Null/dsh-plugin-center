@@ -48,6 +48,12 @@ function decideLlmRestore(input) {
   if (rec.status !== "running" && rec.status !== "pending") return "none";
   return sessionRunning === false ? "ended" : "continue";
 }
+function llmResultLabelKey(status, action) {
+  if (status === "failed") return "llmRes_failed";
+  if (status === "ended") return "llmRes_ended";
+  if (status === "success") return action === "keep" ? "llmRes_keep" : "llmRes_success";
+  return "llmRes_running";
+}
 
 // client/index.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
@@ -367,11 +373,8 @@ async function convergeLlmState(name) {
     setLlmResult(name, rec);
     const S = STRINGS[localeId];
     const brief = (rec?.detail ?? "").length > 120 ? `${(rec?.detail ?? "").slice(0, 120)}\u2026` : rec?.detail ?? "";
-    showToast(
-      decision === "success" ? S.llmDone.replace("{name}", name).replace("{d}", brief) : S.llmFailed.replace("{name}", name).replace("{d}", brief),
-      decision === "success" ? "ok" : "error",
-      12e3
-    );
+    const msg = decision === "failed" ? S.llmFailed.replace("{name}", name).replace("{d}", brief) : rec?.action === "keep" ? S.llmKept.replace("{name}", name).replace("{d}", brief) : S.llmDone.replace("{name}", name).replace("{d}", brief);
+    showToast(msg, decision === "success" ? "ok" : "error", 12e3);
   } else {
     setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
     showToast(STRINGS[localeId].llmEnded.replace("{name}", name), "error", 1e4);
@@ -602,6 +605,7 @@ var STRINGS = {
     llmBusy: "LLM \u6267\u884C\u4E2D\u2026",
     llmDone: "LLM \u66F4\u65B0\u5B8C\u6210\uFF1A{name} \u2014 {d}",
     llmFailed: "LLM \u66F4\u65B0\u5931\u8D25\uFF1A{name} \u2014 {d}",
+    llmKept: "LLM \u51B3\u7B56\uFF1A\u4FDD\u6301 {name}\uFF08\u672A\u66F4\u65B0\uFF09\u2014 {d}",
     llmRes_success: "LLM \u5DF2\u66F4\u65B0",
     llmRes_keep: "LLM \u4FDD\u6301\u4E0D\u52A8",
     llmRes_failed: "LLM \u5931\u8D25",
@@ -717,6 +721,7 @@ var STRINGS = {
     llmBusy: "LLM running\u2026",
     llmDone: "LLM update done: {name} \u2014 {d}",
     llmFailed: "LLM update failed: {name} \u2014 {d}",
+    llmKept: "LLM decided: keep {name} (no update) \u2014 {d}",
     llmRes_success: "LLM updated",
     llmRes_keep: "LLM kept",
     llmRes_failed: "LLM failed",
@@ -1079,7 +1084,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         llmResults.get(u.name) !== void 0 && (() => {
           const r = llmResults.get(u.name);
           const cls = r.status === "success" ? "" : r.status === "failed" ? "danger" : "warn";
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-tag ${cls}`, title: r.detail, children: t(`llmRes_${r.status}`) });
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-tag ${cls}`, title: r.detail, children: t(llmResultLabelKey(r.status, r.action)) });
         })(),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
         llmSessionByPlugin.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: () => {

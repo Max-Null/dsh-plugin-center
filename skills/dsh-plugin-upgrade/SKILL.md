@@ -93,9 +93,11 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 1. **写主机状态文件（插件中心轮询的证据源）**：把决策结果以**单行 JSON** 追加到
    `$env:DSH_HOME\plugin-center\llm-update-log.jsonl`（`~/.dsh/plugin-center/` 下）：
    ```powershell
-   Add-Content -Path "$env:DSH_HOME\plugin-center\llm-update-log.jsonl" -Value '{"name":"<插件名>","action":"upgrade|keep|switch-npm|fix-peer|failed","detail":"<一句话摘要,含实体版本/命令/错误>","status":"success|pending|failed"}'
+   Add-Content -Path "$env:DSH_HOME\plugin-center\llm-update-log.jsonl" -Value '{"name":"<插件名>","action":"upgrade|keep|switch-npm|fix-peer|failed","detail":"<一句话摘要,含实体版本/命令/错误>","status":"success|pending|failed","at":<当前毫秒时间戳>}'
    ```
-   字段要求：`status` 只允许 `success` / `pending` / `failed`；`detail` 一行内写完。
+   字段要求：`status` 只允许 `success` / `pending` / `failed`；`detail` 一行内写完；
+   `at` 填当前毫秒时间戳（PowerShell: `[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()`）；
+   action=keep 表示「保持不动、未更新」——插件中心据此显示「保持」而非「已更新」。
 2. 同时在会话最后一条消息用同一格式回传（供用户阅读），例如：
    ```
    action: upgrade
