@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { sourceOf, dependencySpecifierOf, buildLlmPrompt, tarballNameOf, type LlmUpdatePackage } from '../src/update.ts'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import {
+  sourceOf, dependencySpecifierOf, buildLlmPrompt, tarballNameOf, normalizeRepoUrl, isSameUpstream, clearNpmRepoCache,
+  type LlmUpdatePackage,
+} from '../src/update.ts'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -96,4 +99,40 @@ describe('tarballNameOf', () => {
   it('拼接 <name>-<version>.tgz', () => {
     expect(tarballNameOf('dsh-sidebar-qa', '0.4.2')).toBe('dsh-sidebar-qa-0.4.2.tgz')
   })
+})
+
+describe('normalizeRepoUrl(上游同源判定)', () => {
+  beforeEach(() => { clearNpmRepoCache() })
+
+  it('归一化: scheme/git+/@/尾 .git/斜杠/大小写', () => {
+    expect(normalizeRepoUrl('git+https://github.com/Dream12347/dsh-session-manager.git')).toBe('dream12347/dsh-session-manager')
+    expect(normalizeRepoUrl('github.com/Hkkz9522/dsh-session-manager')).toBe('hkkz9522/dsh-session-manager')
+    expect(normalizeRepoUrl('https://github.com/A/B/')).toBe('a/b')
+  })
+
+  it('同名异源: 本地定制 vs 独立同名项目(repository 不同)→ false', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      // 模拟 npm packument:根级 repository 为 hkkz9522 的项目
+      expect(String(url)).toContain('dsh-session-manager')
+      return { ok: true, json: async () => ({ repository: { url: 'git+https://github.com/Hkkz9522/dsh-session-manager.git' } }) }
+    }))
+    const same = await isSameUpstream('https://github.com/Dream12347/dsh-session-manager', 'dsh-session-manager')
+    await vi.waitFor(() => {}) // flush promises
+    expect(same).toBe(false)
+  })
+
+  it('同一上游(repository 一致, 仅格式差异)→ true', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ repository: { url: 'git+https://github.com/a/b.git' } }) })))
+    expect(await isSameUpstream('https://github.com/a/b', 'pkg')).toBe(true)
+  })
+
+  it('任一侧缺 repo → null(无法判定不误判)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ repository: { url: '' } }) })))
+    expect(await isSameUpstream(null, 'pkg')).toBeNull()
+    expect(await isSameUpstream('https://github.com/a/b', 'pkg')).toBeNull()
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })

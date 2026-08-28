@@ -35,6 +35,62 @@ export async function npmLatest(packageName: string): Promise<string | null> {
   return null
 }
 
+// ---- 上游同源判定(2026-08-29):包名相同 ≠ 同一项目 ---------------
+// 案例: dsh-session-manager 本地 0.2.2(dream12347 定制)vs npm 0.4.1
+// (hkkz9522 独立同名项目)——机械升级按包名匹配会误报并覆盖定制。
+// 本地为 vendor/tarball/local-file 来源时,校验两边 repository 是否一致。
+const npmRepoCache = new Map<string, { at: number, repo: string | null }>()
+const NPM_REPO_TTL = 24 * 3600_000
+
+/** 测试用:清空 repository 缓存(生产无调用)。 */
+export function clearNpmRepoCache(): void { npmRepoCache.clear() }
+
+/** 读 npm 包根级 repository.url(带 24h 缓存;失败/缺失 null)。 */
+export async function npmRepository(packageName: string): Promise<string | null> {
+  const hit = npmRepoCache.get(packageName)
+  if (hit !== undefined && Date.now() - hit.at < NPM_REPO_TTL) return hit.repo
+  let repo: string | null = null
+  for (const registry of ['https://registry.npmjs.org', 'https://registry.npmmirror.com']) {
+    try {
+      const res = await fetch(`${registry}/${packageName}`, { signal: AbortSignal.timeout(8000) })
+      if (res.ok) {
+        const doc = await res.json() as { repository?: { url?: string } | string }
+        repo = typeof doc.repository === 'object' && doc.repository !== null ? doc.repository.url ?? null : typeof doc.repository === 'string' ? doc.repository : null
+        break
+      }
+    } catch { /* next registry */ }
+  }
+  const entry = { at: Date.now(), repo }
+  npmRepoCache.set(packageName, entry)
+  return repo
+}
+
+/** 仓库 URL 归一化(去 scheme/git+ 前缀/尾 .git/尾斜杠/大小写)用于同源比较。 */
+export function normalizeRepoUrl(url: string): string {
+  return url
+    .trim()
+    .replace(/^git\+/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/^git:\/\//, '')
+    .replace(/^ssh:\/\/git@/, '')
+    .replace(/\.git$/, '')
+    .replace(/\/$/, '')
+    .replace(/^github\.com\//, '')
+    .replace(/@/g, '')
+    .toLowerCase()
+}
+
+/** 同源判定:true=同一上游;false=同名异源;null=无法判定(任一侧缺 repo)。 */
+export async function isSameUpstream(localRepoUrl: string | null, packageName: string): Promise<boolean | null> {
+  if (localRepoUrl === null) return null
+  const npmRepo = await npmRepository(packageName)
+  if (npmRepo === null) return null
+  const a = normalizeRepoUrl(localRepoUrl)
+  const b = normalizeRepoUrl(npmRepo)
+  if (a === '' || b === '') return null
+  return a === b
+}
+
 /** Extract owner/repo from a package.json repository field. */
 function repoOf(repoUrl: string | null): { owner: string; repo: string } | null {
   if (repoUrl === null) return null
@@ -560,6 +616,9 @@ export interface LlmUpdatePackage {
   /** 插件所在 profile 目录(host 运行时锚点;LLM 只允许在此目录内操作)。
    *  内部技术字段——不直接展示给用户,由 runtimeLabel 承担语义化表达。 */
   profileDir: string
+  /** 同名异源警告:npm 同名包与本地上游不是同一项目(repository 不一致)。
+   *  真机案例: dsh-session-manager(dream12347 定制)vs npm 0.4.1(独立项目)。 */
+  upstreamMismatch: boolean
   /** 用户可读的环境标签(小白视角):'SSID'(思灵应用内)/'DSH-WEB'。 */
   runtimeLabel: string
   /** 已组装的 Agent prompt(host 单一来源,client 直接注入会话)。 */
@@ -580,6 +639,10 @@ export async function buildLlmPackage(
   const specifier = dependencySpecifierOf(profileDir, name)
   const source = specifier === null ? 'npm' : sourceOf(specifier, profileDir)
   const isVendorModified = source === 'vendor' || source === 'tarball' || source === 'local-file'
+  // 同名异源:本地非 npm 来源时校验 npm 同名包上游是否一致(不一致 → 警告)。
+  const upstreamMismatch = (source === 'vendor' || source === 'tarball' || source === 'local-file')
+    ? (await isSameUpstream(repoUrl, name)) === false
+    : false
   let compat: LlmUpdatePackage['compat'] = 'unknown'
   if (compatRange !== null) {
     compat = satisfies(localDshVersion, compatRange) ? 'compatible' : 'incompatible'
@@ -596,6 +659,7 @@ export async function buildLlmPackage(
     specifier,
     isVendorModified,
     profileDir,
+    upstreamMismatch,
     // 小白视角环境标签:SSiD 内核(kernel.ts)在 boot 时设置该变量;官方 DSH web 无。
     runtimeLabel: process.env.SSID_PENDING_CONSUMER === '1' ? 'SSID' : 'DSH-WEB',
     prompt: '',
@@ -613,6 +677,7 @@ export function buildLlmPrompt(pkg: LlmUpdatePackage): string {
     `当前版本: ${pkg.fromVersion}`,
     `npm 最新: ${pkg.toVersion ?? '(未发布或不可达)'}`,
     `来源: ${srcBadge}${pkg.isVendorModified ? '(本地定制!机械更新会覆盖,需核对作者是否已采纳)' : ''}`,
+    ...(pkg.upstreamMismatch ? [`同名异源警告: npm 上的 ${pkg.name} 与本地上游不是同一项目(repository 不一致,如独立同名项目),升级将丢失本地定制——执行前务必核实来源。`] : []),
     `依赖声明: ${pkg.specifier ?? '(非 npm 依赖)'}`,
     `安装位置: ${pkg.profileDir}(唯一允许操作目录!本会话工作区与之不同,严禁按会话 cwd 操作)`,
     `DSH 兼容: ${pkg.compat} (要求 ${pkg.compatRange ?? '未知'})`,

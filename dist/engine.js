@@ -12,7 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { buildInstalledPlugin, clearPackageCache, resolvePackage } from "./meta.js";
 import { fetchAwesomePluginsJson, fetchDshMarketPlugins, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins, } from "./market.js";
-import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, buildLlmPackage, } from "./update.js";
+import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, buildLlmPackage, dependencySpecifierOf, isSameUpstream, sourceOf, } from "./update.js";
 import { reconcileInstalled, readDependencyKeys } from "./reconcile.js";
 import { readDisabledState, setDisabled, escapeRegExp } from "./toggle.js";
 import { appendLlmLog, readLlmLogLatest } from "./llm-log.js";
@@ -335,7 +335,19 @@ export class PluginCenterEngine extends Service {
             return hit.digests;
         const [installed, localDsh] = await Promise.all([this.listInstalled(), this.dshVersion()]);
         const candidates = installed.filter(p => UPDATABLE.has(p.source) && p.version !== null);
-        const digests = await Promise.all(candidates.map(p => detectUpdate(p.name, p.version, p.repoUrl, p.compatRange, localDsh, sinceIso)));
+        const digests = await Promise.all(candidates.map(async (p) => {
+            // 同名异源保护(2026-08-29):本地自定义来源(依赖声明 vendor/tarball/
+            // local-file)时,校验 npm 同名包是否同一上游——不一致(如 dream12347
+            // 定制 vs hkkz9522 独立同名项目)排除出更新列表,防误报与覆盖定制。
+            const spec = dependencySpecifierOf(this.baseUrl, p.name);
+            const src = spec === null ? 'npm' : sourceOf(spec, this.baseUrl);
+            if (src === 'vendor' || src === 'tarball' || src === 'local-file') {
+                const same = await isSameUpstream(p.repoUrl, p.name);
+                if (same === false)
+                    return null;
+            }
+            return detectUpdate(p.name, p.version, p.repoUrl, p.compatRange, localDsh, sinceIso);
+        }));
         this.updatesCache = { since: sinceIso, at: now, digests: digests.filter((d) => d !== null) };
         return this.updatesCache.digests;
     }

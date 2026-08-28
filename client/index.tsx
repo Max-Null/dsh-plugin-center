@@ -212,6 +212,8 @@ interface LlmUpdatePackage {
   isVendorModified: boolean
   /** 插件所在 profile 目录(内部:专用 workspace 注册/Agent cwd;UI 不展示)。 */
   profileDir: string
+  /** 同名异源警告:npm 同名包与本地上游不是同一项目(防覆盖定制)。 */
+  upstreamMismatch: boolean
   /** 用户可读环境标签:'SSID'(思灵应用内)/'DSH-WEB'。 */
   runtimeLabel: string
   /** 已组装的 Agent prompt(host buildLlmPrompt 单一来源)。 */
@@ -668,6 +670,7 @@ const STRINGS = {
     incompat: '不兼容当前 DSH', update: '更新', updating: '更新中…',
     llmUpdate: 'LLM 更新', llmUpdating: 'LLM 决策中…', llmConfirmTitle: '确认 LLM 更新',
     llmSourceBadge: '来源：{s}', llmVendorWarn: '本地定制!机械更新会覆盖,先核对作者是否已采纳',
+    llmMismatch: '同名异源', llmMismatchHint: 'npm 同名包与本地上游不是同一项目,升级会丢失定制功能',
     llmScopeSsid: '更新范围：仅思灵应用内的插件（AI 助手只动这一处，不会影响你其他地方的安装）',
     llmScopeWeb: '更新范围：仅当前 DSH Web 应用内的插件（AI 助手只动这一处，不会影响你其他地方的安装）',
     llmConfirm: '确认并执行', llmCancel: '取消',
@@ -732,6 +735,7 @@ const STRINGS = {
     incompat: 'Incompatible with current DSH', update: 'Update', updating: 'Updating…',
     llmUpdate: 'LLM update', llmUpdating: 'LLM deciding…', llmConfirmTitle: 'Confirm LLM update',
     llmSourceBadge: 'Source: {s}', llmVendorWarn: 'Local custom build! Mechanical update would overwrite — verify upstream adoption first',
+    llmMismatch: 'Mismatched upstream', llmMismatchHint: 'The npm package with this name is a different project — updating would lose local customizations',
     llmScopeSsid: 'Scope: plugins inside SSiD only (AI touches just this place, nothing elsewhere)',
     llmScopeWeb: 'Scope: plugins inside this DSH Web app only (AI touches just this place, nothing elsewhere)',
     llmConfirm: 'Confirm & run', llmCancel: 'Cancel',
@@ -1428,6 +1432,7 @@ function LlmConfirmDialog() {
                 <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{p.toVersion ?? '—'}</span>
                 <span className={`pc-tag${p.source === 'npm' || p.source === 'official' ? '' : ' warn'}`}>{t('llmSourceBadge', { s: p.source })}</span>
                 {p.isVendorModified && <span className="pc-tag warn" title={t('llmVendorWarn')}>vendor</span>}
+                {p.upstreamMismatch && <span className="pc-tag warn" title={t('llmMismatchHint')}>{t('llmMismatch')}</span>}
                 {p.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--dsw-alias-label-secondary, #67748a)' }}>

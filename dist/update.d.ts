@@ -9,6 +9,14 @@ export interface UpdateDigest {
 }
 /** Latest published version on the npm registry; null when unreachable/unpublished. */
 export declare function npmLatest(packageName: string): Promise<string | null>;
+/** 测试用:清空 repository 缓存(生产无调用)。 */
+export declare function clearNpmRepoCache(): void;
+/** 读 npm 包根级 repository.url(带 24h 缓存;失败/缺失 null)。 */
+export declare function npmRepository(packageName: string): Promise<string | null>;
+/** 仓库 URL 归一化(去 scheme/git+ 前缀/尾 .git/尾斜杠/大小写)用于同源比较。 */
+export declare function normalizeRepoUrl(url: string): string;
+/** 同源判定:true=同一上游;false=同名异源;null=无法判定(任一侧缺 repo)。 */
+export declare function isSameUpstream(localRepoUrl: string | null, packageName: string): Promise<boolean | null>;
 /** Commit-message changelog: the reliable source for repos without release notes. */
 export declare function fetchCommitChangelog(repoUrl: string | null, sinceIso: string): Promise<string[]>;
 /**
@@ -151,6 +159,9 @@ export interface LlmUpdatePackage {
     /** 插件所在 profile 目录(host 运行时锚点;LLM 只允许在此目录内操作)。
      *  内部技术字段——不直接展示给用户,由 runtimeLabel 承担语义化表达。 */
     profileDir: string;
+    /** 同名异源警告:npm 同名包与本地上游不是同一项目(repository 不一致)。
+     *  真机案例: dsh-session-manager(dream12347 定制)vs npm 0.4.1(独立项目)。 */
+    upstreamMismatch: boolean;
     /** 用户可读的环境标签(小白视角):'SSID'(思灵应用内)/'DSH-WEB'。 */
     runtimeLabel: string;
     /** 已组装的 Agent prompt(host 单一来源,client 直接注入会话)。 */
