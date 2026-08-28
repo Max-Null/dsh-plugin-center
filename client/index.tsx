@@ -1087,6 +1087,8 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
               if (id === undefined) return
               // 校验会话仍在列表(重启/删除后)再跳转,避免静默失效。
               if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== undefined) {
+                // 跳转会话并关闭设置面板,让用户直接看到会话内容(2026-08-29)。
+                closeOverlay()
                 sessionsSvc?.open?.(id)
               } else {
                 showToast(STRINGS[localeId].llmSessionMissing, 'error', 5000)

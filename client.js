@@ -1091,6 +1091,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           const id = llmSessionByPlugin.get(u.name);
           if (id === void 0) return;
           if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== void 0) {
+            closeOverlay();
             sessionsSvc?.open?.(id);
           } else {
             showToast(STRINGS[localeId].llmSessionMissing, "error", 5e3);
