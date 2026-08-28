@@ -390,6 +390,7 @@ async function restoreLlmStates(names) {
           llmSessionByPlugin.set(name, updateSession.id);
           startLlmPolling(name);
         } else {
+          setLlmUpdating(name, false);
           setLlmResult(name, { at: rec.at, action: "ended", detail: "", status: "ended" });
         }
       } else {
@@ -1054,7 +1055,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
         u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
         pendingInstall.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("pendingRestart") }),
-        llmUpdating.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("llmBusy") }),
+        llmUpdating.has(u.name) && llmResults.get(u.name) === void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("llmBusy") }),
         llmResults.get(u.name) !== void 0 && (() => {
           const r = llmResults.get(u.name);
           const cls = r.status === "success" ? "" : r.status === "failed" ? "danger" : "warn";
@@ -1065,12 +1066,9 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           const id = llmSessionByPlugin.get(u.name);
           if (id !== void 0) sessionsSvc?.open?.(id);
         }, children: t("llmSessionLink") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name), onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name) && llmResults.get(u.name) === void 0, onClick: () => {
           llmPrepare(u.name);
-        }, children: llmUpdating.has(u.name) ? t("llmBusy") : t("llmUpdate") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name), onClick: () => {
-          updateOne(u.name, u.toVersion);
-        }, children: busy === u.name || busy === "__all__" || updatingPlugins.has(u.name) ? t("updating") : t("update") })
+        }, children: llmUpdating.has(u.name) && llmResults.get(u.name) === void 0 ? t("llmBusy") : t("llmUpdate") })
       ] }),
       u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
     ] }, u.name)),
@@ -1871,9 +1869,6 @@ function WhatsNewDialog() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("later") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("markAllRead") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", disabled: busy || llmUpdating.size > 0 || llmConfirm !== null, onClick: () => {
-        void updateNow();
-      }, children: busy ? t("updating") : t("updateNow") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy || llmUpdating.size > 0 || llmConfirm !== null, onClick: () => {
         llmPrepareAll(whatsNewDigests.map((u) => u.name));
       }, children: llmUpdating.size > 0 ? t("llmBusy") : t("llmUpdateAll", { n: whatsNewDigests.length }) })

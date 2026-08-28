@@ -470,6 +470,8 @@ async function restoreLlmStates(names: string[]): Promise<void> {
           llmSessionByPlugin.set(name, updateSession.id)
           startLlmPolling(name)
         } else {
+          // 会话已结束(未回传)→ ended;防御性清执行中标记,保证互斥。
+          setLlmUpdating(name, false)
           setLlmResult(name, { at: rec.at, action: 'ended', detail: '', status: 'ended' })
         }
       } else {
@@ -1060,7 +1062,8 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             {pendingInstall.has(u.name) && <span className="pc-tag">{t('pendingRestart')}</span>}
-            {llmUpdating.has(u.name) && <span className="pc-tag">{t('llmBusy')}</span>}
+            {/* 终态优先:LLM 结果存在时不再显示「执行中」tag(互斥,2026-08-29)。 */}
+            {llmUpdating.has(u.name) && llmResults.get(u.name) === undefined && <span className="pc-tag">{t('llmBusy')}</span>}
             {llmResults.get(u.name) !== undefined && (() => {
               const r = llmResults.get(u.name)!
               const cls = r.status === 'success' ? '' : r.status === 'failed' ? 'danger' : 'warn'
@@ -1068,8 +1071,10 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             })()}
             <span className="pc-spacer" />
             {llmSessionByPlugin.has(u.name) && <button className="pc-btn" onClick={() => { const id = llmSessionByPlugin.get(u.name); if (id !== undefined) sessionsSvc?.open?.(id) }}>{t('llmSessionLink')}</button>}
-            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) ? t('llmBusy') : t('llmUpdate')}</button>
-            <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button>
+            <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || (llmUpdating.has(u.name) && llmResults.get(u.name) === undefined)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) && llmResults.get(u.name) === undefined ? t('llmBusy') : t('llmUpdate')}</button>
+            {/* 机械更新按钮:先注释,只保留 LLM 驱动入口(2026-08-29 用户确认方向)。
+                updateOne 保留未删,后续需要恢复时取消注释即可。 */}
+            {/* <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button> */}
           </div>
           {u.changelog.length > 0 && (
             <ul className="pc-wn-list">
@@ -1932,7 +1937,8 @@ function WhatsNewDialog() {
         <div className="pc-panel-footer">
           <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>
           <button className="pc-btn" onClick={closeWhatsNew}>{t('markAllRead')}</button>
-          <button className="pc-btn" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button>
+          {/* 机械「立即更新」先注释,只保留 LLM 更新入口(2026-08-29);updateNow 保留未删。 */}
+          {/* <button className="pc-btn" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { void updateNow() }}>{busy ? t('updating') : t('updateNow')}</button> */}
           <button className="pc-btn primary" disabled={busy || llmUpdating.size > 0 || llmConfirm !== null} onClick={() => { llmPrepareAll(whatsNewDigests.map(u => u.name)) }}>{llmUpdating.size > 0 ? t('llmBusy') : t('llmUpdateAll', { n: whatsNewDigests.length })}</button>
         </div>
       </div>
