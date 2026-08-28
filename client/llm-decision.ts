@@ -14,16 +14,19 @@ export interface LlmDecisionInput {
   rec: { status: string } | null
   /** 对应会话行;undefined = 未知(判据 2 依赖它),null 语义不用——用值区分。 */
   sessionRunning: boolean | undefined
+  /** 发起宽限期(Agent 启动窗口)内:会话短暂 running=false 不判 ended,
+   *  避免"刚发起就误判已结束"——2026-08-29 实测回归。 */
+  graceActive?: boolean
 }
 
 /** 收敛判定(不修改任何状态,只给结论)。 */
 export function decideLlmState(input: LlmDecisionInput): LlmDecision {
-  const { rec, sessionRunning } = input
+  const { rec, sessionRunning, graceActive } = input
   if (rec !== null && rec.status !== 'running' && rec.status !== 'pending') {
     return rec.status === 'success' ? 'success' : rec.status === 'failed' ? 'failed' : 'ended'
   }
-  // JSONL 无终态:会话明确已停(或行不在列表=已清理)→ ended。
-  if (sessionRunning === false) return 'ended'
+  // JSONL 无终态:会话明确已停(或行不在列表=已清理)→ ended;宽限期内放过。
+  if (sessionRunning === false && graceActive !== true) return 'ended'
   return 'continue'
 }
 

@@ -429,7 +429,9 @@ async function convergeLlmState(name: string): Promise<boolean> {
   // 2) 会话活跃度判据
   const sid = llmSessionByPlugin.get(name)
   const sessionRunning = sid === undefined ? undefined : (sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]?.running ?? false)
-  const decision = decideLlmState({ rec, sessionRunning })
+  // 发起后 30s 宽限期:Aget 尚未启动完成时 running=false 不判 ended。
+  const graceActive = Date.now() - (llmStartedAt.get(name) ?? 0) < LLM_GRACE_MS
+  const decision = decideLlmState({ rec, sessionRunning, graceActive })
   if (decision === 'continue') return false
   stopLlmPolling(name)
   setLlmUpdating(name, false)
@@ -498,6 +500,9 @@ async function restoreLlmStates(names: string[]): Promise<void> {
 }
 /** 插件名 → 本次 LLM 更新会话 id(「查看会话」跳转)。 */
 const llmSessionByPlugin = new Map<string, string>()
+/** 插件名 → 发起时间戳(轮询宽限期:Aget 启动窗口内不判 ended)。 */
+const llmStartedAt = new Map<string, number>()
+const LLM_GRACE_MS = 30_000
 
 // ---- pending-toggle state: a disable/enable written to the patch layer but
 // not yet applied by a restart (SSiD has no HMR). The card shows a
@@ -1368,6 +1373,8 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
     // 批量「插件更新(批量)」(统一会话)。restore 按标题精确匹配。
     if (isBatch) session.rename?.('插件更新(批量)').catch(() => {})
     else session.rename?.(`插件更新: ${pkgs[0].name}`).catch(() => {})
+    // 记录发起时间(轮询宽限期判定依据)。
+    for (const p of pkgs) llmStartedAt.set(p.name, Date.now())
     // 归档同插件已结束的旧会话(进行中的绝不归档;侧栏不堆积)。
     const rows = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {})
     for (const oldId of pickLlmArchives(rows, pkgs[0]?.name ?? '', isBatch, id)) {

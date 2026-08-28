@@ -31,6 +31,14 @@ describe('decideLlmState(轮询收敛:LLM 更新状态机的核心)', () => {
     expect(decideLlmState({ rec: { status: 'running' }, sessionRunning: false })).toBe('ended')
   })
 
+  it('回归:发起后 30s 宽限期内会话未启动(running=false)不判 ended', () => {
+    expect(decideLlmState({ rec: { status: 'running' }, sessionRunning: false, graceActive: true })).toBe('continue')
+  })
+
+  it('宽限期过后会话仍停 → ended', () => {
+    expect(decideLlmState({ rec: { status: 'running' }, sessionRunning: false, graceActive: false })).toBe('ended')
+  })
+
   it('回归:会话不存在(undefined 行已折叠为 false)→ ended', () => {
     expect(decideLlmState({ rec: { status: 'running' }, sessionRunning: false })).toBe('ended')
   })

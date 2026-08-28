@@ -35,11 +35,11 @@ var import_react = require("react");
 
 // client/llm-decision.ts
 function decideLlmState(input) {
-  const { rec, sessionRunning } = input;
+  const { rec, sessionRunning, graceActive } = input;
   if (rec !== null && rec.status !== "running" && rec.status !== "pending") {
     return rec.status === "success" ? "success" : rec.status === "failed" ? "failed" : "ended";
   }
-  if (sessionRunning === false) return "ended";
+  if (sessionRunning === false && graceActive !== true) return "ended";
   return "continue";
 }
 function decideLlmRestore(input) {
@@ -369,7 +369,8 @@ async function convergeLlmState(name) {
   const rec = await rpc("llm-update.result", { name }).catch(() => null);
   const sid = llmSessionByPlugin.get(name);
   const sessionRunning = sid === void 0 ? void 0 : sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]?.running ?? false;
-  const decision = decideLlmState({ rec, sessionRunning });
+  const graceActive = Date.now() - (llmStartedAt.get(name) ?? 0) < LLM_GRACE_MS;
+  const decision = decideLlmState({ rec, sessionRunning, graceActive });
   if (decision === "continue") return false;
   stopLlmPolling(name);
   setLlmUpdating(name, false);
@@ -426,6 +427,8 @@ async function restoreLlmStates(names) {
   }
 }
 var llmSessionByPlugin = /* @__PURE__ */ new Map();
+var llmStartedAt = /* @__PURE__ */ new Map();
+var LLM_GRACE_MS = 3e4;
 var pendingToggles = /* @__PURE__ */ new Map();
 var pendingListeners = /* @__PURE__ */ new Set();
 function setPendingToggle(id, action) {
@@ -1345,6 +1348,7 @@ async function llmExecute(pkgs, name) {
     });
     else session.rename?.(`\u63D2\u4EF6\u66F4\u65B0: ${pkgs[0].name}`).catch(() => {
     });
+    for (const p of pkgs) llmStartedAt.set(p.name, Date.now());
     const rows = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {});
     for (const oldId of pickLlmArchives(rows, pkgs[0]?.name ?? "", isBatch, id)) {
       void workspacesSvc?.archiveSession?.(oldId).catch(() => {
