@@ -209,8 +209,8 @@ interface LlmUpdatePackage {
   source: 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file'
   specifier: string | null
   isVendorModified: boolean
-  /** 插件所在 profile 目录(LLM 只允许在此目录内操作)。 */
-  profileDir: string
+  /** 用户可读环境标签:'SSID'(思灵应用内)/'DSH-WEB'。 */
+  runtimeLabel: string
   /** 已组装的 Agent prompt(host buildLlmPrompt 单一来源)。 */
   prompt: string
 }
@@ -618,7 +618,8 @@ const STRINGS = {
     incompat: '不兼容当前 DSH', update: '更新', updating: '更新中…',
     llmUpdate: 'LLM 更新', llmUpdating: 'LLM 决策中…', llmConfirmTitle: '确认 LLM 更新',
     llmSourceBadge: '来源：{s}', llmVendorWarn: '本地定制!机械更新会覆盖,先核对作者是否已采纳',
-    llmProfileDir: '安装位置：{p}',
+    llmScopeSsid: '更新范围：仅思灵应用内的插件（AI 助手只动这一处，不会影响你其他地方的安装）',
+    llmScopeWeb: '更新范围：仅当前 DSH Web 应用内的插件（AI 助手只动这一处，不会影响你其他地方的安装）',
     llmConfirm: '确认并执行', llmCancel: '取消',
     llmPromptReady: 'LLM 更新已发起：{name}。请在会话中按 dsh-plugin-upgrade skill 决策执行。',
     llmPreparing: '采集插件信息中…', llmPreparedError: '信息包采集失败：{e}',
@@ -678,7 +679,8 @@ const STRINGS = {
     incompat: 'Incompatible with current DSH', update: 'Update', updating: 'Updating…',
     llmUpdate: 'LLM update', llmUpdating: 'LLM deciding…', llmConfirmTitle: 'Confirm LLM update',
     llmSourceBadge: 'Source: {s}', llmVendorWarn: 'Local custom build! Mechanical update would overwrite — verify upstream adoption first',
-    llmProfileDir: 'Install location: {p}',
+    llmScopeSsid: 'Scope: plugins inside SSiD only (AI touches just this place, nothing elsewhere)',
+    llmScopeWeb: 'Scope: plugins inside this DSH Web app only (AI touches just this place, nothing elsewhere)',
     llmConfirm: 'Confirm & run', llmCancel: 'Cancel',
     llmPromptReady: 'LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.',
     llmPreparing: 'Preparing plugin info…', llmPreparedError: 'Prepare failed: {e}',
@@ -1324,7 +1326,9 @@ function LlmConfirmDialog() {
                 {p.isVendorModified && <span className="pc-tag warn" title={t('llmVendorWarn')}>vendor</span>}
                 {p.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--dsw-alias-label-secondary, #67748a)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{t('llmProfileDir', { p: p.profileDir })}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--dsw-alias-label-secondary, #67748a)' }}>
+                {p.runtimeLabel === 'SSID' ? t('llmScopeSsid') : t('llmScopeWeb')}
+              </div>
               {p.changelog.length > 0 && (
                 <ul className="pc-wn-list" style={{ margin: 0 }}>
                   {p.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}

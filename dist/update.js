@@ -521,6 +521,8 @@ export async function buildLlmPackage(name, localVersion, repoUrl, compatRange, 
         specifier,
         isVendorModified,
         profileDir,
+        // 小白视角环境标签:SSiD 内核(kernel.ts)在 boot 时设置该变量;官方 DSH web 无。
+        runtimeLabel: process.env.SSID_PENDING_CONSUMER === '1' ? 'SSID' : 'DSH-WEB',
         prompt: '',
     };
     return { ...pkg, prompt: buildLlmPrompt(pkg) };

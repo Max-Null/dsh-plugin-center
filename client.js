@@ -550,7 +550,8 @@ var STRINGS = {
     llmConfirmTitle: "\u786E\u8BA4 LLM \u66F4\u65B0",
     llmSourceBadge: "\u6765\u6E90\uFF1A{s}",
     llmVendorWarn: "\u672C\u5730\u5B9A\u5236!\u673A\u68B0\u66F4\u65B0\u4F1A\u8986\u76D6,\u5148\u6838\u5BF9\u4F5C\u8005\u662F\u5426\u5DF2\u91C7\u7EB3",
-    llmProfileDir: "\u5B89\u88C5\u4F4D\u7F6E\uFF1A{p}",
+    llmScopeSsid: "\u66F4\u65B0\u8303\u56F4\uFF1A\u4EC5\u601D\u7075\u5E94\u7528\u5185\u7684\u63D2\u4EF6\uFF08AI \u52A9\u624B\u53EA\u52A8\u8FD9\u4E00\u5904\uFF0C\u4E0D\u4F1A\u5F71\u54CD\u4F60\u5176\u4ED6\u5730\u65B9\u7684\u5B89\u88C5\uFF09",
+    llmScopeWeb: "\u66F4\u65B0\u8303\u56F4\uFF1A\u4EC5\u5F53\u524D DSH Web \u5E94\u7528\u5185\u7684\u63D2\u4EF6\uFF08AI \u52A9\u624B\u53EA\u52A8\u8FD9\u4E00\u5904\uFF0C\u4E0D\u4F1A\u5F71\u54CD\u4F60\u5176\u4ED6\u5730\u65B9\u7684\u5B89\u88C5\uFF09",
     llmConfirm: "\u786E\u8BA4\u5E76\u6267\u884C",
     llmCancel: "\u53D6\u6D88",
     llmPromptReady: "LLM \u66F4\u65B0\u5DF2\u53D1\u8D77\uFF1A{name}\u3002\u8BF7\u5728\u4F1A\u8BDD\u4E2D\u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u6267\u884C\u3002",
@@ -661,7 +662,8 @@ var STRINGS = {
     llmConfirmTitle: "Confirm LLM update",
     llmSourceBadge: "Source: {s}",
     llmVendorWarn: "Local custom build! Mechanical update would overwrite \u2014 verify upstream adoption first",
-    llmProfileDir: "Install location: {p}",
+    llmScopeSsid: "Scope: plugins inside SSiD only (AI touches just this place, nothing elsewhere)",
+    llmScopeWeb: "Scope: plugins inside this DSH Web app only (AI touches just this place, nothing elsewhere)",
     llmConfirm: "Confirm & run",
     llmCancel: "Cancel",
     llmPromptReady: "LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.",
@@ -1298,7 +1300,7 @@ function LlmConfirmDialog() {
         p.isVendorModified && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", title: t("llmVendorWarn"), children: "vendor" }),
         p.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: "var(--dsw-alias-label-secondary, #67748a)", fontFamily: "monospace", wordBreak: "break-all" }, children: t("llmProfileDir", { p: p.profileDir }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: "var(--dsw-alias-label-secondary, #67748a)" }, children: p.runtimeLabel === "SSID" ? t("llmScopeSsid") : t("llmScopeWeb") }),
       p.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", style: { margin: 0 }, children: p.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
     ] }, p.name))
   ] });

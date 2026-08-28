@@ -556,8 +556,11 @@ export interface LlmUpdatePackage {
   specifier: string | null
   /** 是否本地定制(vendor/tarball/local-file)。 */
   isVendorModified: boolean
-  /** 插件所在 profile 目录(host 运行时锚点;LLM 只允许在此目录内操作)。 */
+  /** 插件所在 profile 目录(host 运行时锚点;LLM 只允许在此目录内操作)。
+   *  内部技术字段——不直接展示给用户,由 runtimeLabel 承担语义化表达。 */
   profileDir: string
+  /** 用户可读的环境标签(小白视角):'SSID'(思灵应用内)/'DSH-WEB'。 */
+  runtimeLabel: string
   /** 已组装的 Agent prompt(host 单一来源,client 直接注入会话)。 */
   prompt: string
 }
@@ -592,6 +595,8 @@ export async function buildLlmPackage(
     specifier,
     isVendorModified,
     profileDir,
+    // 小白视角环境标签:SSiD 内核(kernel.ts)在 boot 时设置该变量;官方 DSH web 无。
+    runtimeLabel: process.env.SSID_PENDING_CONSUMER === '1' ? 'SSID' : 'DSH-WEB',
     prompt: '',
   }
   return { ...pkg, prompt: buildLlmPrompt(pkg) }
