@@ -378,19 +378,22 @@ function startLlmPolling(name) {
 async function restoreLlmStates(names) {
   const list = sessionsSvc?.list?.getSnapshot?.();
   const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
-  const updateSession = rows.find((r) => (r.displayTitle ?? "").includes("\u63D2\u4EF6\u66F4\u65B0") || (r.title ?? "").includes("\u63D2\u4EF6\u66F4\u65B0"));
   for (const name of names) {
     if (llmUpdating.has(name) || llmResults.has(name)) continue;
     try {
       const rec = await rpc("llm-update.result", { name });
       if (rec === null) continue;
       if (rec.status === "running" || rec.status === "pending") {
-        if (updateSession !== void 0 && updateSession.running !== false && updateSession.id !== void 0) {
+        const exact = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes(`\u63D2\u4EF6\u66F4\u65B0: ${name}`));
+        const batch = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)"));
+        const sess = exact ?? batch;
+        if (sess !== void 0 && sess.running !== false && sess.id !== void 0) {
           setLlmUpdating(name, true);
-          llmSessionByPlugin.set(name, updateSession.id);
+          llmSessionByPlugin.set(name, sess.id);
           startLlmPolling(name);
         } else {
           setLlmUpdating(name, false);
+          if (sess?.id !== void 0) llmSessionByPlugin.set(name, sess.id);
           setLlmResult(name, { at: rec.at, action: "ended", detail: "", status: "ended" });
         }
       } else {
@@ -580,6 +583,7 @@ var STRINGS = {
     llmPreparing: "\u91C7\u96C6\u63D2\u4EF6\u4FE1\u606F\u4E2D\u2026",
     llmPreparedError: "\u4FE1\u606F\u5305\u91C7\u96C6\u5931\u8D25\uFF1A{e}",
     llmSessionLink: "\u67E5\u770B\u4F1A\u8BDD",
+    llmSessionMissing: "\u4F1A\u8BDD\u5DF2\u4E0D\u5B58\u5728(\u53EF\u80FD\u88AB\u6E05\u7406),\u8BF7\u5728\u4F1A\u8BDD\u5217\u8868\u4E2D\u67E5\u770B\u5386\u53F2\u8BB0\u5F55",
     llmBusy: "LLM \u6267\u884C\u4E2D\u2026",
     llmDone: "LLM \u66F4\u65B0\u5B8C\u6210\uFF1A{name} \u2014 {d}",
     llmFailed: "LLM \u66F4\u65B0\u5931\u8D25\uFF1A{name} \u2014 {d}",
@@ -694,6 +698,7 @@ var STRINGS = {
     llmPreparing: "Preparing plugin info\u2026",
     llmPreparedError: "Prepare failed: {e}",
     llmSessionLink: "View session",
+    llmSessionMissing: "Session no longer exists (may have been cleaned up); check the session list",
     llmBusy: "LLM running\u2026",
     llmDone: "LLM update done: {name} \u2014 {d}",
     llmFailed: "LLM update failed: {name} \u2014 {d}",
@@ -1064,7 +1069,12 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
         llmSessionByPlugin.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: () => {
           const id = llmSessionByPlugin.get(u.name);
-          if (id !== void 0) sessionsSvc?.open?.(id);
+          if (id === void 0) return;
+          if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== void 0) {
+            sessionsSvc?.open?.(id);
+          } else {
+            showToast(STRINGS[localeId].llmSessionMissing, "error", 5e3);
+          }
         }, children: t("llmSessionLink") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name) && llmResults.get(u.name) === void 0, onClick: () => {
           llmPrepare(u.name);
@@ -1256,13 +1266,15 @@ function llmPrepareAll(names) {
     setLlmConfirm({ name: "__all__", pkgs, error: null, skipped, preparing: false });
   })();
 }
-async function ensureLlmUpdateSession() {
+async function ensureLlmUpdateSession(isBatch) {
   const list = sessionsSvc?.list?.getSnapshot?.();
   const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
-  const existing = rows.find((r) => (r.displayTitle ?? "").includes("\u63D2\u4EF6\u66F4\u65B0") || (r.title ?? "").includes("\u63D2\u4EF6\u66F4\u65B0"));
-  if (existing?.id !== void 0) {
-    sessionsSvc?.open?.(existing.id);
-    return existing.id;
+  if (isBatch) {
+    const existing = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)"));
+    if (existing?.id !== void 0 && existing.running !== false) {
+      sessionsSvc?.open?.(existing.id);
+      return existing.id;
+    }
   }
   const ws = workspacesSvc?.list?.getSnapshot?.();
   const wsId = ws?.recentWorkspaceId ?? ws?.items?.[0]?.id;
@@ -1283,7 +1295,8 @@ async function llmExecute(pkgs, name) {
   ].join("\n");
   void rpc("llm-update.log", { name, action: "prompt-sent", detail: prompt.split("\n").slice(0, 3).join(" "), status: "running" });
   try {
-    const id = await ensureLlmUpdateSession();
+    const isBatch = name === "__all__" || pkgs.length > 1;
+    const id = await ensureLlmUpdateSession(isBatch);
     if (id === null) throw new Error("no-session-target");
     const session = sessionsSvc?.binding?.(id)?.session;
     if (session?.prompt === void 0) throw new Error("no-session-face");
@@ -1291,13 +1304,15 @@ async function llmExecute(pkgs, name) {
     if (res?.ok !== true) {
       throw new Error(res?.error?.message ?? "prompt rejected");
     }
-    session.rename?.("\u63D2\u4EF6\u66F4\u65B0").catch(() => {
+    if (isBatch) session.rename?.("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)").catch(() => {
+    });
+    else session.rename?.(`\u63D2\u4EF6\u66F4\u65B0: ${pkgs[0].name}`).catch(() => {
     });
     setLlmSessionId(id);
     for (const p of pkgs) llmSessionByPlugin.set(p.name, id);
     for (const p of pkgs) startLlmPolling(p.name);
     showToast(S.llmPromptReady.replace("{name}", pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} \u4E2A\u63D2\u4EF6`), "ok", 8e3);
-    if (name === "__all__") closeWhatsNew();
+    if (isBatch) closeWhatsNew();
   } catch (e) {
     for (const p of pkgs) setLlmUpdating(p.name, false);
     setLlmFallback(prompt);

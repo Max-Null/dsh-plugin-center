@@ -453,25 +453,30 @@ function startLlmPolling(name: string): void {
   }, LLM_POLL_MS)
   llmPollTimers.set(name, timer)
 }
-/** 重挂/刷新后从 host 恢复:JSONL running → 结合「插件更新」会话活动状态
- *  决策(会话还在跑 → 继续执行中+轮询;会话已结束 → ended)。 */
+/** 重挂/刷新后从 host 恢复:JSONL running → 结合对应「插件更新」会话活动状态
+ *  决策(会话还在跑 → 继续执行中+轮询;会话已结束 → ended)。
+ *  会话按标题精确匹配:单插件「插件更新: <name>」/ 批量「插件更新(批量)」。 */
 async function restoreLlmStates(names: string[]): Promise<void> {
   const list = sessionsSvc?.list?.getSnapshot?.()
   const rows = list?.byId === undefined ? [] : Object.values(list.byId)
-  const updateSession = rows.find(r => (r.displayTitle ?? '').includes('插件更新') || (r.title ?? '').includes('插件更新'))
   for (const name of names) {
     if (llmUpdating.has(name) || llmResults.has(name)) continue
     try {
       const rec = await rpc('llm-update.result', { name }) as LlmResult | null
       if (rec === null) continue
       if (rec.status === 'running' || rec.status === 'pending') {
-        if (updateSession !== undefined && updateSession.running !== false && updateSession.id !== undefined) {
+        // 精确匹配:该插件的专属会话优先;没有则退化到批量统一会话。
+        const exact = rows.find(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes(`插件更新: ${name}`))
+        const batch = rows.find(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes('插件更新(批量)'))
+        const sess = exact ?? batch
+        if (sess !== undefined && sess.running !== false && sess.id !== undefined) {
           setLlmUpdating(name, true)
-          llmSessionByPlugin.set(name, updateSession.id)
+          llmSessionByPlugin.set(name, sess.id)
           startLlmPolling(name)
         } else {
           // 会话已结束(未回传)→ ended;防御性清执行中标记,保证互斥。
           setLlmUpdating(name, false)
+          if (sess?.id !== undefined) llmSessionByPlugin.set(name, sess.id)
           setLlmResult(name, { at: rec.at, action: 'ended', detail: '', status: 'ended' })
         }
       } else {
@@ -653,6 +658,7 @@ const STRINGS = {
     llmPromptReady: 'LLM 更新已发起：{name}。请在会话中按 dsh-plugin-upgrade skill 决策执行。',
     llmPreparing: '采集插件信息中…', llmPreparedError: '信息包采集失败：{e}',
     llmSessionLink: '查看会话',
+    llmSessionMissing: '会话已不存在(可能被清理),请在会话列表中查看历史记录',
     llmBusy: 'LLM 执行中…',
     llmDone: 'LLM 更新完成：{name} — {d}',
     llmFailed: 'LLM 更新失败：{name} — {d}',
@@ -715,6 +721,7 @@ const STRINGS = {
     llmPromptReady: 'LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.',
     llmPreparing: 'Preparing plugin info…', llmPreparedError: 'Prepare failed: {e}',
     llmSessionLink: 'View session',
+    llmSessionMissing: 'Session no longer exists (may have been cleaned up); check the session list',
     llmBusy: 'LLM running…',
     llmDone: 'LLM update done: {name} — {d}',
     llmFailed: 'LLM update failed: {name} — {d}',
@@ -1070,7 +1077,16 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
               return <span className={`pc-tag ${cls}`} title={r.detail}>{t(`llmRes_${r.status}`)}</span>
             })()}
             <span className="pc-spacer" />
-            {llmSessionByPlugin.has(u.name) && <button className="pc-btn" onClick={() => { const id = llmSessionByPlugin.get(u.name); if (id !== undefined) sessionsSvc?.open?.(id) }}>{t('llmSessionLink')}</button>}
+            {llmSessionByPlugin.has(u.name) && <button className="pc-btn" onClick={() => {
+              const id = llmSessionByPlugin.get(u.name)
+              if (id === undefined) return
+              // 校验会话仍在列表(重启/删除后)再跳转,避免静默失效。
+              if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== undefined) {
+                sessionsSvc?.open?.(id)
+              } else {
+                showToast(STRINGS[localeId].llmSessionMissing, 'error', 5000)
+              }
+            }}>{t('llmSessionLink')}</button>}
             <button className="pc-btn primary" disabled={busy !== null || pendingInstall.has(u.name) || (llmUpdating.has(u.name) && llmResults.get(u.name) === undefined)} onClick={() => { llmPrepare(u.name) }}>{llmUpdating.has(u.name) && llmResults.get(u.name) === undefined ? t('llmBusy') : t('llmUpdate')}</button>
             {/* 机械更新按钮:先注释,只保留 LLM 驱动入口(2026-08-29 用户确认方向)。
                 updateOne 保留未删,后续需要恢复时取消注释即可。 */}
@@ -1272,16 +1288,19 @@ function llmPrepareAll(names: string[]): void {
  *  - sessions.open(id) 只 open 已有会话,不创建;
  *  - 创建走 workspaces.connectWorkspace(workspaceId)(复用该工作区 blank 会话);
  *  - 注入用 ISession.prompt(content, 'queue')(binding(id).session)。 */
-async function ensureLlmUpdateSession(): Promise<string | null> {
-  // 1) 复用列表里标题含「插件更新」的会话(第一次成功后即稳定命中)。
+async function ensureLlmUpdateSession(isBatch: boolean): Promise<string | null> {
   const list = sessionsSvc?.list?.getSnapshot?.()
   const rows = list?.byId === undefined ? [] : Object.values(list.byId)
-  const existing = rows.find(r => (r.displayTitle ?? '').includes('插件更新') || (r.title ?? '').includes('插件更新'))
-  if (existing?.id !== undefined) {
-    sessionsSvc?.open?.(existing.id)
-    return existing.id
+  // 批量(更新全部):统一复用「插件更新(批量)」会话(进行中才复用,避免旧上下文混入)。
+  if (isBatch) {
+    const existing = rows.find(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes('插件更新(批量)'))
+    if (existing?.id !== undefined && existing.running !== false) {
+      sessionsSvc?.open?.(existing.id)
+      return existing.id
+    }
   }
-  // 2) 新建:优先 recent workspace,其次第一个 workspace。
+  // 单插件 / 批量新建:每个插件独立会话——绝不模糊复用一个会话,
+  // 互不打断(connectWorkspace 只可能碰空白会话;带过内容的会话不匹配)。
   const ws = workspacesSvc?.list?.getSnapshot?.()
   const wsId = ws?.recentWorkspaceId ?? ws?.items?.[0]?.id
   if (wsId === undefined || wsId === '') return null
@@ -1306,7 +1325,8 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
       ].join('\n')
   void rpc('llm-update.log', { name, action: 'prompt-sent', detail: prompt.split('\n').slice(0, 3).join(' '), status: 'running' })
   try {
-    const id = await ensureLlmUpdateSession()
+    const isBatch = name === '__all__' || pkgs.length > 1
+    const id = await ensureLlmUpdateSession(isBatch)
     if (id === null) throw new Error('no-session-target')
     const session = sessionsSvc?.binding?.(id)?.session
     if (session?.prompt === undefined) throw new Error('no-session-face')
@@ -1314,14 +1334,16 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
     if (res?.ok !== true) {
       throw new Error(res?.error?.message ?? 'prompt rejected')
     }
-    // 成功:补标题便于下次复用判断(失败忽略——空白会话仍会复用)。
-    session.rename?.('插件更新').catch(() => {})
+    // 标题即会话身份:单插件「插件更新: <插件名>」(独立会话、互不打断),
+    // 批量「插件更新(批量)」(统一会话)。restore 按标题精确匹配。
+    if (isBatch) session.rename?.('插件更新(批量)').catch(() => {})
+    else session.rename?.(`插件更新: ${pkgs[0].name}`).catch(() => {})
     setLlmSessionId(id)
     // 保持「执行中」直到 host JSONL 出现终态(轮询收敛);会话 id 供查看跳转。
     for (const p of pkgs) llmSessionByPlugin.set(p.name, id)
     for (const p of pkgs) startLlmPolling(p.name)
     showToast(S.llmPromptReady.replace('{name}', pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} 个插件`), 'ok', 8000)
-    if (name === '__all__') closeWhatsNew()
+    if (isBatch) closeWhatsNew()
   } catch (e) {
     for (const p of pkgs) setLlmUpdating(p.name, false)
     // 降级:提示词给用户自行粘贴(模态带复制)。
