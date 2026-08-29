@@ -22,7 +22,8 @@
     "dist",
     "client.js",
     "cordis.patch.yml",
-    "assets"
+    "assets",
+    "skills"
   ],
   "dsh": {
     "bundle": {
