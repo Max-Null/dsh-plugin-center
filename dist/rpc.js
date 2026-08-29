@@ -78,6 +78,12 @@ export class PluginCenterRpc extends Service {
                         });
                         return { ok: true, value: null };
                     }
+                    case 'llm-update.invalidate': {
+                        // LLM 更新由另一 Agent 直接改 profile;失效本插件"已安装/更新"快照缓存,
+                        // 使 UI 立即反映磁盘新版本,不再残留 updatesCache(5min TTL)的旧列表。
+                        ctx.pluginCenter.invalidateCaches();
+                        return { ok: true, value: null };
+                    }
                     case 'llm-update.result': {
                         // 读某插件最近一条 LLM 更新动作(轮询三态:running/success/failed)。
                         const name = payload?.name;

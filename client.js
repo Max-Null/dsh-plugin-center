@@ -381,6 +381,14 @@ async function convergeLlmState(name) {
     const brief = (rec?.detail ?? "").length > 120 ? `${(rec?.detail ?? "").slice(0, 120)}\u2026` : rec?.detail ?? "";
     const msg = decision === "failed" ? S.llmFailed.replace("{name}", name).replace("{d}", brief) : rec?.action === "keep" ? S.llmKept.replace("{name}", name).replace("{d}", brief) : S.llmDone.replace("{name}", name).replace("{d}", brief);
     showToast(msg, decision === "success" ? "ok" : "error", 12e3);
+    if (decision === "success" && rec?.action !== "keep") {
+      void rpc("llm-update.invalidate").catch(() => {
+      });
+      if (!llmRestartHinted) {
+        llmRestartHinted = true;
+        showToast(S.llmPromptRestart, "ok", 12e3);
+      }
+    }
   } else {
     setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
     showToast(STRINGS[localeId].llmEnded.replace("{name}", name), "error", 1e4);
@@ -429,6 +437,7 @@ async function restoreLlmStates(names) {
 }
 var llmSessionByPlugin = /* @__PURE__ */ new Map();
 var llmStartedAt = /* @__PURE__ */ new Map();
+var llmRestartHinted = false;
 var LLM_GRACE_MS = 3e4;
 var pendingToggles = /* @__PURE__ */ new Map();
 var pendingListeners = /* @__PURE__ */ new Set();
@@ -608,6 +617,7 @@ var STRINGS = {
     llmConfirm: "\u786E\u8BA4\u5E76\u6267\u884C",
     llmCancel: "\u53D6\u6D88",
     llmPromptReady: "LLM \u66F4\u65B0\u5DF2\u53D1\u8D77\uFF1A{name}\u3002\u8BF7\u5728\u4F1A\u8BDD\u4E2D\u6309 dsh-plugin-upgrade skill \u51B3\u7B56\u6267\u884C\u3002",
+    llmPromptRestart: "LLM \u66F4\u65B0\u5B8C\u6210\u540E\u8BF7\u91CD\u542F DSH web\uFF0C\u63D2\u4EF6\u5217\u8868\u5C06\u5237\u65B0\u4E3A\u6700\u65B0\u7248\u672C\u3002",
     llmPreparing: "\u91C7\u96C6\u63D2\u4EF6\u4FE1\u606F\u4E2D\u2026",
     llmPreparedError: "\u4FE1\u606F\u5305\u91C7\u96C6\u5931\u8D25\uFF1A{e}",
     llmSessionLink: "\u67E5\u770B\u4F1A\u8BDD",
@@ -726,6 +736,7 @@ var STRINGS = {
     llmConfirm: "Confirm & run",
     llmCancel: "Cancel",
     llmPromptReady: "LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.",
+    llmPromptRestart: "Restart DSH web after the LLM update completes so the plugin list refreshes to latest.",
     llmPreparing: "Preparing plugin info\u2026",
     llmPreparedError: "Prepare failed: {e}",
     llmSessionLink: "View session",

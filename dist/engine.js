@@ -436,6 +436,14 @@ export class PluginCenterEngine extends Service {
         this.pnpmChain = run.catch(() => { });
         return run;
     }
+    /** 失效「已安装/更新」快照缓存。LLM 更新是另一个 Agent 直接改 profile
+     *  跑 pnpm install,不走本插件的 enqueuePnpm 路径,故此处需显式触发——
+     *  否则 updatesCache(5min TTL)保留旧版本,UI 仍显示已更新的插件为"可更新"。 */
+    invalidateCaches() {
+        this.installedNamesCache = null;
+        this.updatesCache = null;
+        clearPackageCache();
+    }
     /** Temporary diagnostics for the empty-update bug; removed once root-caused. */
     async debug() {
         return {

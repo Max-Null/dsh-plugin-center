@@ -460,6 +460,16 @@ async function convergeLlmState(name: string): Promise<boolean> {
         ? S.llmKept.replace('{name}', name).replace('{d}', brief)
         : S.llmDone.replace('{name}', name).replace('{d}', brief)
     showToast(msg, decision === 'success' ? 'ok' : 'error', 12000)
+    // LLM 已改盘(upgrade/switch-npm 等实际动作):失效 host「已安装/更新」缓存,
+    // 否则 updatesCache(5min TTL)保留旧版本,UI 仍把已更新的插件列为"可更新"。
+    // 只提示一次重启(多插件收敛各自 success 时不重复打断)。
+    if (decision === 'success' && rec?.action !== 'keep') {
+      void rpc('llm-update.invalidate').catch(() => {})
+      if (!llmRestartHinted) {
+        llmRestartHinted = true
+        showToast(S.llmPromptRestart, 'ok', 12000)
+      }
+    }
   } else {
     // ended(会话已停/已清理,未回传)。
     setLlmResult(name, { at: Date.now(), action: 'ended', detail: '', status: 'ended' })
@@ -516,6 +526,8 @@ async function restoreLlmStates(names: string[]): Promise<void> {
 const llmSessionByPlugin = new Map<string, string>()
 /** 插件名 → 发起时间戳(轮询宽限期:Aget 启动窗口内不判 ended)。 */
 const llmStartedAt = new Map<string, number>()
+/** 「LLM 更新完成后请重启」提示只弹一次(多个插件收敛 success 时去重)。 */
+let llmRestartHinted = false
 const LLM_GRACE_MS = 30_000
 
 // ---- pending-toggle state: a disable/enable written to the patch layer but
@@ -687,6 +699,7 @@ const STRINGS = {
     llmScopeWeb: '更新范围：仅当前 DSH Web 应用内的插件（AI 助手只动这一处，不会影响你其他地方的安装）',
     llmConfirm: '确认并执行', llmCancel: '取消',
     llmPromptReady: 'LLM 更新已发起：{name}。请在会话中按 dsh-plugin-upgrade skill 决策执行。',
+    llmPromptRestart: 'LLM 更新完成后请重启 DSH web，插件列表将刷新为最新版本。',
     llmPreparing: '采集插件信息中…', llmPreparedError: '信息包采集失败：{e}',
     llmSessionLink: '查看会话',
     llmSessionMissing: '会话已不存在(可能被清理),请在会话列表中查看历史记录',
@@ -752,6 +765,7 @@ const STRINGS = {
     llmScopeWeb: 'Scope: plugins inside this DSH Web app only (AI touches just this place, nothing elsewhere)',
     llmConfirm: 'Confirm & run', llmCancel: 'Cancel',
     llmPromptReady: 'LLM update launched: {name}. Decide & execute in session per dsh-plugin-upgrade skill.',
+    llmPromptRestart: 'Restart DSH web after the LLM update completes so the plugin list refreshes to latest.',
     llmPreparing: 'Preparing plugin info…', llmPreparedError: 'Prepare failed: {e}',
     llmSessionLink: 'View session',
     llmSessionMissing: 'Session no longer exists (may have been cleaned up); check the session list',
