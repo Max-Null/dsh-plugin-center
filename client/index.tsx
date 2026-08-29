@@ -374,18 +374,30 @@ interface LlmSessionsSvc {
     rename?: (title: string) => Promise<unknown>
   } } | undefined
 }
+// ctx.workspaces 实际 = IWorkspaces(list/list.getSnapshot/create/rename/archiveSession 等)。
+// Snapshot 结构(核对 workspace-controller): { items: WorkspaceView[], archivedSessionIds }。
+// WorkspaceView.workspaceId 才是 id——snapshot 无 recentWorkspaceId,items 元素也无 id 字段。
 interface LlmWorkspacesSvc {
-  list?: { getSnapshot?: () => { recentWorkspaceId?: string, items?: Array<{ id?: string }> } }
-  connectWorkspace?: (workspaceId: string) => Promise<string>
+  list?: { getSnapshot?: () => { items?: Array<{ workspaceId?: string }> } }
   /** 注册一个 path 为 workspace(幂等:已存在则返回既有),返回 WorkspaceView。 */
   create?: (input: { path: string }) => Promise<{ workspaceId?: string } | string>
   /** 重命名 workspace(幂等)。 */
   rename?: (workspaceId: string, title: string) => Promise<unknown>
-  /** 归档会话(分组视图隐藏,日志保留)。 */
+  /** 归档会话(分组视图隐藏,日志保留)。在 IWorkspaces 上存在。 */
   archiveSession?: (sessionId: string) => Promise<unknown>
+}
+// ctx.uiWorkspace 实际 = UiWorkspaceService(核对 ui-workspace/navigation.ts)。
+// connectWorkspace 是它专有——不在 ctx.workspaces(IWorkspaces) 上!
+// 之前误用 workspacesSvc.connectWorkspace → 恒 undefined → 返回空 → no-session-target。
+interface LlmUiWorkspaceSvc {
+  /** 复用该 workspace 的可复用/新建 blank 会话,返回已可寻址的 SessionId。
+   *  对 list 中不存在的 workspace 会 reject(unknown workspace)。 */
+  connectWorkspace?: (workspaceId: string) => Promise<string>
 }
 let sessionsSvc: LlmSessionsSvc | null = null
 let workspacesSvc: LlmWorkspacesSvc | null = null
+// 会话动作服务(connectWorkspace):UiWorkspaceService,与 workspaces(IWorkspaces) 分开取。
+let uiWorkspaceSvc: LlmUiWorkspaceSvc | null = null
 
 // ---- LLM 更新终态与轮询 (2026-08-29,模块级:执行中/成功/失败三态跨面板持久) ----
 // 事实源 = host JSONL(~/.dsh/plugin-center/llm-update-log.jsonl):
@@ -1334,6 +1346,9 @@ async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | und
   // 且 Agent 的默认 cwd 就是插件环境(与 skill 操作域约束一致)。
   const ws = workspacesSvc?.list?.getSnapshot?.()
   let wsId: string | undefined
+  // create 失败的真实原因(不吞掉;供下方兜底与诊断)。绝大多数情况 items[0] 可兜底,
+  // 因此该失败只影响「插件更新」专用 workspace 是否成立,不应阻断开新会话。
+  let createError: unknown = null
   if (profileDir !== undefined && profileDir !== '') {
     try {
       const wsv = await workspacesSvc?.create?.({ path: profileDir })
@@ -1341,14 +1356,51 @@ async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | und
       // 此前 wsv?.id 恒 undefined 导致静默回退到用户最近工作区。
       wsId = typeof wsv === 'string' ? wsv : wsv?.workspaceId
       if (wsId !== undefined) void workspacesSvc?.rename?.(wsId, '插件更新').catch(() => {})
-    } catch { /* 注册失败退回默认 workspace */ }
+    } catch (e) {
+      createError = e
+      // 不静默:create 仅是「专用分组」的优化,失败应可诊断(但不阻断,见 finalWsId 兜底)。
+      console.warn('[dsh-plugin-center] create 插件更新 workspace 失败:', e, { profileDir })
+    }
   }
-  const finalWsId = wsId ?? ws?.recentWorkspaceId ?? ws?.items?.[0]?.id
-  if (finalWsId === undefined || finalWsId === '') return null
-  const id = await workspacesSvc?.connectWorkspace?.(finalWsId)
-  if (id === undefined || id === '') return null
+  // Snapshot 结构 = { items: WorkspaceView[], archivedSessionIds }(见 LlmWorkspacesSvc 注释)。
+  // 兜底取 items[0].workspaceId——字段是 workspaceId 不是 id,且 snapshot 无 recentWorkspaceId。
+  // 修正前(recentWorkspaceId ?? items[0].id)两项恒 undefined → create 失败即 no-session-target。
+  const listWsId = ws?.items?.[0]?.workspaceId
+  const finalWsId = wsId ?? listWsId
+  if (finalWsId === undefined || finalWsId === '') {
+    console.error('[dsh-plugin-center] 无可用 workspace 目标', {
+      createError: String(createError ?? ''),
+      profileDir,
+      snapshot: ws,
+    })
+    return null
+  }
+  // 会话动作走 ctx.uiWorkspace.connectWorkspace——它才是持有该方法的服务
+  // (workspaces=IWorkspaces 上没有);WorkspaceView 也是 workspaceId 字段。
+  // 刚 create 的 workspace 可能尚未进入 uiWorkspace 内部 list → connectWorkspace
+  // 报 unknown workspace(reject)。此时降级:用既有 workspace items[0] 再试一次。
+  let id = await connectLlmWorkspace(finalWsId)
+  if ((id === undefined || id === '') && finalWsId !== listWsId && listWsId !== undefined) {
+    console.warn('[dsh-plugin-center] newly-created workspace 尚不可见,回退到既有 workspace', { finalWsId, fallback: listWsId })
+    id = await connectLlmWorkspace(listWsId)
+  }
+  if (id === undefined || id === '') {
+    console.error('[dsh-plugin-center] connectWorkspace 未返回会话 id', { finalWsId, fallback: listWsId, createError: String(createError ?? '') })
+    return null
+  }
   sessionsSvc?.open?.(id)
   return id
+}
+
+/** 经 uiWorkspace.connectWorkspace 拿会话 id;拒绝(unknown workspace)按空处理,由调用方降级。 */
+async function connectLlmWorkspace(workspaceId: string): Promise<string | undefined> {
+  try {
+    const id = await uiWorkspaceSvc?.connectWorkspace?.(workspaceId)
+    return typeof id === 'string' && id !== '' ? id : undefined
+  } catch (e) {
+    console.warn('[dsh-plugin-center] uiWorkspace.connectWorkspace 拒绝:', e, { workspaceId })
+    return undefined
+  }
 }
 
 /** 确认后:复用/创建「插件更新」会话并注入 prompt(LLM 按 skill 决策执行)。
@@ -1372,7 +1424,7 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
   try {
     const isBatch = name === '__all__' || pkgs.length > 1
     const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir)
-    if (id === null) throw new Error('no-session-target')
+    if (id === null) throw new Error('no-session-target: 无法找到可复用的插件更新会话/工作区（详见浏览器 console 的 [dsh-plugin-center] 诊断）')
     const session = sessionsSvc?.binding?.(id)?.session
     if (session?.prompt === undefined) throw new Error('no-session-face')
     const res = await session.prompt([{ type: 'text', text: prompt }], 'queue')
@@ -2047,7 +2099,7 @@ function WhatsNewDialog() {
 // ---- client plugin body ----
 // 0.2.14: 注入 sessions/workspaces —— LLM 更新需复用/创建「插件更新」会话并
 // 注入 prompt(与 dsh-sidebar-preview-select 同款硬注入,DSH 内核必供)。
-const inject = ['slots', 'connection', 'sessions', 'workspaces']
+const inject = ['slots', 'connection', 'sessions', 'workspaces', 'uiWorkspace']
 
 // ---- 0.1.7：SSiD 标题栏统一按钮组全局控制器 ----
 // SSiD 内置插件 dsh-header-unify 监听壳派发的 `ssid:titlebar` CustomEvent，
@@ -2072,6 +2124,7 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
   // LLM 更新：保存会话/工作区服务引用(模块级 llmExecute 使用)。
   sessionsSvc = ctx.sessions ?? null
   workspacesSvc = ctx.workspaces ?? null
+  uiWorkspaceSvc = ctx.uiWorkspace ?? null
   // 设置导航图标：标记本插件行后由 CSS 把默认齿轮替换为拼图（HMR-safe）。
   ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), 'dsh-plugin-center: settings navigation icon')
   // 0.1.7：暴露全局控制器（防重复安装：已安装则不重复挂监听）。

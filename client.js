@@ -335,6 +335,7 @@ function useLlmFallback() {
 }
 var sessionsSvc = null;
 var workspacesSvc = null;
+var uiWorkspaceSvc = null;
 var llmResults = /* @__PURE__ */ new Map();
 var llmResultListeners = /* @__PURE__ */ new Set();
 function setLlmResult(name, rec) {
@@ -1312,21 +1313,48 @@ async function ensureLlmUpdateSession(isBatch, profileDir) {
   }
   const ws = workspacesSvc?.list?.getSnapshot?.();
   let wsId;
+  let createError = null;
   if (profileDir !== void 0 && profileDir !== "") {
     try {
       const wsv = await workspacesSvc?.create?.({ path: profileDir });
       wsId = typeof wsv === "string" ? wsv : wsv?.workspaceId;
       if (wsId !== void 0) void workspacesSvc?.rename?.(wsId, "\u63D2\u4EF6\u66F4\u65B0").catch(() => {
       });
-    } catch {
+    } catch (e) {
+      createError = e;
+      console.warn("[dsh-plugin-center] create \u63D2\u4EF6\u66F4\u65B0 workspace \u5931\u8D25:", e, { profileDir });
     }
   }
-  const finalWsId = wsId ?? ws?.recentWorkspaceId ?? ws?.items?.[0]?.id;
-  if (finalWsId === void 0 || finalWsId === "") return null;
-  const id = await workspacesSvc?.connectWorkspace?.(finalWsId);
-  if (id === void 0 || id === "") return null;
+  const listWsId = ws?.items?.[0]?.workspaceId;
+  const finalWsId = wsId ?? listWsId;
+  if (finalWsId === void 0 || finalWsId === "") {
+    console.error("[dsh-plugin-center] \u65E0\u53EF\u7528 workspace \u76EE\u6807", {
+      createError: String(createError ?? ""),
+      profileDir,
+      snapshot: ws
+    });
+    return null;
+  }
+  let id = await connectLlmWorkspace(finalWsId);
+  if ((id === void 0 || id === "") && finalWsId !== listWsId && listWsId !== void 0) {
+    console.warn("[dsh-plugin-center] newly-created workspace \u5C1A\u4E0D\u53EF\u89C1,\u56DE\u9000\u5230\u65E2\u6709 workspace", { finalWsId, fallback: listWsId });
+    id = await connectLlmWorkspace(listWsId);
+  }
+  if (id === void 0 || id === "") {
+    console.error("[dsh-plugin-center] connectWorkspace \u672A\u8FD4\u56DE\u4F1A\u8BDD id", { finalWsId, fallback: listWsId, createError: String(createError ?? "") });
+    return null;
+  }
   sessionsSvc?.open?.(id);
   return id;
+}
+async function connectLlmWorkspace(workspaceId) {
+  try {
+    const id = await uiWorkspaceSvc?.connectWorkspace?.(workspaceId);
+    return typeof id === "string" && id !== "" ? id : void 0;
+  } catch (e) {
+    console.warn("[dsh-plugin-center] uiWorkspace.connectWorkspace \u62D2\u7EDD:", e, { workspaceId });
+    return void 0;
+  }
 }
 async function llmExecute(pkgs, name) {
   const S = STRINGS[localeId];
@@ -1344,7 +1372,7 @@ async function llmExecute(pkgs, name) {
   try {
     const isBatch = name === "__all__" || pkgs.length > 1;
     const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir);
-    if (id === null) throw new Error("no-session-target");
+    if (id === null) throw new Error("no-session-target: \u65E0\u6CD5\u627E\u5230\u53EF\u590D\u7528\u7684\u63D2\u4EF6\u66F4\u65B0\u4F1A\u8BDD/\u5DE5\u4F5C\u533A\uFF08\u8BE6\u89C1\u6D4F\u89C8\u5668 console \u7684 [dsh-plugin-center] \u8BCA\u65AD\uFF09");
     const session = sessionsSvc?.binding?.(id)?.session;
     if (session?.prompt === void 0) throw new Error("no-session-face");
     const res = await session.prompt([{ type: "text", text: prompt }], "queue");
@@ -1959,7 +1987,7 @@ function WhatsNewDialog() {
     ] })
   ] }) });
 }
-var inject = ["slots", "connection", "sessions", "workspaces"];
+var inject = ["slots", "connection", "sessions", "workspaces", "uiWorkspace"];
 var GLOBAL_KEYS = ["__pluginCenterOpen", "__pluginCenterToggle", "__pluginCenterClose"];
 function installGlobals() {
   const w = window;
@@ -1977,6 +2005,7 @@ function apply(ctx) {
   injectCss();
   sessionsSvc = ctx.sessions ?? null;
   workspacesSvc = ctx.workspaces ?? null;
+  uiWorkspaceSvc = ctx.uiWorkspace ?? null;
   ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), "dsh-plugin-center: settings navigation icon");
   if (window.__pluginCenterGlobalsInstalled !== true) {
     installGlobals();
