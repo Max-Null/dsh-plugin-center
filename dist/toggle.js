@@ -138,8 +138,48 @@ function patchInsertChildByName(lines, name, disabled) {
     lines.push(`${tail}- id: ${name}\n  disabled: ${String(disabled)}`);
     return true;
 }
+/**
+ * Resolve a profile-bundle plugin's loader entry id.
+ *
+ * Profile bundles (`dsh.profile.bundles`) are composed by applying each
+ * bundle's own `cordis.patch.yml` over the root; the entry id a toggle must
+ * target lives in THAT file, not in the profile patch layer. Returns the
+ * insert child id whose `name` matches the package name, or null when the
+ * package is not a profile bundle (or its patch cannot be read/parsed).
+ */
+function bundleEntryId(profileDir, name) {
+    try {
+        const manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'));
+        const bundles = manifest.dsh?.profile?.bundles;
+        if (!Array.isArray(bundles) || !bundles.includes(name))
+            return null;
+        // A bundle's patch declares the insert child that carries the entry id.
+        const patchPath = join(profileDir, 'node_modules', ...name.split('/'), 'cordis.patch.yml');
+        const text = readFileSync(patchPath, 'utf8');
+        const idPattern = /^ {4}- id: (\S+)\s*$/gmu;
+        const idLines = [...text.matchAll(idPattern)].map(match => match[1]);
+        return idLines.length > 0 ? idLines[0] : null;
+    }
+    catch {
+        return null;
+    }
+}
 /** Serialize toggles so concurrent writes cannot interleave. */
 let toggleChain = Promise.resolve();
+/**
+ * Effective disabled stance for install-list display: the profile patch
+ * layer is the toggle source of truth (rows written by setDisabled), and
+ * the Loader's own `entry.disabled` is unreliable for profile-bundle
+ * plugins (they report disabled even when the bundle enables them).
+ * Order: patch row by entry id (include: stripped) → patch row by the
+ * bundle-declared id → enabled by default.
+ */
+export function effectiveDisabledStance(profileDir, entryId, name) {
+    const stance = readDisabledState(join(profileDir, 'cordis.patch.yml'));
+    return stance.get(patchRowId(entryId))
+        ?? stance.get(bundleEntryId(profileDir, name) ?? '')
+        ?? false;
+}
 /**
  * Set one entry's disabled stance in the profile patch layer. The file is
  * only touched when the stance changes; a malformed file (not a plain
@@ -214,7 +254,20 @@ export function setDisabled(profileDir, entryId, name, disabled) {
             // 静默跳过）。所以这里绝不静默追加：先按 name 寻址 insert 子条目行，
             // 原地升级为稳定 id 再追加；都找不到 → 拒绝（不写文件）。
             if (!patchInsertChildByName(out, name, disabled)) {
-                if (/^[0-9a-f]{8}$/u.test(id)) {
+                // 2026-08-29 bundle 兼容：dsh.profile.bundles 启用的插件在 profile
+                // patch 里没有 `- id:` 行（entry id 声明在各个 bundle 自己的
+                // cordis.patch.yml 里）。按 bundle 声明 id 追加 disabled 行即可
+                // 覆盖；默认启用态（disabled=false）无需写文件。
+                const bundleId = bundleEntryId(profileDir, name);
+                if (bundleId !== null) {
+                    if (!disabled) {
+                        return { ok: true, detail: `"${name}" is enabled by profile bundle`, nowDisabled: false };
+                    }
+                    const tail = out.length > 0 && out[out.length - 1] !== '' ? '\n' : '';
+                    out.push(`${tail}- id: ${bundleId}\n  disabled: true`);
+                    patched = true;
+                }
+                else if (/^[0-9a-f]{8}$/u.test(id)) {
                     return {
                         ok: false,
                         detail: `entry "${id}" has no stable patch id (random runtime id); ` +
@@ -222,7 +275,9 @@ export function setDisabled(profileDir, entryId, name, disabled) {
                         nowDisabled: null,
                     };
                 }
-                return { ok: false, detail: `no patch row or insert child matches "${id}"`, nowDisabled: null };
+                else {
+                    return { ok: false, detail: `no patch row or insert child matches "${id}"`, nowDisabled: null };
+                }
             }
             patched = true;
         }

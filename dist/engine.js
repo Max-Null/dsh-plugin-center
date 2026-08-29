@@ -14,7 +14,7 @@ import { buildInstalledPlugin, clearPackageCache, resolvePackage } from "./meta.
 import { fetchAwesomePluginsJson, fetchDshMarketPlugins, fetchOhMyDshOverrides, fetchOhMyDshPlugins, mapConcurrent, mergePlugins, } from "./market.js";
 import { detectUpdate, installPlugin, preparePluginUpdate, updatePlugin, buildLlmPackage, dependencySpecifierOf, isSameUpstream, sourceOf, } from "./update.js";
 import { reconcileInstalled, readDependencyKeys } from "./reconcile.js";
-import { readDisabledState, setDisabled, escapeRegExp } from "./toggle.js";
+import { readDisabledState, setDisabled, escapeRegExp, effectiveDisabledStance } from "./toggle.js";
 import { appendLlmLog, readLlmLogLatest } from "./llm-log.js";
 /** Runtime mirror of cordis FiberState (a cross-package const enum). */
 const FIBER_PHASE = {
@@ -174,7 +174,9 @@ export class PluginCenterEngine extends Service {
             views.push({
                 id: entry.id,
                 name: entry.options.name,
-                disabled: entry.disabled,
+                // The patch layer is the toggle source of truth; the Loader's own
+                // stance misreports profile-bundle plugins as disabled.
+                disabled: effectiveDisabledStance(this.baseUrl, entry.id, entry.options.name),
                 fiberPhase: entry.fiber === undefined ? null : FIBER_PHASE[entry.fiber.state],
             });
         }

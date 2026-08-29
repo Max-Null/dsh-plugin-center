@@ -23,7 +23,7 @@ import {
   type LlmUpdatePackage, type PnpmResult, type UpdateDigest,
 } from './update.ts'
 import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
-import { readDisabledState, setDisabled, escapeRegExp } from './toggle.ts'
+import { readDisabledState, setDisabled, escapeRegExp, effectiveDisabledStance } from './toggle.ts'
 import { appendLlmLog, readLlmLogLatest, type LlmLogRecord } from './llm-log.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -223,7 +223,9 @@ export class PluginCenterEngine extends Service {
       views.push({
         id: entry.id,
         name: entry.options.name,
-        disabled: entry.disabled,
+        // The patch layer is the toggle source of truth; the Loader's own
+        // stance misreports profile-bundle plugins as disabled.
+        disabled: effectiveDisabledStance(this.baseUrl, entry.id, entry.options.name),
         fiberPhase: entry.fiber === undefined ? null : FIBER_PHASE[entry.fiber.state],
       })
     }

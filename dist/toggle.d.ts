@@ -31,6 +31,15 @@ export declare function readDisabledState(patchPath: string): Map<string, boolea
 /** Escape a literal for use inside a RegExp (plugin names may contain `.` etc.). */
 export declare function escapeRegExp(text: string): string;
 /**
+ * Effective disabled stance for install-list display: the profile patch
+ * layer is the toggle source of truth (rows written by setDisabled), and
+ * the Loader's own `entry.disabled` is unreliable for profile-bundle
+ * plugins (they report disabled even when the bundle enables them).
+ * Order: patch row by entry id (include: stripped) → patch row by the
+ * bundle-declared id → enabled by default.
+ */
+export declare function effectiveDisabledStance(profileDir: string, entryId: string, name: string): boolean;
+/**
  * Set one entry's disabled stance in the profile patch layer. The file is
  * only touched when the stance changes; a malformed file (not a plain
  * entry list) is reported instead of being made worse.
