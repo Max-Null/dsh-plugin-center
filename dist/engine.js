@@ -195,12 +195,17 @@ export class PluginCenterEngine extends Service {
             if (m.name.includes('/'))
                 byRepo.set(m.name.toLowerCase(), { cats: m.categories, name: m.name });
             const base = m.name.split('/').pop() ?? m.name;
+            // 同一插件的不同收录形态（awesome owner/repo + oh-my-dsh 裸名）必须视为
+            // 同一 owner——按 URL 的 owner 去重；不同 owner 才是真歧义（2026-09-01
+            // context-doctor 被「count=2 绕过此判断」漏配）。
+            const urlOwner = /github\.com[/:]([^/]+)\//u.exec(m.url ?? '')?.[1] ?? '';
+            const owner = urlOwner !== '' ? urlOwner : (m.name.includes('/') ? (m.name.split('/')[0] ?? m.name) : m.name);
             const cur = byBase.get(base);
             if (cur === undefined)
-                byBase.set(base, { cats: m.categories, count: 1, name: m.name });
+                byBase.set(base, { cats: m.categories, owners: new Set([owner]), name: m.name });
             else {
                 cur.cats = [...new Set([...cur.cats, ...m.categories])];
-                cur.count++;
+                cur.owners.add(owner);
             }
         }
         // 返回分类 + 命中的市场条目名（owner/repo；无 repository 字段的包用它补
@@ -223,7 +228,7 @@ export class PluginCenterEngine extends Service {
             // context-doctor 因此未命中（标签/作者都丢失）。
             const raw = p.name.includes('/') ? p.name.slice(p.name.indexOf('/') + 1) : p.name;
             const b = byBase.get(raw);
-            if (b !== undefined && b.count === 1)
+            if (b !== undefined && b.owners.size === 1)
                 return { cats: b.cats, marketName: b.name };
             return { cats: [], marketName: null };
         };
