@@ -180,12 +180,12 @@ export class PluginCenterEngine extends Service {
                 fiberPhase: entry.fiber === undefined ? null : FIBER_PHASE[entry.fiber.state],
             });
         }
-        // 市场多键索引（2026-09-01 修：@max-null/* 等被 awesome 收录但无标签——
-        // 原匹配键只有 m.name（awesome 的 owner/repo 形态），而 installed 的
-        // p.name 是 npm 名（@scope/name），形态不一致匹配失败；oh-my-dsh 又是
-        // 裸名，三种形态需全部覆盖。同名不同 owner（如 dsh-memory 有 4 个源、
-        // dsh-pocket 3 个）用裸名兜底时必须唯一，否则误配）。
-        const merged = mergePlugins([this.awesomeCache, this.ohMyDshCache]);
+        // 市场多键索引（2026-09-01 修：@max-null/* 等被收录但无标签——
+        // ①原匹配键只有 m.name（awesome 的 owner/repo 形态），而 installed 的
+        // p.name 是 npm 名，形态不一致；②此前只合并 awesome/oh-my-dsh，漏了
+        // dsh-market（市场 tab 是三源合并，2777 条多为 dsh-market——SSiD 内
+        // awesome 可能 fetch 失败而 dsh-market 成功，漏它=标签全丢））。
+        const merged = mergePlugins([this.awesomeCache, this.ohMyDshCache, this.dshMarketCache]);
         const byNpm = new Map();
         const byRepo = new Map();
         const byBase = new Map();
