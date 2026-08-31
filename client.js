@@ -576,10 +576,15 @@ async function checkWhatNew() {
   }
 }
 var CATEGORIES = ["ui", "usage", "theme", "model", "session", "memory", "tools", "vision", "skill", "workflow", "notify", "dev", "market", "fun"];
-function repoDisplay(url) {
+function repoName(url) {
   if (url === null || url === "") return null;
   const s = url.trim().replace(/^git\+/u, "").replace(/^https?:\/\//u, "").replace(/^git:\/\//u, "").replace(/^ssh:\/\/git@/u, "").replace(/^github\.com\//u, "").replace(/\.git$/u, "").replace(/\/$/u, "");
-  return s.length > 32 ? `${s.slice(0, 32)}\u2026` : s;
+  return s === "" ? null : s;
+}
+function authorDuplicatesRepo(author, repo) {
+  if (author === null || author === "" || repo === null) return false;
+  const owner = repo.split("/")[0];
+  return owner === author || repo.toLowerCase().includes(author.toLowerCase());
 }
 var STRINGS = {
   zh: {
@@ -897,14 +902,13 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
   });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: filtered.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: p.displayName }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: repoName(p.repoUrl) ?? p.displayName }),
       p.version !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
         "v",
         p.version
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
-      repoDisplay(p.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-src", title: `${t("srcRepo")}: ${p.repoUrl ?? ""}`, children: repoDisplay(p.repoUrl) }),
-      p.author !== null && p.author !== "" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${p.author}`, children: [
+      p.author !== null && p.author !== "" && !authorDuplicatesRepo(p.author, repoName(p.repoUrl)) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${p.author}`, children: [
         "@",
         p.author
       ] }),
@@ -1113,9 +1117,8 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
-        repoDisplay(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-src", title: `${t("srcRepo")}: ${u.repoUrl ?? ""}`, children: repoDisplay(u.repoUrl) }),
-        u.author !== null && u.author !== "" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${u.author}`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: repoName(u.repoUrl) ?? u.name }),
+        u.author !== null && u.author !== "" && !authorDuplicatesRepo(u.author, repoName(u.repoUrl)) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${u.author}`, children: [
           "@",
           u.author
         ] }),

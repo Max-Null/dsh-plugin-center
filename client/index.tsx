@@ -701,6 +701,32 @@ function repoDisplay(url: string | null): string | null {
   return s.length > 32 ? `${s.slice(0, 32)}…` : s
 }
 
+/** 完整库名(纯归一化,不截断):owner/repo——卡片标题直接用它,
+ *  避免「插件名 + 库名」两份冗余(2026-09-01 用户反馈)。 */
+function repoName(url: string | null): string | null {
+  if (url === null || url === '') return null
+  const s = url
+    .trim()
+    .replace(/^git\+/u, '')
+    .replace(/^https?:\/\//u, '')
+    .replace(/^git:\/\//u, '')
+    .replace(/^ssh:\/\/git@/u, '')
+    .replace(/^github\.com\//u, '')
+    .replace(/\.git$/u, '')
+    .replace(/\/$/u, '')
+  return s === '' ? null : s
+}
+
+/** 作者是否与库名 owner 重复(重复时不单独显示 @author,避免第三份冗余)。
+ *  如 Max-Null/dsh-memory 的 owner=Max-Null = 作者 → 隐藏；dsh-dream-skin
+ *  的 owner=RevolutionLA 但其 author="dsh-dream-skin contributors" → 显示。 */
+function authorDuplicatesRepo(author: string | null, repo: string | null): boolean {
+  if (author === null || author === '' || repo === null) return false
+  const owner = repo.split('/')[0]
+  return owner === author || repo.toLowerCase().includes(author.toLowerCase())
+}
+
+
 // ---- i18n（2026-08-17 用户反馈：未适配 DSH 双语切换）----------------------
 // DSH locale 机制：ctx.locale 服务 + `locale/change` 事件（快照 active: 'zh'|'en'）。
 // 模块级 localeId + 监听器（apply 时接线），组件经 useT 订阅切换重渲染。
@@ -920,13 +946,10 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
       {filtered.map(p => (
         <div key={p.entryId} className="pc-card">
           <div className="pc-row">
-            <span className="pc-name">{p.displayName}</span>
+            <span className="pc-name">{repoName(p.repoUrl) ?? p.displayName}</span>
             {p.version !== null && <span className="pc-ver">v{p.version}</span>}
             <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
-            {repoDisplay(p.repoUrl) !== null && (
-              <span className="pc-src" title={`${t('srcRepo')}: ${p.repoUrl ?? ''}`}>{repoDisplay(p.repoUrl)}</span>
-            )}
-            {p.author !== null && p.author !== '' && (
+            {p.author !== null && p.author !== '' && !authorDuplicatesRepo(p.author, repoName(p.repoUrl)) && (
               <span className="pc-src" title={`${t('srcAuthor')}: ${p.author}`}>@{p.author}</span>
             )}
             <span className="pc-spacer" />
@@ -1145,11 +1168,8 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
       {updates.map(u => (
         <div key={u.name} className="pc-card">
           <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
-            <span className="pc-name">{u.name}</span>
-            {repoDisplay(u.repoUrl) !== null && (
-              <span className="pc-src" title={`${t('srcRepo')}: ${u.repoUrl ?? ''}`}>{repoDisplay(u.repoUrl)}</span>
-            )}
-            {u.author !== null && u.author !== '' && (
+            <span className="pc-name">{repoName(u.repoUrl) ?? u.name}</span>
+            {u.author !== null && u.author !== '' && !authorDuplicatesRepo(u.author, repoName(u.repoUrl)) && (
               <span className="pc-src" title={`${t('srcAuthor')}: ${u.author}`}>@{u.author}</span>
             )}
             <span className="pc-ver">{u.fromVersion}</span>
