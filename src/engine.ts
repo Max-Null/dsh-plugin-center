@@ -19,7 +19,7 @@ import {
 } from './market.ts'
 import {
   detectUpdate, installPlugin, preparePluginUpdate, updatePlugin,
-  buildLlmPackage, dependencySpecifierOf, isSameUpstream, sourceOf,
+  buildLlmPackage, dependencySpecifierOf, isSameUpstream, normalizeRepoUrl, sourceOf,
   type LlmUpdatePackage, type PnpmResult, type UpdateDigest,
 } from './update.ts'
 import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
@@ -229,12 +229,46 @@ export class PluginCenterEngine extends Service {
         fiberPhase: entry.fiber === undefined ? null : FIBER_PHASE[entry.fiber.state],
       })
     }
-    const categoryByName = new Map(mergePlugins([this.awesomeCache, this.ohMyDshCache]).map(m => [m.name, m.categories]))
+    // 市场多键索引（2026-09-01 修：@max-null/* 等被 awesome 收录但无标签——
+    // 原匹配键只有 m.name（awesome 的 owner/repo 形态），而 installed 的
+    // p.name 是 npm 名（@scope/name），形态不一致匹配失败；oh-my-dsh 又是
+    // 裸名，三种形态需全部覆盖。同名不同 owner（如 dsh-memory 有 4 个源、
+    // dsh-pocket 3 个）用裸名兜底时必须唯一，否则误配）。
+    const merged = mergePlugins([this.awesomeCache, this.ohMyDshCache])
+    const byNpm = new Map<string, string[]>()
+    const byRepo = new Map<string, string[]>()
+    const byBase = new Map<string, { cats: string[]; count: number }>()
+    for (const m of merged) {
+      if (m.npm !== null) byNpm.set(m.npm, m.categories)
+      if (m.name.includes('/')) byRepo.set(m.name.toLowerCase(), m.categories)
+      const base = m.name.split('/').pop() ?? m.name
+      const cur = byBase.get(base)
+      if (cur === undefined) byBase.set(base, { cats: m.categories, count: 1 })
+      else {
+        cur.cats = [...new Set([...cur.cats, ...m.categories])]
+        cur.count++
+      }
+    }
+    const categoriesOf = (p: InstalledPlugin): string[] => {
+      let hit = byNpm.get(p.name)
+      if (hit !== undefined) return hit
+      if (p.repoUrl !== null) {
+        const repo = normalizeRepoUrl(p.repoUrl)
+        if (repo !== '') {
+          hit = byRepo.get(repo.toLowerCase())
+          if (hit !== undefined) return hit
+        }
+      }
+      const base = p.displayName
+      const b = byBase.get(base)
+      if (b !== undefined && b.count === 1) return b.cats
+      return []
+    }
     const plugins = await Promise.all(views.map(v => buildInstalledPlugin(this.baseUrl, v)))
     // Sort local dev first, then third-party installs, then official, then builtin.
     const SOURCE_ORDER: Record<PluginSource, number> = { local: 0, installed: 1, official: 2, builtin: 3 }
     return plugins
-      .map(p => ({ ...p, categories: categoryByName.get(p.name) ?? [] }))
+      .map(p => ({ ...p, categories: categoriesOf(p) }))
       .sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source])
   }
 
