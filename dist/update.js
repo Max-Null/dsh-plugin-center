@@ -161,7 +161,7 @@ export async function fetchCommitChangelog(repoUrl, sinceIso) {
  * changelog since `sinceIso`, and check DSH compatibility against the local
  * DSH version via the plugin's peer-dependency range.
  */
-export async function detectUpdate(name, localVersion, repoUrl, compatRange, localDshVersion, sinceIso) {
+export async function detectUpdate(name, localVersion, repoUrl, author, compatRange, localDshVersion, sinceIso) {
     const latest = await npmLatest(name);
     if (latest === null || compareVersions(latest, localVersion) <= 0)
         return null;
@@ -183,6 +183,7 @@ export async function detectUpdate(name, localVersion, repoUrl, compatRange, loc
         compat,
         compatRange,
         repoUrl,
+        author,
     };
 }
 // ── 两段式更新（2026-08-22）：预下载 + 重启时安装 ────────────────────────

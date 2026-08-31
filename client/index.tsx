@@ -175,6 +175,8 @@ interface InstalledPlugin {
   fiberPhase: FiberPhase
   compatRange: string | null
   repoUrl: string | null
+  /** 作者（区分同名异源，2026-09-01）。 */
+  author: string | null
   categories: string[]
 }
 
@@ -201,6 +203,8 @@ interface UpdateDigest {
   compatRange: string | null
   /** 上游仓库(区分同名异源:同一插件名可能来自不同项目,2026-09-01)。 */
   repoUrl: string | null
+  /** 作者(区分同名异源,2026-09-01)。 */
+  author: string | null
 }
 
 /** LLM 更新信息包(host 采集,只读;执行由 LLM 会话完成)。 */
@@ -708,7 +712,7 @@ const STRINGS = {
     check: '检查更新', checking: '检查中…', updateAll: '更新全部（{n}）',
     searchInstalled: '搜索已安装插件', allSources: '全部来源',
     srcOfficial: '官方', srcInstalled: '用户安装', srcLocal: '本地开发', srcBuiltin: '内置',
-    srcRepo: '来源仓库',
+    srcRepo: '来源仓库', srcAuthor: '作者',
     all: '全部', searchMarket: '搜索社区插件', allMarkets: '全部源',
     gridDouble: '双列网格', gridSingle: '单列列表',
     loadFailed: '加载失败：{e}', loading: '加载中…',
@@ -775,7 +779,7 @@ const STRINGS = {
     check: 'Check updates', checking: 'Checking…', updateAll: 'Update all（{n}）',
     searchInstalled: 'Search installed plugins', allSources: 'All sources',
     srcOfficial: 'Official', srcInstalled: 'User installed', srcLocal: 'Local dev', srcBuiltin: 'Built-in',
-    srcRepo: 'Source repo',
+    srcRepo: 'Source repo', srcAuthor: 'Author',
     all: 'All', searchMarket: 'Search community plugins', allMarkets: 'All sources',
     gridDouble: 'Two-column grid', gridSingle: 'Single-column list',
     loadFailed: 'Failed to load: {e}', loading: 'Loading…',
@@ -921,6 +925,9 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
             <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
             {repoDisplay(p.repoUrl) !== null && (
               <span className="pc-src" title={`${t('srcRepo')}: ${p.repoUrl ?? ''}`}>{repoDisplay(p.repoUrl)}</span>
+            )}
+            {p.author !== null && p.author !== '' && (
+              <span className="pc-src" title={`${t('srcAuthor')}: ${p.author}`}>@{p.author}</span>
             )}
             <span className="pc-spacer" />
             {p.fiberPhase === 'failed' && <span className="pc-dot failed" title="failed" />}
@@ -1141,6 +1148,9 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             <span className="pc-name">{u.name}</span>
             {repoDisplay(u.repoUrl) !== null && (
               <span className="pc-src" title={`${t('srcRepo')}: ${u.repoUrl ?? ''}`}>{repoDisplay(u.repoUrl)}</span>
+            )}
+            {u.author !== null && u.author !== '' && (
+              <span className="pc-src" title={`${t('srcAuthor')}: ${u.author}`}>@{u.author}</span>
             )}
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>

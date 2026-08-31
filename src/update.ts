@@ -20,6 +20,8 @@ export interface UpdateDigest {
   compatRange: string | null
   /** 上游仓库(区分同名异源:同一插件名可能来自不同项目,2026-09-01)。 */
   repoUrl: string | null
+  /** 作者(来自实体 package.json author,区分同名异源)。 */
+  author: string | null
 }
 
 /** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
@@ -173,6 +175,7 @@ export async function detectUpdate(
   name: string,
   localVersion: string,
   repoUrl: string | null,
+  author: string | null,
   compatRange: string | null,
   localDshVersion: string,
   sinceIso: string,
@@ -196,6 +199,7 @@ export async function detectUpdate(
     compat,
     compatRange,
     repoUrl,
+    author,
   }
 }
 

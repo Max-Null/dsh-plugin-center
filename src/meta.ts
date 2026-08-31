@@ -23,6 +23,8 @@ export interface InstalledPlugin {
   fiberPhase: string | null
   compatRange: string | null
   repoUrl: string | null
+  /** 作者（package.json author；字符串或对象 name，缺失 null）。 */
+  author: string | null
   /** Community categories, cross-matched from the market catalog (empty until fetched). */
   categories: string[]
 }
@@ -34,6 +36,8 @@ interface PackageJson {
   description?: string
   repository?: string | { url?: string }
   peerDependencies?: Record<string, string>
+  /** npm author 字段（字符串或 { name } 对象）——已安装列表显示作者（2026-09-01）。 */
+  author?: string | { name?: string }
 }
 
 /** Compact a module specifier into a display name without guessing Loader id shape. */
@@ -162,6 +166,12 @@ export async function buildInstalledPlugin(
       const r = resolved.pkg.repository
       if (typeof r === 'string') return r
       if (r !== null && typeof r === 'object' && typeof r.url === 'string') return r.url
+      return null
+    })(),
+    author: resolved === null ? null : (() => {
+      const a = resolved.pkg.author
+      if (typeof a === 'string') return a !== '' ? a : null
+      if (a !== null && typeof a === 'object' && typeof a.name === 'string') return a.name !== '' ? a.name : null
       return null
     })(),
     categories: [],

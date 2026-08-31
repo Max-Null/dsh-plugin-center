@@ -598,6 +598,7 @@ var STRINGS = {
     srcLocal: "\u672C\u5730\u5F00\u53D1",
     srcBuiltin: "\u5185\u7F6E",
     srcRepo: "\u6765\u6E90\u4ED3\u5E93",
+    srcAuthor: "\u4F5C\u8005",
     all: "\u5168\u90E8",
     searchMarket: "\u641C\u7D22\u793E\u533A\u63D2\u4EF6",
     allMarkets: "\u5168\u90E8\u6E90",
@@ -718,6 +719,7 @@ var STRINGS = {
     srcLocal: "Local dev",
     srcBuiltin: "Built-in",
     srcRepo: "Source repo",
+    srcAuthor: "Author",
     all: "All",
     searchMarket: "Search community plugins",
     allMarkets: "All sources",
@@ -902,6 +904,10 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
       repoDisplay(p.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-src", title: `${t("srcRepo")}: ${p.repoUrl ?? ""}`, children: repoDisplay(p.repoUrl) }),
+      p.author !== null && p.author !== "" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${p.author}`, children: [
+        "@",
+        p.author
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       p.fiberPhase === "failed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-dot failed", title: "failed" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -1109,6 +1115,10 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
         repoDisplay(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-src", title: `${t("srcRepo")}: ${u.repoUrl ?? ""}`, children: repoDisplay(u.repoUrl) }),
+        u.author !== null && u.author !== "" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${u.author}`, children: [
+          "@",
+          u.author
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),

@@ -396,7 +396,7 @@ export class PluginCenterEngine extends Service {
         const same = await isSameUpstream(p.repoUrl, p.name)
         if (same !== true) return null
       }
-      return detectUpdate(p.name, p.version!, p.repoUrl, p.compatRange, localDsh, sinceIso)
+      return detectUpdate(p.name, p.version!, p.repoUrl, p.author, p.compatRange, localDsh, sinceIso)
     }))
     this.updatesCache = { since: sinceIso, at: now, digests: digests.filter((d): d is UpdateDigest => d !== null) }
     return this.updatesCache.digests

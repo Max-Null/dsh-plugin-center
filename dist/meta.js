@@ -121,6 +121,14 @@ export async function buildInstalledPlugin(baseUrl, entry) {
                 return r.url;
             return null;
         })(),
+        author: resolved === null ? null : (() => {
+            const a = resolved.pkg.author;
+            if (typeof a === 'string')
+                return a !== '' ? a : null;
+            if (a !== null && typeof a === 'object' && typeof a.name === 'string')
+                return a.name !== '' ? a.name : null;
+            return null;
+        })(),
         categories: [],
     };
 }

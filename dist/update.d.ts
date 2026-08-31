@@ -8,6 +8,8 @@ export interface UpdateDigest {
     compatRange: string | null;
     /** 上游仓库(区分同名异源:同一插件名可能来自不同项目,2026-09-01)。 */
     repoUrl: string | null;
+    /** 作者(来自实体 package.json author,区分同名异源)。 */
+    author: string | null;
 }
 /** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
  *  SSiD 内核(0.1.x)无 remote BFF 服务(走 /plugin-center RPC channel),
@@ -34,7 +36,7 @@ export declare function fetchCommitChangelog(repoUrl: string | null, sinceIso: s
  * changelog since `sinceIso`, and check DSH compatibility against the local
  * DSH version via the plugin's peer-dependency range.
  */
-export declare function detectUpdate(name: string, localVersion: string, repoUrl: string | null, compatRange: string | null, localDshVersion: string, sinceIso: string): Promise<UpdateDigest | null>;
+export declare function detectUpdate(name: string, localVersion: string, repoUrl: string | null, author: string | null, compatRange: string | null, localDshVersion: string, sinceIso: string): Promise<UpdateDigest | null>;
 /** One pnpm invocation result: success plus a failure detail for diagnostics. */
 export interface PnpmResult {
     ok: boolean;
