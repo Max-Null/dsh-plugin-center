@@ -127,6 +127,16 @@ export async function buildInstalledPlugin(baseUrl, entry) {
                 return a !== '' ? a : null;
             if (a !== null && typeof a === 'object' && typeof a.name === 'string')
                 return a.name !== '' ? a.name : null;
+            // npm 包常不写 author 字段但 repository 有 owner（= 作者/组织，如
+            // Max-Null、omdsh-dev）——回退提取（2026-09-01 用户实测"显示不全"：
+            // 多数包无 author → 界面只有库名无作者）。
+            const r = resolved.pkg.repository;
+            const url = typeof r === 'string' ? r : r !== null && typeof r === 'object' && typeof r.url === 'string' ? r.url : null;
+            if (url !== null) {
+                const m = /github\.com[/:]([^/]+)\/[^/.\#]+/.exec(url);
+                if (m !== null && m[1] !== undefined && m[1] !== '')
+                    return m[1];
+            }
             return null;
         })(),
         categories: [],

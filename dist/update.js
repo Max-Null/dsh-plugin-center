@@ -183,7 +183,9 @@ export async function detectUpdate(name, localVersion, repoUrl, author, compatRa
         compat,
         compatRange,
         repoUrl,
-        author,
+        // 与 meta.ts buildInstalledPlugin 同规则：无 author 字段时回退 repository
+        // owner（npm 包常不写 author；owner=作者/组织，2026-09-01）。
+        author: author ?? (repoUrl === null ? null : (/github\.com[/:]([^/]+)\/[^/.\#]+/.exec(repoUrl)?.[1] ?? null)),
     };
 }
 // ── 两段式更新（2026-08-22）：预下载 + 重启时安装 ────────────────────────
