@@ -217,8 +217,12 @@ export class PluginCenterEngine extends Service {
                         return { cats: hit.cats, marketName: hit.name };
                 }
             }
-            const base = p.displayName;
-            const b = byBase.get(base);
+            // 裸名兜底用「完整包名」（剥 scope 不剥 dsh- 前缀）——displayName 会剥
+            // dsh-（dsh-context-doctor → context-doctor），而市场裸名是完整名
+            // （Zhenyu98/dsh-context-doctor 的 base=dsh-context-doctor），2026-09-01 实测
+            // context-doctor 因此未命中（标签/作者都丢失）。
+            const raw = p.name.includes('/') ? p.name.slice(p.name.indexOf('/') + 1) : p.name;
+            const b = byBase.get(raw);
             if (b !== undefined && b.count === 1)
                 return { cats: b.cats, marketName: b.name };
             return { cats: [], marketName: null };
