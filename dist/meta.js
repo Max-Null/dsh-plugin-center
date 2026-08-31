@@ -5,6 +5,7 @@
  */
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 /** Compact a module specifier into a display name without guessing Loader id shape. */
@@ -90,12 +91,41 @@ async function resolveUncached(baseUrl, specifier) {
     }
     if (specifier.startsWith('cordis:'))
         return null;
+    // 1) 主入口解析（exports "." 的 import/require 条件都命中；主入口可能深在
+    //    dist/ 子目录，须向上找包根 package.json）。2026-09-01 修复两坑：
+    //    a. `pkg/package.json` 子路径被 exports 拒（chinese-thinking 等）；
+    //    b. exports "." 仅 import 条件时 CJS require.resolve 失败（ds-harness-remote）。
     try {
         const require = createRequire(join(baseUrl, 'package.json'));
-        const path = require.resolve(`${specifier}/package.json`);
-        return { pkg: JSON.parse(await readFile(path, 'utf8')), dir: dirname(path) };
+        const entry = require.resolve(specifier);
+        let dir = dirname(entry);
+        for (let i = 0; i < 12; i++) {
+            const pkgPath = join(dir, 'package.json');
+            if (existsSync(pkgPath)) {
+                return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')), dir };
+            }
+            const parent = dirname(dir);
+            if (parent === dir)
+                return null;
+            dir = parent;
+        }
+        return null;
     }
     catch {
+        // 2) 回退：逐级 node_modules 链路探测（不经过 require 的 exports 门控）——
+        //    从 profile 根向上找 node_modules/<specifier>/package.json。
+        let dir = baseUrl;
+        for (let i = 0; i < 16; i++) {
+            const cand = join(dir, 'node_modules', specifier);
+            const pkgPath = join(cand, 'package.json');
+            if (existsSync(pkgPath)) {
+                return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')), dir: cand };
+            }
+            const parent = dirname(dir);
+            if (parent === dir)
+                return null;
+            dir = parent;
+        }
         return null;
     }
 }

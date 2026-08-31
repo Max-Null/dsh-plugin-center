@@ -683,24 +683,6 @@ async function checkWhatNew(): Promise<void> {
 
 const CATEGORIES = ['ui', 'usage', 'theme', 'model', 'session', 'memory', 'tools', 'vision', 'skill', 'workflow', 'notify', 'dev', 'market', 'fun']
 
-/** 仓库 URL 短显示(区分同名异源):去 scheme/git+/github.com 前缀/尾斜杠,
- *  保留 owner/repo——与 host normalizeRepoUrl 同规则(2026-09-01:
- *  不剥 github.com/ 会显示成 github.com/omdsh-dev/DSH-better-sidebar,
- *  用户明确要求「omdsh-dev/」前缀形态)。截断过长部分(>32 字符),全文放 title。 */
-function repoDisplay(url: string | null): string | null {
-  if (url === null || url === '') return null
-  const s = url
-    .trim()
-    .replace(/^git\+/u, '')
-    .replace(/^https?:\/\//u, '')
-    .replace(/^git:\/\//u, '')
-    .replace(/^ssh:\/\/git@/u, '')
-    .replace(/^github\.com\//u, '')
-    .replace(/\.git$/u, '')
-    .replace(/\/$/u, '')
-  return s.length > 32 ? `${s.slice(0, 32)}…` : s
-}
-
 /** 完整库名(纯归一化,不截断):owner/repo——卡片标题直接用它,
  *  避免「插件名 + 库名」两份冗余(2026-09-01 用户反馈)。 */
 function repoName(url: string | null): string | null {
@@ -717,14 +699,29 @@ function repoName(url: string | null): string | null {
   return s === '' ? null : s
 }
 
-/** 作者是否与库名 owner 重复(重复时不单独显示 @author,避免第三份冗余)。
- *  如 Max-Null/dsh-memory 的 owner=Max-Null = 作者 → 隐藏；dsh-dream-skin
- *  的 owner=RevolutionLA 但其 author="dsh-dream-skin contributors" → 显示。 */
-function authorDuplicatesRepo(author: string | null, repo: string | null): boolean {
-  if (author === null || author === '' || repo === null) return false
-  const owner = repo.split('/')[0]
-  return owner === author || repo.toLowerCase().includes(author.toLowerCase())
+/** SSiD 内置专属包（vendor/file 形态、无独立 npm/仓库的）——无 repo 时
+ *  标题默认 Max-Null/ 前缀（2026-09-01 用户定：拿不到作者信息正常，
+ *  默认用 Max-Null/ 就行）。 */
+const KNOWN_MAXNULL_INTERNAL = new Set(['dsh-ssid-panels', 'dsh-ssid-zh-ui', 'dsh-context-doctor'])
+
+/** 标题回退链：repoName(repoUrl) → scope 推导（@max-null/dsh-x → Max-Null/dsh-x；
+ *  其余 scope 保留 @scope/name）→ 内置白名单（Max-Null/<name>）→ 原名。 */
+function titleOf(name: string, repoUrl: string | null, fallback: string): string {
+  const fromRepo = repoName(repoUrl)
+  if (fromRepo !== null) return fromRepo
+  if (name.startsWith('@')) {
+    const slash = name.indexOf('/')
+    if (slash > 0) {
+      const scope = name.slice(1, slash)
+      const rest = name.slice(slash + 1)
+      const owner = scope === 'max-null' ? 'Max-Null' : scope
+      return `${owner}/${rest}`
+    }
+  }
+  if (KNOWN_MAXNULL_INTERNAL.has(name)) return `Max-Null/${name}`
+  return fallback
 }
+
 
 
 // ---- i18n（2026-08-17 用户反馈：未适配 DSH 双语切换）----------------------
@@ -738,7 +735,7 @@ const STRINGS = {
     check: '检查更新', checking: '检查中…', updateAll: '更新全部（{n}）',
     searchInstalled: '搜索已安装插件', allSources: '全部来源',
     srcOfficial: '官方', srcInstalled: '用户安装', srcLocal: '本地开发', srcBuiltin: '内置',
-    srcRepo: '来源仓库', srcAuthor: '作者',
+    srcRepo: '来源仓库',
     all: '全部', searchMarket: '搜索社区插件', allMarkets: '全部源',
     gridDouble: '双列网格', gridSingle: '单列列表',
     loadFailed: '加载失败：{e}', loading: '加载中…',
@@ -805,7 +802,7 @@ const STRINGS = {
     check: 'Check updates', checking: 'Checking…', updateAll: 'Update all（{n}）',
     searchInstalled: 'Search installed plugins', allSources: 'All sources',
     srcOfficial: 'Official', srcInstalled: 'User installed', srcLocal: 'Local dev', srcBuiltin: 'Built-in',
-    srcRepo: 'Source repo', srcAuthor: 'Author',
+    srcRepo: 'Source repo',
     all: 'All', searchMarket: 'Search community plugins', allMarkets: 'All sources',
     gridDouble: 'Two-column grid', gridSingle: 'Single-column list',
     loadFailed: 'Failed to load: {e}', loading: 'Loading…',
@@ -946,12 +943,9 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
       {filtered.map(p => (
         <div key={p.entryId} className="pc-card">
           <div className="pc-row">
-            <span className="pc-name">{repoName(p.repoUrl) ?? p.displayName}</span>
+            <span className="pc-name">{titleOf(p.name, p.repoUrl, p.displayName)}</span>
             {p.version !== null && <span className="pc-ver">v{p.version}</span>}
             <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
-            {p.author !== null && p.author !== '' && !authorDuplicatesRepo(p.author, repoName(p.repoUrl)) && (
-              <span className="pc-src" title={`${t('srcAuthor')}: ${p.author}`}>@{p.author}</span>
-            )}
             <span className="pc-spacer" />
             {p.fiberPhase === 'failed' && <span className="pc-dot failed" title="failed" />}
             <button
@@ -1168,10 +1162,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
       {updates.map(u => (
         <div key={u.name} className="pc-card">
           <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
-            <span className="pc-name">{repoName(u.repoUrl) ?? u.name}</span>
-            {u.author !== null && u.author !== '' && !authorDuplicatesRepo(u.author, repoName(u.repoUrl)) && (
-              <span className="pc-src" title={`${t('srcAuthor')}: ${u.author}`}>@{u.author}</span>
-            )}
+            <span className="pc-name">{titleOf(u.name, u.repoUrl, u.name)}</span>
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>

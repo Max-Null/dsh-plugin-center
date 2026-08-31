@@ -581,10 +581,21 @@ function repoName(url) {
   const s = url.trim().replace(/^git\+/u, "").replace(/^https?:\/\//u, "").replace(/^git:\/\//u, "").replace(/^ssh:\/\/git@/u, "").replace(/^github\.com\//u, "").replace(/\.git$/u, "").replace(/\/$/u, "");
   return s === "" ? null : s;
 }
-function authorDuplicatesRepo(author, repo) {
-  if (author === null || author === "" || repo === null) return false;
-  const owner = repo.split("/")[0];
-  return owner === author || repo.toLowerCase().includes(author.toLowerCase());
+var KNOWN_MAXNULL_INTERNAL = /* @__PURE__ */ new Set(["dsh-ssid-panels", "dsh-ssid-zh-ui", "dsh-context-doctor"]);
+function titleOf(name, repoUrl, fallback) {
+  const fromRepo = repoName(repoUrl);
+  if (fromRepo !== null) return fromRepo;
+  if (name.startsWith("@")) {
+    const slash = name.indexOf("/");
+    if (slash > 0) {
+      const scope = name.slice(1, slash);
+      const rest = name.slice(slash + 1);
+      const owner = scope === "max-null" ? "Max-Null" : scope;
+      return `${owner}/${rest}`;
+    }
+  }
+  if (KNOWN_MAXNULL_INTERNAL.has(name)) return `Max-Null/${name}`;
+  return fallback;
 }
 var STRINGS = {
   zh: {
@@ -603,7 +614,6 @@ var STRINGS = {
     srcLocal: "\u672C\u5730\u5F00\u53D1",
     srcBuiltin: "\u5185\u7F6E",
     srcRepo: "\u6765\u6E90\u4ED3\u5E93",
-    srcAuthor: "\u4F5C\u8005",
     all: "\u5168\u90E8",
     searchMarket: "\u641C\u7D22\u793E\u533A\u63D2\u4EF6",
     allMarkets: "\u5168\u90E8\u6E90",
@@ -724,7 +734,6 @@ var STRINGS = {
     srcLocal: "Local dev",
     srcBuiltin: "Built-in",
     srcRepo: "Source repo",
-    srcAuthor: "Author",
     all: "All",
     searchMarket: "Search community plugins",
     allMarkets: "All sources",
@@ -902,16 +911,12 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
   });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: filtered.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: repoName(p.repoUrl) ?? p.displayName }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(p.name, p.repoUrl, p.displayName) }),
       p.version !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
         "v",
         p.version
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
-      p.author !== null && p.author !== "" && !authorDuplicatesRepo(p.author, repoName(p.repoUrl)) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${p.author}`, children: [
-        "@",
-        p.author
-      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       p.fiberPhase === "failed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-dot failed", title: "failed" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -1117,11 +1122,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: repoName(u.repoUrl) ?? u.name }),
-        u.author !== null && u.author !== "" && !authorDuplicatesRepo(u.author, repoName(u.repoUrl)) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-src", title: `${t("srcAuthor")}: ${u.author}`, children: [
-          "@",
-          u.author
-        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(u.name, u.repoUrl, u.name) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
