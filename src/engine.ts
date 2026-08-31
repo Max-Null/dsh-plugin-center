@@ -376,7 +376,13 @@ export class PluginCenterEngine extends Service {
     const hit = this.updatesCache
     if (hit !== null && hit.since === sinceIso && now - hit.at < this.updatesTtlMs) return hit.digests
     const [installed, localDsh] = await Promise.all([this.listInstalled(), this.dshVersion()])
-    const candidates = installed.filter(p => UPDATABLE.has(p.source) && p.version !== null)
+    // 只检测 profile 直接声明的插件。由内核 bundle 间接引入的内部插件——
+    // 如 @deepseek-ai/cordis-plugin-timer / cordis-plugin-hmr(dsh-base 的
+    // cordis.patch.yml insert 条目)——名字不在 profile dependency 里,由 DSH
+    // 内核版本管理,用户无法也不应单独更新;不按此过滤会把它们误报进更新列表
+    // (且每次都报,npm 一直有小版本漂移),LLM 还会误判为"安装位置不符"而空跑。
+    const managed = readDependencyKeys(this.baseUrl)
+    const candidates = installed.filter(p => UPDATABLE.has(p.source) && p.version !== null && managed.has(p.name))
     const digests = await Promise.all(candidates.map(async p => {
       // 同名异源保护(2026-08-29):本地自定义来源(依赖声明 vendor/tarball/
       // local-file)时,校验 npm 同名包是否同一上游——不一致(如 dream12347
@@ -441,6 +447,9 @@ export class PluginCenterEngine extends Service {
    *  只读采集（npm/GitHub/本地 package.json），不执行任何安装——执行由 LLM
    *  Agent 在「插件更新」会话中按 skill 决策后完成。 */
   async llmUpdatePrepare(name: string): Promise<LlmUpdatePackage | null> {
+    // 非 profile 直接声明的插件(bundle 内核内部项)不提供 LLM 更新入口——
+    // 与 checkUpdates 同一判据,避免用户对不可独立更新的包触发决策。
+    if (!readDependencyKeys(this.baseUrl).has(name)) return null
     // 从已安装列表找该插件的元数据（版本/repo/兼容范围）
     const installed = await this.listInstalled()
     const p = installed.find(i => i.name === name)
