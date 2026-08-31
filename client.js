@@ -80,6 +80,8 @@ var CSS = `
 .pc-card:hover { border-color: var(--dsw-alias-label-dimmed); }
 .pc-name { font-size: 15px; font-weight: 600; line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
 .pc-ver { color: var(--dsw-alias-label-caption); font-size: 12px; }
+/* \u6765\u6E90\u4ED3\u5E93\u77ED\u540D\uFF1A\u53EF\u6536\u7F29 + \u622A\u65AD\u7701\u7565(\u957F owner/repo \u4E0D\u6491\u7834 nowrap \u884C),title \u663E\u793A\u5168\u6587\u3002 */
+.pc-src { flex: 0 1 auto; min-width: 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-caption); font-size: 12px; cursor: default; }
 .pc-desc { color: var(--dsw-alias-label-tertiary); font-size: 13px; margin-top: 6px; word-break: break-word; overflow-wrap: break-word; }
 .pc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pc-spacer { flex: 1; }
@@ -574,6 +576,11 @@ async function checkWhatNew() {
   }
 }
 var CATEGORIES = ["ui", "usage", "theme", "model", "session", "memory", "tools", "vision", "skill", "workflow", "notify", "dev", "market", "fun"];
+function repoDisplay(url) {
+  if (url === null || url === "") return null;
+  const s = url.trim().replace(/^git\+/u, "").replace(/^https?:\/\//u, "").replace(/^git:\/\//u, "").replace(/^ssh:\/\/git@/u, "").replace(/^github\.com\//u, "").replace(/\.git$/u, "").replace(/\/$/u, "");
+  return s.length > 32 ? `${s.slice(0, 32)}\u2026` : s;
+}
 var STRINGS = {
   zh: {
     title: "\u63D2\u4EF6\u4E2D\u5FC3",
@@ -590,6 +597,7 @@ var STRINGS = {
     srcInstalled: "\u7528\u6237\u5B89\u88C5",
     srcLocal: "\u672C\u5730\u5F00\u53D1",
     srcBuiltin: "\u5185\u7F6E",
+    srcRepo: "\u6765\u6E90\u4ED3\u5E93",
     all: "\u5168\u90E8",
     searchMarket: "\u641C\u7D22\u793E\u533A\u63D2\u4EF6",
     allMarkets: "\u5168\u90E8\u6E90",
@@ -709,6 +717,7 @@ var STRINGS = {
     srcInstalled: "User installed",
     srcLocal: "Local dev",
     srcBuiltin: "Built-in",
+    srcRepo: "Source repo",
     all: "All",
     searchMarket: "Search community plugins",
     allMarkets: "All sources",
@@ -892,6 +901,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
         p.version
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-badge ${p.source}`, children: srcLabel[p.source] }),
+      repoDisplay(p.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-src", title: `${t("srcRepo")}: ${p.repoUrl ?? ""}`, children: repoDisplay(p.repoUrl) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       p.fiberPhase === "failed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-dot failed", title: "failed" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -1098,6 +1108,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
     updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
+        repoDisplay(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-src", title: `${t("srcRepo")}: ${u.repoUrl ?? ""}`, children: repoDisplay(u.repoUrl) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),

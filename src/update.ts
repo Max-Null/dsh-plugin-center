@@ -18,6 +18,8 @@ export interface UpdateDigest {
   changelog: string[]
   compat: 'compatible' | 'incompatible' | 'unknown'
   compatRange: string | null
+  /** 上游仓库(区分同名异源:同一插件名可能来自不同项目,2026-09-01)。 */
+  repoUrl: string | null
 }
 
 /** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
@@ -193,6 +195,7 @@ export async function detectUpdate(
     changelog: await fetchCommitChangelog(repoUrl, sinceIso),
     compat,
     compatRange,
+    repoUrl,
   }
 }
 
@@ -625,7 +628,9 @@ export async function updatePlugin(packageName: string, version: string, profile
 export type PluginSource = 'official' | 'npm' | 'vendor' | 'tarball' | 'local-file'
 
 export function sourceOf(specifier: string, profileDir: string): PluginSource {
-  if (specifier.startsWith('@deepseek-ai/dsh-')) return 'official'
+  // @deepseek-ai/ 全 scope 官方(含 vendored cordis-* 内核包)——第三方无法
+  // 发布到该 scope;与 meta.ts classifySource 保持同一判据(2026-09-01)。
+  if (specifier.startsWith('@deepseek-ai/')) return 'official'
   // tarball 判定必须在 vendor 之前(否则 'file:./vendor/x.tgz' 被 vendor 分支截胡)。
   if (specifier.startsWith('file:./vendor/') && specifier.endsWith('.tgz')) return 'tarball'
   if (specifier.startsWith('file:./vendor/')) return 'vendor'

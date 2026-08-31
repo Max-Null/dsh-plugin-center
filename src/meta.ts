@@ -56,9 +56,14 @@ function dshCompatRange(pkg: PackageJson): string | null {
   return null
 }
 
-/** Classify provenance from the specifier shape alone (matches the §4.2 design). */
-function classifySource(specifier: string): PluginSource {
-  if (specifier.startsWith('@deepseek-ai/dsh-')) return 'official'
+/** Classify provenance from the specifier shape alone (matches the §4.2 design).
+ *  导出供测试:来源分类直接决定「已安装」列表的展示标签(2026-09-01 起修复
+ *  @deepseek-ai/cordis-* 被误标「用户安装」)。 */
+export function classifySource(specifier: string): PluginSource {
+  // @deepseek-ai/cordis-* 是内核 vendored 的 Cordis 生态包(dsh-base 等 bundle
+  // 的依赖,如 cordis-plugin-timer/hmr),随 DSH 内核版本管理——不是用户安装的
+  // 第三方,归为官方(2026-09-01: 曾被误判 installed,在已安装列表标「用户安装」)。
+  if (specifier.startsWith('@deepseek-ai/')) return 'official'
   if (specifier.startsWith('file://') || specifier.startsWith('link:')) return 'local'
   if (specifier.startsWith('cordis:')) return 'builtin'
   return 'installed'

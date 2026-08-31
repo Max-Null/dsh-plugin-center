@@ -27,6 +27,10 @@ interface PackageJson {
 }
 /** Compact a module specifier into a display name without guessing Loader id shape. */
 export declare function displayName(specifier: string): string;
+/** Classify provenance from the specifier shape alone (matches the §4.2 design).
+ *  导出供测试:来源分类直接决定「已安装」列表的展示标签(2026-09-01 起修复
+ *  @deepseek-ai/cordis-* 被误标「用户安装」)。 */
+export declare function classifySource(specifier: string): PluginSource;
 /**
  * Drop every cached package.json resolution. Called after install/update:
  * pnpm rewrites node_modules on disk, and the next `listInstalled` must see

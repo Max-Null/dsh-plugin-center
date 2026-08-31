@@ -31,6 +31,8 @@ const CSS = `
 .pc-card:hover { border-color: var(--dsw-alias-label-dimmed); }
 .pc-name { font-size: 15px; font-weight: 600; line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
 .pc-ver { color: var(--dsw-alias-label-caption); font-size: 12px; }
+/* 来源仓库短名：可收缩 + 截断省略(长 owner/repo 不撑破 nowrap 行),title 显示全文。 */
+.pc-src { flex: 0 1 auto; min-width: 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-caption); font-size: 12px; cursor: default; }
 .pc-desc { color: var(--dsw-alias-label-tertiary); font-size: 13px; margin-top: 6px; word-break: break-word; overflow-wrap: break-word; }
 .pc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pc-spacer { flex: 1; }
@@ -197,6 +199,8 @@ interface UpdateDigest {
   changelog: string[]
   compat: 'compatible' | 'incompatible' | 'unknown'
   compatRange: string | null
+  /** 上游仓库(区分同名异源:同一插件名可能来自不同项目,2026-09-01)。 */
+  repoUrl: string | null
 }
 
 /** LLM 更新信息包(host 采集,只读;执行由 LLM 会话完成)。 */
@@ -675,6 +679,24 @@ async function checkWhatNew(): Promise<void> {
 
 const CATEGORIES = ['ui', 'usage', 'theme', 'model', 'session', 'memory', 'tools', 'vision', 'skill', 'workflow', 'notify', 'dev', 'market', 'fun']
 
+/** 仓库 URL 短显示(区分同名异源):去 scheme/git+/github.com 前缀/尾斜杠,
+ *  保留 owner/repo——与 host normalizeRepoUrl 同规则(2026-09-01:
+ *  不剥 github.com/ 会显示成 github.com/omdsh-dev/DSH-better-sidebar,
+ *  用户明确要求「omdsh-dev/」前缀形态)。截断过长部分(>32 字符),全文放 title。 */
+function repoDisplay(url: string | null): string | null {
+  if (url === null || url === '') return null
+  const s = url
+    .trim()
+    .replace(/^git\+/u, '')
+    .replace(/^https?:\/\//u, '')
+    .replace(/^git:\/\//u, '')
+    .replace(/^ssh:\/\/git@/u, '')
+    .replace(/^github\.com\//u, '')
+    .replace(/\.git$/u, '')
+    .replace(/\/$/u, '')
+  return s.length > 32 ? `${s.slice(0, 32)}…` : s
+}
+
 // ---- i18n（2026-08-17 用户反馈：未适配 DSH 双语切换）----------------------
 // DSH locale 机制：ctx.locale 服务 + `locale/change` 事件（快照 active: 'zh'|'en'）。
 // 模块级 localeId + 监听器（apply 时接线），组件经 useT 订阅切换重渲染。
@@ -686,6 +708,7 @@ const STRINGS = {
     check: '检查更新', checking: '检查中…', updateAll: '更新全部（{n}）',
     searchInstalled: '搜索已安装插件', allSources: '全部来源',
     srcOfficial: '官方', srcInstalled: '用户安装', srcLocal: '本地开发', srcBuiltin: '内置',
+    srcRepo: '来源仓库',
     all: '全部', searchMarket: '搜索社区插件', allMarkets: '全部源',
     gridDouble: '双列网格', gridSingle: '单列列表',
     loadFailed: '加载失败：{e}', loading: '加载中…',
@@ -752,6 +775,7 @@ const STRINGS = {
     check: 'Check updates', checking: 'Checking…', updateAll: 'Update all（{n}）',
     searchInstalled: 'Search installed plugins', allSources: 'All sources',
     srcOfficial: 'Official', srcInstalled: 'User installed', srcLocal: 'Local dev', srcBuiltin: 'Built-in',
+    srcRepo: 'Source repo',
     all: 'All', searchMarket: 'Search community plugins', allMarkets: 'All sources',
     gridDouble: 'Two-column grid', gridSingle: 'Single-column list',
     loadFailed: 'Failed to load: {e}', loading: 'Loading…',
@@ -895,6 +919,9 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
             <span className="pc-name">{p.displayName}</span>
             {p.version !== null && <span className="pc-ver">v{p.version}</span>}
             <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
+            {repoDisplay(p.repoUrl) !== null && (
+              <span className="pc-src" title={`${t('srcRepo')}: ${p.repoUrl ?? ''}`}>{repoDisplay(p.repoUrl)}</span>
+            )}
             <span className="pc-spacer" />
             {p.fiberPhase === 'failed' && <span className="pc-dot failed" title="failed" />}
             <button
@@ -1112,6 +1139,9 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         <div key={u.name} className="pc-card">
           <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
             <span className="pc-name">{u.name}</span>
+            {repoDisplay(u.repoUrl) !== null && (
+              <span className="pc-src" title={`${t('srcRepo')}: ${u.repoUrl ?? ''}`}>{repoDisplay(u.repoUrl)}</span>
+            )}
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>

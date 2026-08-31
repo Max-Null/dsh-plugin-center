@@ -6,6 +6,8 @@ export interface UpdateDigest {
     changelog: string[];
     compat: 'compatible' | 'incompatible' | 'unknown';
     compatRange: string | null;
+    /** 上游仓库(区分同名异源:同一插件名可能来自不同项目,2026-09-01)。 */
+    repoUrl: string | null;
 }
 /** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
  *  SSiD 内核(0.1.x)无 remote BFF 服务(走 /plugin-center RPC channel),

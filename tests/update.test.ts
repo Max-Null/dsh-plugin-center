@@ -12,6 +12,11 @@ describe('sourceOf 来源判定', () => {
     expect(sourceOf('@deepseek-ai/dsh-session', '/p')).toBe('official')
   })
 
+  it('内核 vendored cordis 包 → 官方(不标用户安装,2026-09-01)', () => {
+    expect(sourceOf('@deepseek-ai/cordis-plugin-timer', '/p')).toBe('official')
+    expect(sourceOf('@deepseek-ai/cordis-plugin-hmr', '/p')).toBe('official')
+  })
+
   it('file:./vendor/ 目录 → vendor', () => {
     expect(sourceOf('file:./vendor/dsh-ssid-panels', '/p')).toBe('vendor')
   })
