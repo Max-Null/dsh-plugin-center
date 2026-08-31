@@ -582,7 +582,7 @@ function repoName(url) {
   return s === "" ? null : s;
 }
 var KNOWN_MAXNULL_INTERNAL = /* @__PURE__ */ new Set(["dsh-ssid-panels", "dsh-ssid-zh-ui"]);
-function titleOf(name, repoUrl, fallback) {
+function titleOf(name, repoUrl, catalogName, fallback) {
   if (name.startsWith("@")) {
     const slash = name.indexOf("/");
     if (slash > 0) {
@@ -594,6 +594,7 @@ function titleOf(name, repoUrl, fallback) {
   }
   const fromRepo = repoName(repoUrl);
   if (fromRepo !== null) return fromRepo;
+  if (catalogName !== null && catalogName !== "") return catalogName;
   if (KNOWN_MAXNULL_INTERNAL.has(name)) return `Max-Null/${name}`;
   return fallback;
 }
@@ -911,7 +912,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }) {
   });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: filtered.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(p.name, p.repoUrl, p.displayName) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(p.name, p.repoUrl, p.catalogName, p.displayName) }),
       p.version !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
         "v",
         p.version
@@ -1122,7 +1123,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     updates.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(u.name, u.repoUrl, u.name) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(u.name, u.repoUrl, null, u.name) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),

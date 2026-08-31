@@ -191,41 +191,46 @@ export class PluginCenterEngine extends Service {
         const byBase = new Map();
         for (const m of merged) {
             if (m.npm !== null)
-                byNpm.set(m.npm, m.categories);
+                byNpm.set(m.npm, { cats: m.categories, name: m.name });
             if (m.name.includes('/'))
-                byRepo.set(m.name.toLowerCase(), m.categories);
+                byRepo.set(m.name.toLowerCase(), { cats: m.categories, name: m.name });
             const base = m.name.split('/').pop() ?? m.name;
             const cur = byBase.get(base);
             if (cur === undefined)
-                byBase.set(base, { cats: m.categories, count: 1 });
+                byBase.set(base, { cats: m.categories, count: 1, name: m.name });
             else {
                 cur.cats = [...new Set([...cur.cats, ...m.categories])];
                 cur.count++;
             }
         }
+        // 返回分类 + 命中的市场条目名（owner/repo；无 repository 字段的包用它补
+        // 作者，如 context-doctor → Zhenyu98/dsh-context-doctor，2026-09-01）。
         const categoriesOf = (p) => {
             let hit = byNpm.get(p.name);
             if (hit !== undefined)
-                return hit;
+                return { cats: hit.cats, marketName: hit.name };
             if (p.repoUrl !== null) {
                 const repo = normalizeRepoUrl(p.repoUrl);
                 if (repo !== '') {
                     hit = byRepo.get(repo.toLowerCase());
                     if (hit !== undefined)
-                        return hit;
+                        return { cats: hit.cats, marketName: hit.name };
                 }
             }
             const base = p.displayName;
             const b = byBase.get(base);
             if (b !== undefined && b.count === 1)
-                return b.cats;
-            return [];
+                return { cats: b.cats, marketName: b.name };
+            return { cats: [], marketName: null };
         };
         const plugins = await Promise.all(views.map(v => buildInstalledPlugin(this.baseUrl, v)));
         // Sort local dev first, then third-party installs, then official, then builtin.
         const SOURCE_ORDER = { local: 0, installed: 1, official: 2, builtin: 3 };
         return plugins
-            .map(p => ({ ...p, categories: categoriesOf(p) }))
+            .map(p => {
+            const r = categoriesOf(p);
+            return { ...p, categories: r.cats, catalogName: p.repoUrl === null ? r.marketName : null };
+        })
             .sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source]);
     }
     /** Start the awesome catalog fetch (with failed-retry cooldown). */

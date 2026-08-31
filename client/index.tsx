@@ -177,6 +177,8 @@ interface InstalledPlugin {
   repoUrl: string | null
   /** 作者（区分同名异源，2026-09-01）。 */
   author: string | null
+  /** 市场目录里的 owner/repo（无 repository 字段时兜底标题作者，2026-09-01）。 */
+  catalogName: string | null
   categories: string[]
 }
 
@@ -710,9 +712,11 @@ const KNOWN_MAXNULL_INTERNAL = new Set(['dsh-ssid-panels', 'dsh-ssid-zh-ui'])
  *     其他 scope 去 @ 原样，如 @changfenhuang/dsh-genui → changfenhuang/dsh-genui
  *     ——其 package.json repository 误写 omdsh-dev，不得用 repository 覆盖 scope）；
  *  2. 无 scope → repoName(repoUrl)（dsh-pocket → shaobeichen/dsh-pocket）；
- *  3. SSiD 内置白名单 → Max-Null/<name>；
- *  4. 原名。 */
-function titleOf(name: string, repoUrl: string | null, fallback: string): string {
+ *  3. 无 repoUrl → catalogName（市场收录的 owner/repo，如 context-doctor →
+ *     Zhenyu98/dsh-context-doctor——其 package.json 无 repository 字段）；
+ *  4. SSiD 内置白名单 → Max-Null/<name>；
+ *  5. 原名。 */
+function titleOf(name: string, repoUrl: string | null, catalogName: string | null, fallback: string): string {
   if (name.startsWith('@')) {
     const slash = name.indexOf('/')
     if (slash > 0) {
@@ -724,6 +728,7 @@ function titleOf(name: string, repoUrl: string | null, fallback: string): string
   }
   const fromRepo = repoName(repoUrl)
   if (fromRepo !== null) return fromRepo
+  if (catalogName !== null && catalogName !== '') return catalogName
   if (KNOWN_MAXNULL_INTERNAL.has(name)) return `Max-Null/${name}`
   return fallback
 }
@@ -949,7 +954,7 @@ function InstalledView({ search, category, source, onToggle, togglingId }: {
       {filtered.map(p => (
         <div key={p.entryId} className="pc-card">
           <div className="pc-row">
-            <span className="pc-name">{titleOf(p.name, p.repoUrl, p.displayName)}</span>
+            <span className="pc-name">{titleOf(p.name, p.repoUrl, p.catalogName, p.displayName)}</span>
             {p.version !== null && <span className="pc-ver">v{p.version}</span>}
             <span className={`pc-badge ${p.source}`}>{srcLabel[p.source]}</span>
             <span className="pc-spacer" />
@@ -1168,7 +1173,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
       {updates.map(u => (
         <div key={u.name} className="pc-card">
           <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
-            <span className="pc-name">{titleOf(u.name, u.repoUrl, u.name)}</span>
+            <span className="pc-name">{titleOf(u.name, u.repoUrl, null, u.name)}</span>
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>

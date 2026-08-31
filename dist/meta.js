@@ -169,6 +169,7 @@ export async function buildInstalledPlugin(baseUrl, entry) {
             }
             return null;
         })(),
+        catalogName: null,
         categories: [],
     };
 }

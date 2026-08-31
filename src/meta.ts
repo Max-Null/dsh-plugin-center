@@ -26,6 +26,9 @@ export interface InstalledPlugin {
   repoUrl: string | null
   /** 作者（package.json author；字符串或对象 name，缺失 null）。 */
   author: string | null
+  /** 市场目录里的 owner/repo（无 repository 字段时从市场匹配补，2026-09-01：
+   *  context-doctor 无 repo/scope，但市场收录其 Zhenyu98 条目——标题由此补作者）。 */
+  catalogName: string | null
   /** Community categories, cross-matched from the market catalog (empty until fetched). */
   categories: string[]
 }
@@ -211,6 +214,7 @@ export async function buildInstalledPlugin(
       }
       return null
     })(),
+    catalogName: null,
     categories: [],
   }
 }
