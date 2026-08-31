@@ -699,16 +699,20 @@ function repoName(url: string | null): string | null {
   return s === '' ? null : s
 }
 
-/** SSiD 内置专属包（vendor/file 形态、无独立 npm/仓库的）——无 repo 时
- *  标题默认 Max-Null/ 前缀（2026-09-01 用户定：拿不到作者信息正常，
- *  默认用 Max-Null/ 就行）。 */
-const KNOWN_MAXNULL_INTERNAL = new Set(['dsh-ssid-panels', 'dsh-ssid-zh-ui', 'dsh-context-doctor'])
+/** SSiD 内置专属包（vendor/file 形态、无独立 npm/仓库的，Max-Null 组织）——
+ *  无 repo/scope 时标题默认 Max-Null/ 前缀（2026-09-01 用户定）。
+ *  注意 dsh-context-doctor 不是 Max-Null（实为 Zhenyu98 第三方，README 有
+ *  github.com/Zhenyu98/dsh-context-doctor）——不得列入。 */
+const KNOWN_MAXNULL_INTERNAL = new Set(['dsh-ssid-panels', 'dsh-ssid-zh-ui'])
 
-/** 标题回退链：repoName(repoUrl) → scope 推导（@max-null/dsh-x → Max-Null/dsh-x；
- *  其余 scope 保留 @scope/name）→ 内置白名单（Max-Null/<name>）→ 原名。 */
+/** 标题回退链（2026-09-01 用户三个反馈后定序）：
+ *  1. npm scope（发布者权威，不可冒用）→ Owner/name（@max-null→Max-Null，
+ *     其他 scope 去 @ 原样，如 @changfenhuang/dsh-genui → changfenhuang/dsh-genui
+ *     ——其 package.json repository 误写 omdsh-dev，不得用 repository 覆盖 scope）；
+ *  2. 无 scope → repoName(repoUrl)（dsh-pocket → shaobeichen/dsh-pocket）；
+ *  3. SSiD 内置白名单 → Max-Null/<name>；
+ *  4. 原名。 */
 function titleOf(name: string, repoUrl: string | null, fallback: string): string {
-  const fromRepo = repoName(repoUrl)
-  if (fromRepo !== null) return fromRepo
   if (name.startsWith('@')) {
     const slash = name.indexOf('/')
     if (slash > 0) {
@@ -718,6 +722,8 @@ function titleOf(name: string, repoUrl: string | null, fallback: string): string
       return `${owner}/${rest}`
     }
   }
+  const fromRepo = repoName(repoUrl)
+  if (fromRepo !== null) return fromRepo
   if (KNOWN_MAXNULL_INTERNAL.has(name)) return `Max-Null/${name}`
   return fallback
 }

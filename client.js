@@ -581,10 +581,8 @@ function repoName(url) {
   const s = url.trim().replace(/^git\+/u, "").replace(/^https?:\/\//u, "").replace(/^git:\/\//u, "").replace(/^ssh:\/\/git@/u, "").replace(/^github\.com\//u, "").replace(/\.git$/u, "").replace(/\/$/u, "");
   return s === "" ? null : s;
 }
-var KNOWN_MAXNULL_INTERNAL = /* @__PURE__ */ new Set(["dsh-ssid-panels", "dsh-ssid-zh-ui", "dsh-context-doctor"]);
+var KNOWN_MAXNULL_INTERNAL = /* @__PURE__ */ new Set(["dsh-ssid-panels", "dsh-ssid-zh-ui"]);
 function titleOf(name, repoUrl, fallback) {
-  const fromRepo = repoName(repoUrl);
-  if (fromRepo !== null) return fromRepo;
   if (name.startsWith("@")) {
     const slash = name.indexOf("/");
     if (slash > 0) {
@@ -594,6 +592,8 @@ function titleOf(name, repoUrl, fallback) {
       return `${owner}/${rest}`;
     }
   }
+  const fromRepo = repoName(repoUrl);
+  if (fromRepo !== null) return fromRepo;
   if (KNOWN_MAXNULL_INTERNAL.has(name)) return `Max-Null/${name}`;
   return fallback;
 }
