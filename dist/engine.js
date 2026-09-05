@@ -413,7 +413,20 @@ export class PluginCenterEngine extends Service {
             }
             return detectUpdate(p.name, p.version, p.repoUrl, p.author, p.compatRange, localDsh, sinceIso);
         }));
-        this.updatesCache = { since: sinceIso, at: now, digests: digests.filter((d) => d !== null) };
+        // 同包去重（2026-09-05 修复）：loader 的 entries 可能同名多 entry（如
+        // bundle 声明 + 包内 cordis.patch.yml 双注册的变异场景 / 历史上 PK 残留），
+        // 同包会产出重复 digest → 更新弹窗同一插件提示两次、「更新全部」计数虚增。
+        // checkUpdates 层按包名收敛为一条（列表/计数/LLM 更新流程一致），
+        // 深层重复 entry 的溯源（loader 组合）另行排查。
+        const seen = new Set();
+        const unique = [];
+        for (const d of digests) {
+            if (d === null || seen.has(d.name))
+                continue;
+            seen.add(d.name);
+            unique.push(d);
+        }
+        this.updatesCache = { since: sinceIso, at: now, digests: unique };
         return this.updatesCache.digests;
     }
     async install(spec) {

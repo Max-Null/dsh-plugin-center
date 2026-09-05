@@ -1,6 +1,6 @@
 {
   "name": "@max-null/dsh-plugin-center",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Plugin center for DeepSeek Harness 閳?installed metadata, community market, update detection, and What's New",
   "license": "MIT",
   "publishConfig": {
