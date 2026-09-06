@@ -694,6 +694,14 @@ async function checkWhatNew(): Promise<void> {
 
 const CATEGORIES = ['ui', 'usage', 'theme', 'model', 'session', 'memory', 'tools', 'vision', 'skill', 'workflow', 'notify', 'dev', 'market', 'fun']
 
+/** GitHub 仓库外链（清洗 git+/ssh 前缀与尾 .git；非 github 仓库 → null）。 */
+function githubLinkOf(repoUrl: string | null | undefined): string | null {
+  if (typeof repoUrl !== 'string' || repoUrl === '') return null
+  const m = /github\.com[/:]([^/]+)\/([^/.#]+)/.exec(repoUrl)
+  if (m === null) return null
+  return `https://github.com/${m[1]}/${m[2]}`
+}
+
 /** 完整库名(纯归一化,不截断):owner/repo——卡片标题直接用它,
  *  避免「插件名 + 库名」两份冗余(2026-09-01 用户反馈)。 */
 function repoName(url: string | null): string | null {
@@ -805,6 +813,7 @@ const STRINGS = {
     updateSummary: '更新完成：成功 {a}，失败 {b}（{c}）',
     whatsNewTitle: '插件更新', whatsNewSub: '{n} 个有新版本，其中 {m} 个未读', readTag: '已读',
     changelogNone: '暂无变更说明（GitHub 限流或仓库无记录，稍后自动重试）',
+    githubChanges: 'GitHub 变更 ↗',
     later: '稍后', markAllRead: '全部标记已读', updateNow: '立即更新', close: '关闭',
     checkFail: '检查更新失败，请稍后重试',
     foundUpdates: '发现 {n} 个可更新插件', allUpToDate: '所有插件均为最新',
@@ -873,6 +882,7 @@ const STRINGS = {
     updateSummary: 'Update done: {a} succeeded, {b} failed ({c})',
     whatsNewTitle: 'Plugin updates', whatsNewSub: '{n} with new versions, {m} unread', readTag: 'Read',
     changelogNone: 'No changelog available (GitHub rate limit or no repo history; retried automatically)',
+    githubChanges: 'GitHub changes ↗',
     later: 'Later', markAllRead: 'Mark all read', updateNow: 'Update now', close: 'Close',
     checkFail: 'Failed to check updates, please retry later',
     foundUpdates: '{n} updates found', allUpToDate: 'All plugins are up to date',
@@ -1225,6 +1235,10 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
             </ul>
           ) : (
             <div className="pc-wn-list" style={{ color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
+          )}
+          {githubLinkOf(u.repoUrl) !== null && (
+            <a className="pc-wn-list" href={githubLinkOf(u.repoUrl) as string} target="_blank" rel="noreferrer"
+              style={{ display: 'inline-block', fontSize: 12, color: 'var(--dsw-alias-state-business-primary)', textDecoration: 'none' }}>{t('githubChanges')}</a>
           )}
         </div>
       ))}
@@ -2181,6 +2195,10 @@ function WhatsNewDialog() {
                   </ul>
                 ) : (
                   <div className="pc-wn-list" style={{ color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
+                )}
+                {githubLinkOf(u.repoUrl) !== null && (
+                  <a className="pc-wn-list" href={githubLinkOf(u.repoUrl) as string} target="_blank" rel="noreferrer"
+                    style={{ display: 'inline-block', fontSize: 12, color: 'var(--dsw-alias-state-business-primary)', textDecoration: 'none' }}>{t('githubChanges')}</a>
                 )}
               </div>
             )

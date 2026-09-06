@@ -199,33 +199,51 @@ function cachedChangelogOf(name, latest) {
         return null;
     return entry.lines.length > 0 ? entry.lines : null;
 }
-// ---- 发布时间兜底（2026-09-07）：GitHub 限流且无缓存时，用 npm registry 的
-// time[version] 给出「vX 发布于 YYYY-MM-DD」——不依赖 GitHub，介绍至少一行。
+// ---- 发布时间/readme 兜底（2026-09-07）：GitHub 限流且无缓存时，用 npm registry
+// 元数据（一次请求同取 time[version] 与 readme）给出「vX 发布于 D」和 readme 预览
+// ——不依赖 GitHub，介绍至少一行；readme 预览信息量更高（描述性行）。
 const npmTimeCache = new Map();
 const NPM_TIME_TTL = 5 * 60_000;
-/** Registry 发布时间（UTC ISO）；不可达/无该版本 → null（带 5min 缓存）。 */
-async function npmPublishedAt(name, version) {
+/** Registry 元数据（UTC 发布时间 + 根 readme）；不可达/无该版本 → null（5min 缓存）。 */
+async function npmRegistryInfo(name, version) {
     const key = `${name}@${version}`;
     const hit = npmTimeCache.get(key);
     if (hit !== undefined && Date.now() - hit.at < NPM_TIME_TTL)
-        return hit.time;
-    let time = null;
+        return { published: hit.published, readme: hit.readme };
+    const info = { published: null, readme: null };
     for (const registry of ['https://registry.npmjs.org', 'https://registry.npmmirror.com']) {
         try {
             const res = await fetch(`${registry}/${name}`, { signal: AbortSignal.timeout(8000) });
             if (res.ok) {
                 const doc = await res.json();
                 const t = doc.time?.[version];
-                if (typeof t === 'string' && t !== '') {
-                    time = t;
-                    break;
-                }
+                if (typeof t === 'string' && t !== '')
+                    info.published = t;
+                if (typeof doc.readme === 'string' && doc.readme !== '')
+                    info.readme = doc.readme;
+                break;
             }
         }
         catch { /* next registry */ }
     }
-    npmTimeCache.set(key, { at: Date.now(), time });
-    return time;
+    npmTimeCache.set(key, { at: Date.now(), published: info.published, readme: info.readme });
+    return info;
+}
+/** readme 预览：跳过标题/徽章/HTML 行，取正文前 3 个非空行，单行截 100 字符。 */
+export function readmePreviewOf(readme) {
+    const lines = [];
+    for (const raw of readme.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (line === '')
+            continue;
+        // 模板特征行（项目名标题/徽章图片/HTML/链接）跳过——它们在描述上无信息量。
+        if (/^#/.test(line) || /^!\[/.test(line) || /^</.test(line) || /^\[[^\]]*\]\(/.test(line))
+            continue;
+        lines.push(line.length > 100 ? line.slice(0, 100) : line);
+        if (lines.length >= 3)
+            break;
+    }
+    return lines.length > 0 ? lines : null;
 }
 /**
  * Detect one plugin's update: compare local vs remote version, pull commit
@@ -246,8 +264,8 @@ export async function detectUpdate(name, localVersion, repoUrl, author, compatRa
         if (await targetClientUsesRemote(name, latest))
             compat = 'incompatible';
     }
-    // changelog：commits API 优先 → 24h 同版本缓存 → npm 发布时间单行（不依赖
-    // GitHub）→ 空（UI 显示占位）。2026-09-07 限流实测驱动。
+    // changelog：commits API 优先 → 24h 同版本缓存 → npm readme 预览 → npm
+    // 发布时间单行（均不依赖 GitHub）→ 空（UI 显示占位）。2026-09-07 限流实测驱动。
     let changelog = await fetchCommitChangelog(repoUrl, sinceIso);
     let changelogSource = changelog.length > 0 ? 'commits' : 'none';
     if (changelogSource === 'none') {
@@ -258,11 +276,18 @@ export async function detectUpdate(name, localVersion, repoUrl, author, compatRa
         }
     }
     if (changelogSource === 'none') {
-        const published = await npmPublishedAt(name, latest);
-        if (published !== null)
-            changelog = [`v${latest} 发布于 ${published.slice(0, 10)}`];
+        const info = await npmRegistryInfo(name, latest);
+        changelog = readmePreviewOf(info.readme ?? '') ?? [];
+        if (changelog.length > 0) {
+            changelogSource = 'readme';
+            if (info.published !== null)
+                changelog.push(`v${latest} 发布于 ${info.published.slice(0, 10)}`);
+        }
+        else if (info.published !== null) {
+            changelog = [`v${latest} 发布于 ${info.published.slice(0, 10)}`];
+        }
     }
-    else if (changelogSource === 'commits') {
+    if (changelogSource === 'commits') {
         writeChangelogCacheEntry(name, latest, changelog);
     }
     return {

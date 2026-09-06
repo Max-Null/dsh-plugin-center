@@ -580,6 +580,12 @@ async function checkWhatNew() {
   }
 }
 var CATEGORIES = ["ui", "usage", "theme", "model", "session", "memory", "tools", "vision", "skill", "workflow", "notify", "dev", "market", "fun"];
+function githubLinkOf(repoUrl) {
+  if (typeof repoUrl !== "string" || repoUrl === "") return null;
+  const m = /github\.com[/:]([^/]+)\/([^/.#]+)/.exec(repoUrl);
+  if (m === null) return null;
+  return `https://github.com/${m[1]}/${m[2]}`;
+}
 function repoName(url) {
   if (url === null || url === "") return null;
   const s = url.trim().replace(/^git\+/u, "").replace(/^https?:\/\//u, "").replace(/^git:\/\//u, "").replace(/^ssh:\/\/git@/u, "").replace(/^github\.com\//u, "").replace(/\.git$/u, "").replace(/\/$/u, "");
@@ -697,6 +703,7 @@ var STRINGS = {
     whatsNewSub: "{n} \u4E2A\u6709\u65B0\u7248\u672C\uFF0C\u5176\u4E2D {m} \u4E2A\u672A\u8BFB",
     readTag: "\u5DF2\u8BFB",
     changelogNone: "\u6682\u65E0\u53D8\u66F4\u8BF4\u660E\uFF08GitHub \u9650\u6D41\u6216\u4ED3\u5E93\u65E0\u8BB0\u5F55\uFF0C\u7A0D\u540E\u81EA\u52A8\u91CD\u8BD5\uFF09",
+    githubChanges: "GitHub \u53D8\u66F4 \u2197",
     later: "\u7A0D\u540E",
     markAllRead: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB",
     updateNow: "\u7ACB\u5373\u66F4\u65B0",
@@ -819,6 +826,7 @@ var STRINGS = {
     whatsNewSub: "{n} with new versions, {m} unread",
     readTag: "Read",
     changelogNone: "No changelog available (GitHub rate limit or no repo history; retried automatically)",
+    githubChanges: "GitHub changes \u2197",
     later: "Later",
     markAllRead: "Mark all read",
     updateNow: "Update now",
@@ -1159,7 +1167,18 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           llmPrepare(u.name);
         }, children: t("llmUpdate") })
       ] }),
-      u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") })
+      u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") }),
+      githubLinkOf(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "a",
+        {
+          className: "pc-wn-list",
+          href: githubLinkOf(u.repoUrl),
+          target: "_blank",
+          rel: "noreferrer",
+          style: { display: "inline-block", fontSize: 12, color: "var(--dsw-alias-state-business-primary)", textDecoration: "none" },
+          children: t("githubChanges")
+        }
+      )
     ] }, u.name)),
     doneOnly.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: d.name }),
@@ -2027,7 +2046,18 @@ function WhatsNewDialog() {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
           read && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("readTag") })
         ] }),
-        u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") })
+        u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") }),
+        githubLinkOf(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "a",
+          {
+            className: "pc-wn-list",
+            href: githubLinkOf(u.repoUrl),
+            target: "_blank",
+            rel: "noreferrer",
+            style: { display: "inline-block", fontSize: 12, color: "var(--dsw-alias-state-business-primary)", textDecoration: "none" },
+            children: t("githubChanges")
+          }
+        )
       ] }, u.name);
     }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [
