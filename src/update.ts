@@ -210,6 +210,31 @@ function cachedChangelogOf(name: string, latest: string): string[] | null {
   return entry.lines.length > 0 ? entry.lines : null
 }
 
+// ---- 发布时间兜底（2026-09-07）：GitHub 限流且无缓存时，用 npm registry 的
+// time[version] 给出「vX 发布于 YYYY-MM-DD」——不依赖 GitHub，介绍至少一行。
+const npmTimeCache = new Map<string, { at: number; time: string | null }>()
+const NPM_TIME_TTL = 5 * 60_000
+
+/** Registry 发布时间（UTC ISO）；不可达/无该版本 → null（带 5min 缓存）。 */
+async function npmPublishedAt(name: string, version: string): Promise<string | null> {
+  const key = `${name}@${version}`
+  const hit = npmTimeCache.get(key)
+  if (hit !== undefined && Date.now() - hit.at < NPM_TIME_TTL) return hit.time
+  let time: string | null = null
+  for (const registry of ['https://registry.npmjs.org', 'https://registry.npmmirror.com']) {
+    try {
+      const res = await fetch(`${registry}/${name}`, { signal: AbortSignal.timeout(8000) })
+      if (res.ok) {
+        const doc = await res.json() as { time?: Record<string, string> }
+        const t = doc.time?.[version]
+        if (typeof t === 'string' && t !== '') { time = t; break }
+      }
+    } catch { /* next registry */ }
+  }
+  npmTimeCache.set(key, { at: Date.now(), time })
+  return time
+}
+
 /**
  * Detect one plugin's update: compare local vs remote version, pull commit
  * changelog since `sinceIso`, and check DSH compatibility against the local
@@ -235,11 +260,21 @@ export async function detectUpdate(
   if (compat !== 'incompatible' && process.env.SSID_PENDING_CONSUMER === '1') {
     if (await targetClientUsesRemote(name, latest)) compat = 'incompatible'
   }
-  // changelog：commits API 优先，限流/失败回退 24h 同版本缓存（2026-09-07）。
+  // changelog：commits API 优先 → 24h 同版本缓存 → npm 发布时间单行（不依赖
+  // GitHub）→ 空（UI 显示占位）。2026-09-07 限流实测驱动。
   let changelog = await fetchCommitChangelog(repoUrl, sinceIso)
-  if (changelog.length === 0) {
-    changelog = cachedChangelogOf(name, latest) ?? []
-  } else {
+  let changelogSource = changelog.length > 0 ? 'commits' : 'none'
+  if (changelogSource === 'none') {
+    const cached = cachedChangelogOf(name, latest)
+    if (cached !== null) {
+      changelog = cached
+      changelogSource = 'cache'
+    }
+  }
+  if (changelogSource === 'none') {
+    const published = await npmPublishedAt(name, latest)
+    if (published !== null) changelog = [`v${latest} 发布于 ${published.slice(0, 10)}`]
+  } else if (changelogSource === 'commits') {
     writeChangelogCacheEntry(name, latest, changelog)
   }
   return {

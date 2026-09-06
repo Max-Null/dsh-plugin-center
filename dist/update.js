@@ -7,7 +7,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { compareVersions, satisfies } from "./semver.js";
 /** 服务面判定:目标客户端 bundle 是否深度依赖 Remote BFF(ctx.remote.*)。
  *  SSiD 内核(0.1.x)无 remote BFF 服务(走 /plugin-center RPC channel),
@@ -156,6 +156,77 @@ export async function fetchCommitChangelog(repoUrl, sinceIso) {
         return [];
     }
 }
+// ---- changelog 缓存（2026-09-07）：GitHub commits API 匿名限流 60 次/时/IP——
+// 检出高峰期该接口 403，弹窗/更新列表的"介绍"整片消失。成功时写入缓存，拉空
+// 时回退 24h 内的同版本缓存——限流期仍有上次的介绍可看。
+const CHANGELOG_CACHE_PATH = join(homedir(), '.dsh', 'plugin-center-changelog-cache.json');
+const CHANGELOG_CACHE_TTL = 24 * 3600_000;
+const CHANGELOG_CACHE_MAX_ENTRIES = 200;
+function readChangelogCache() {
+    try {
+        const parsed = JSON.parse(readFileSync(CHANGELOG_CACHE_PATH, 'utf8'));
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+            return {};
+        const out = {};
+        for (const [name, entry] of Object.entries(parsed)) {
+            const e = entry;
+            if (e !== null && typeof e.version === 'string' && Array.isArray(e.lines) && typeof e.at === 'number') {
+                out[name] = { version: e.version, lines: e.lines.filter(l => typeof l === 'string'), at: e.at };
+            }
+        }
+        return out;
+    }
+    catch {
+        return {};
+    }
+}
+function writeChangelogCacheEntry(name, version, lines) {
+    try {
+        const cache = readChangelogCache();
+        cache[name] = { version, lines, at: Date.now() };
+        const trimmed = Object.fromEntries(Object.entries(cache).slice(-CHANGELOG_CACHE_MAX_ENTRIES));
+        mkdirSync(dirname(CHANGELOG_CACHE_PATH), { recursive: true });
+        writeFileSync(CHANGELOG_CACHE_PATH, JSON.stringify(trimmed, null, 2) + '\n', 'utf8');
+    }
+    catch { /* best-effort */ }
+}
+/** 限流回退：24h 内同目标版本的缓存 changelog（跨会话/跨重启保留）。 */
+function cachedChangelogOf(name, latest) {
+    const entry = readChangelogCache()[name];
+    if (entry === undefined || entry.version !== latest)
+        return null;
+    if (Date.now() - entry.at > CHANGELOG_CACHE_TTL)
+        return null;
+    return entry.lines.length > 0 ? entry.lines : null;
+}
+// ---- 发布时间兜底（2026-09-07）：GitHub 限流且无缓存时，用 npm registry 的
+// time[version] 给出「vX 发布于 YYYY-MM-DD」——不依赖 GitHub，介绍至少一行。
+const npmTimeCache = new Map();
+const NPM_TIME_TTL = 5 * 60_000;
+/** Registry 发布时间（UTC ISO）；不可达/无该版本 → null（带 5min 缓存）。 */
+async function npmPublishedAt(name, version) {
+    const key = `${name}@${version}`;
+    const hit = npmTimeCache.get(key);
+    if (hit !== undefined && Date.now() - hit.at < NPM_TIME_TTL)
+        return hit.time;
+    let time = null;
+    for (const registry of ['https://registry.npmjs.org', 'https://registry.npmmirror.com']) {
+        try {
+            const res = await fetch(`${registry}/${name}`, { signal: AbortSignal.timeout(8000) });
+            if (res.ok) {
+                const doc = await res.json();
+                const t = doc.time?.[version];
+                if (typeof t === 'string' && t !== '') {
+                    time = t;
+                    break;
+                }
+            }
+        }
+        catch { /* next registry */ }
+    }
+    npmTimeCache.set(key, { at: Date.now(), time });
+    return time;
+}
 /**
  * Detect one plugin's update: compare local vs remote version, pull commit
  * changelog since `sinceIso`, and check DSH compatibility against the local
@@ -175,11 +246,30 @@ export async function detectUpdate(name, localVersion, repoUrl, author, compatRa
         if (await targetClientUsesRemote(name, latest))
             compat = 'incompatible';
     }
+    // changelog：commits API 优先 → 24h 同版本缓存 → npm 发布时间单行（不依赖
+    // GitHub）→ 空（UI 显示占位）。2026-09-07 限流实测驱动。
+    let changelog = await fetchCommitChangelog(repoUrl, sinceIso);
+    let changelogSource = changelog.length > 0 ? 'commits' : 'none';
+    if (changelogSource === 'none') {
+        const cached = cachedChangelogOf(name, latest);
+        if (cached !== null) {
+            changelog = cached;
+            changelogSource = 'cache';
+        }
+    }
+    if (changelogSource === 'none') {
+        const published = await npmPublishedAt(name, latest);
+        if (published !== null)
+            changelog = [`v${latest} 发布于 ${published.slice(0, 10)}`];
+    }
+    else if (changelogSource === 'commits') {
+        writeChangelogCacheEntry(name, latest, changelog);
+    }
     return {
         name,
         fromVersion: localVersion,
         toVersion: latest,
-        changelog: await fetchCommitChangelog(repoUrl, sinceIso),
+        changelog,
         compat,
         compatRange,
         repoUrl,
