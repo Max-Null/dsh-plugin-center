@@ -101,6 +101,7 @@ body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,
 .pc-headerbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .pc-wn-item { border-bottom: 1px solid var(--dsw-alias-border-l1); padding: 14px 0; }
 .pc-wn-item:last-child { border-bottom: none; }
+.pc-wn-item.pc-wn-read { opacity: .55; }
 .pc-wn-list { margin-top: 8px; padding-left: 20px; color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .pc-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 13px; box-shadow: 0 8px 32px rgba(0,0,0,.18); z-index: 1500; max-width: 80vw; }
 .pc-toast.ok { border-color: var(--dsw-alias-state-success-primary); }
@@ -656,7 +657,13 @@ function useToast(): { message: string; kind: 'ok' | 'error' } | null {
 // ---- 插件更新弹窗频率（2026-08-27 用户需求：一天最多一次）----
 // daily 标记存 host 侧文件（DSH web 端口随机，localStorage 按 origin 隔离会丢标记）；
 // 展示即写当天；版本已读（markRead）仍由显式关闭时持久化——次日未读尚在则再弹。
-const wnToday = (): string => new Date().toISOString().slice(0, 10)
+// 弹窗频率节拍用「本地」日期（2026-09-07）：toISOString 是 UTC——本地每日
+// 00:00-08:00（UTC 仍是前一天）会把「昨天已弹」误判成「今天已弹」，晨间弹窗
+// 被错误抑制（实测：本地 9/7 00:34 = UTC 9/6，daily 标记 9/6 挡住弹窗）。
+const wnToday = (): string => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 let wnShownTodayCache: Promise<boolean> | null = null
 function wnShownToday(): Promise<boolean> {
   if (wnShownTodayCache === null) {
@@ -673,9 +680,11 @@ async function checkWhatNew(): Promise<void> {
     const digests = await rpc('checkUpdates', { since }) as UpdateDigest[]
     readCache = await rpc('readVersions') as Record<string, string>
     const fresh = digests.filter(d => readCache[d.name] !== d.toVersion)
-    // 有未读更新且今日未弹过 → 弹（展示即写 daily 标记，跨重启/端口一致）
+    // 有未读更新且今日未弹过 → 弹（展示即写 daily 标记，跨重启/端口一致）。
+    // 弹窗内容 = 全量可更新列表（数字与实际一致），已读项灰显 + 「已读」标签；
+    // 触发条件仍按「有未读」，避免每天重复弹相同列表。
     if (fresh.length > 0 && !(await wnShownToday())) {
-      whatsNewDigests = fresh
+      whatsNewDigests = digests
       whatsNewOpen = true
       void rpc('markWhatsNewDaily', { day: wnToday() })
       whatsNewListeners.forEach(l => l())
@@ -794,7 +803,7 @@ const STRINGS = {
     restartAskBody: '已更新 {n} 个插件，重启思灵后生效（有进行中的会话时会先检查）',
     restartNowBtn: '立即重启',
     updateSummary: '更新完成：成功 {a}，失败 {b}（{c}）',
-    whatsNewTitle: '插件更新', whatsNewSub: '{n} 个插件有新版本',
+    whatsNewTitle: '插件更新', whatsNewSub: '{n} 个有新版本，其中 {m} 个未读', readTag: '已读',
     later: '稍后', markAllRead: '全部标记已读', updateNow: '立即更新', close: '关闭',
     checkFail: '检查更新失败，请稍后重试',
     foundUpdates: '发现 {n} 个可更新插件', allUpToDate: '所有插件均为最新',
@@ -861,7 +870,7 @@ const STRINGS = {
     restartAskBody: '{n} plugin(s) updated; takes effect after restarting SSiD (active sessions are checked first)',
     restartNowBtn: 'Restart now',
     updateSummary: 'Update done: {a} succeeded, {b} failed ({c})',
-    whatsNewTitle: 'Plugin updates', whatsNewSub: '{n} plugins have new versions',
+    whatsNewTitle: 'Plugin updates', whatsNewSub: '{n} with new versions, {m} unread', readTag: 'Read',
     later: 'Later', markAllRead: 'Mark all read', updateNow: 'Update now', close: 'Close',
     checkFail: 'Failed to check updates, please retry later',
     foundUpdates: '{n} updates found', allUpToDate: 'All plugins are up to date',
@@ -2139,26 +2148,35 @@ function WhatsNewDialog() {
       <div className="pc-panel" style={{ width: '540px' }} role="dialog" aria-modal="true" aria-label={t('whatsNewTitle')}>
         <div className="pc-panel-head">
           <span className="pc-title">{t('whatsNewTitle')}</span>
-          <span className="pc-sub" style={{ marginTop: 0 }}>{t('whatsNewSub', { n: whatsNewDigests.length })}</span>
+          <span className="pc-sub" style={{ marginTop: 0 }}>{
+            t('whatsNewSub', {
+              n: whatsNewDigests.length,
+              m: whatsNewDigests.filter(u => readCache[u.name] !== u.toVersion).length,
+            })
+          }</span>
           <span className="pc-spacer" />
           <button type="button" className="pc-close" onClick={closeWhatsNew} aria-label={t('close')}>✕</button>
         </div>
         <div className="pc-panel-body" style={{ overflow: 'auto' }}>
-          {whatsNewDigests.map(u => (
-            <div key={u.name} className="pc-wn-item">
-              <div className="pc-row">
-                <span className="pc-name">{u.name}</span>
-                <span className="pc-ver">{u.fromVersion}</span>
-                <span className="pc-ver">→</span>
-                <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
+          {whatsNewDigests.map(u => {
+            const read = readCache[u.name] === u.toVersion
+            return (
+              <div key={u.name} className={`pc-wn-item${read ? ' pc-wn-read' : ''}`}>
+                <div className="pc-row">
+                  <span className="pc-name">{u.name}</span>
+                  <span className="pc-ver">{u.fromVersion}</span>
+                  <span className="pc-ver">→</span>
+                  <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
+                  {read && <span className="pc-tag">{t('readTag')}</span>}
+                </div>
+                {u.changelog.length > 0 && (
+                  <ul className="pc-wn-list">
+                    {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
+                  </ul>
+                )}
               </div>
-              {u.changelog.length > 0 && (
-                <ul className="pc-wn-list">
-                  {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
-                </ul>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
         <div className="pc-panel-footer">
           <button className="pc-btn" onClick={closeWhatsNew}>{t('later')}</button>

@@ -150,6 +150,7 @@ body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,
 .pc-headerbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .pc-wn-item { border-bottom: 1px solid var(--dsw-alias-border-l1); padding: 14px 0; }
 .pc-wn-item:last-child { border-bottom: none; }
+.pc-wn-item.pc-wn-read { opacity: .55; }
 .pc-wn-list { margin-top: 8px; padding-left: 20px; color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .pc-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 10px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 13px; box-shadow: 0 8px 32px rgba(0,0,0,.18); z-index: 1500; max-width: 80vw; }
 .pc-toast.ok { border-color: var(--dsw-alias-state-success-primary); }
@@ -552,7 +553,10 @@ function useToast() {
   }, [t]);
   return t;
 }
-var wnToday = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+var wnToday = () => {
+  const d = /* @__PURE__ */ new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 var wnShownTodayCache = null;
 function wnShownToday() {
   if (wnShownTodayCache === null) {
@@ -567,7 +571,7 @@ async function checkWhatNew() {
     readCache = await rpc("readVersions");
     const fresh = digests.filter((d) => readCache[d.name] !== d.toVersion);
     if (fresh.length > 0 && !await wnShownToday()) {
-      whatsNewDigests = fresh;
+      whatsNewDigests = digests;
       whatsNewOpen = true;
       void rpc("markWhatsNewDaily", { day: wnToday() });
       whatsNewListeners.forEach((l) => l());
@@ -690,7 +694,8 @@ var STRINGS = {
     restartNowBtn: "\u7ACB\u5373\u91CD\u542F",
     updateSummary: "\u66F4\u65B0\u5B8C\u6210\uFF1A\u6210\u529F {a}\uFF0C\u5931\u8D25 {b}\uFF08{c}\uFF09",
     whatsNewTitle: "\u63D2\u4EF6\u66F4\u65B0",
-    whatsNewSub: "{n} \u4E2A\u63D2\u4EF6\u6709\u65B0\u7248\u672C",
+    whatsNewSub: "{n} \u4E2A\u6709\u65B0\u7248\u672C\uFF0C\u5176\u4E2D {m} \u4E2A\u672A\u8BFB",
+    readTag: "\u5DF2\u8BFB",
     later: "\u7A0D\u540E",
     markAllRead: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB",
     updateNow: "\u7ACB\u5373\u66F4\u65B0",
@@ -810,7 +815,8 @@ var STRINGS = {
     restartNowBtn: "Restart now",
     updateSummary: "Update done: {a} succeeded, {b} failed ({c})",
     whatsNewTitle: "Plugin updates",
-    whatsNewSub: "{n} plugins have new versions",
+    whatsNewSub: "{n} with new versions, {m} unread",
+    readTag: "Read",
     later: "Later",
     markAllRead: "Mark all read",
     updateNow: "Update now",
@@ -2002,19 +2008,26 @@ function WhatsNewDialog() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", style: { width: "540px" }, role: "dialog", "aria-modal": "true", "aria-label": t("whatsNewTitle"), children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("whatsNewTitle") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", style: { marginTop: 0 }, children: t("whatsNewSub", { n: whatsNewDigests.length }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", style: { marginTop: 0 }, children: t("whatsNewSub", {
+        n: whatsNewDigests.length,
+        m: whatsNewDigests.filter((u) => readCache[u.name] !== u.toVersion).length
+      }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeWhatsNew, "aria-label": t("close"), children: "\u2715" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", style: { overflow: "auto" }, children: whatsNewDigests.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-wn-item", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion })
-      ] }),
-      u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
-    ] }, u.name)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", style: { overflow: "auto" }, children: whatsNewDigests.map((u) => {
+      const read = readCache[u.name] === u.toVersion;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: `pc-wn-item${read ? " pc-wn-read" : ""}`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
+          read && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("readTag") })
+        ] }),
+        u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
+      ] }, u.name);
+    }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("later") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("markAllRead") }),
