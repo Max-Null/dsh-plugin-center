@@ -804,6 +804,7 @@ const STRINGS = {
     restartNowBtn: '立即重启',
     updateSummary: '更新完成：成功 {a}，失败 {b}（{c}）',
     whatsNewTitle: '插件更新', whatsNewSub: '{n} 个有新版本，其中 {m} 个未读', readTag: '已读',
+    changelogNone: '暂无变更说明（GitHub 限流或仓库无记录，稍后自动重试）',
     later: '稍后', markAllRead: '全部标记已读', updateNow: '立即更新', close: '关闭',
     checkFail: '检查更新失败，请稍后重试',
     foundUpdates: '发现 {n} 个可更新插件', allUpToDate: '所有插件均为最新',
@@ -871,6 +872,7 @@ const STRINGS = {
     restartNowBtn: 'Restart now',
     updateSummary: 'Update done: {a} succeeded, {b} failed ({c})',
     whatsNewTitle: 'Plugin updates', whatsNewSub: '{n} with new versions, {m} unread', readTag: 'Read',
+    changelogNone: 'No changelog available (GitHub rate limit or no repo history; retried automatically)',
     later: 'Later', markAllRead: 'Mark all read', updateNow: 'Update now', close: 'Close',
     checkFail: 'Failed to check updates, please retry later',
     foundUpdates: '{n} updates found', allUpToDate: 'All plugins are up to date',
@@ -1217,10 +1219,12 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
                 updateOne 保留未删,后续需要恢复时取消注释即可。 */}
             {/* <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button> */}
           </div>
-          {u.changelog.length > 0 && (
+          {u.changelog.length > 0 ? (
             <ul className="pc-wn-list">
               {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
             </ul>
+          ) : (
+            <div className="pc-wn-list" style={{ color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
           )}
         </div>
       ))}
@@ -1575,10 +1579,12 @@ function LlmConfirmDialog() {
               <div style={{ fontSize: 11.5, color: 'var(--dsw-alias-label-secondary, #67748a)' }}>
                 {p.runtimeLabel === 'SSID' ? t('llmScopeSsid') : t('llmScopeWeb')}
               </div>
-              {p.changelog.length > 0 && (
+              {p.changelog.length > 0 ? (
                 <ul className="pc-wn-list" style={{ margin: 0 }}>
                   {p.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
                 </ul>
+              ) : (
+                <div className="pc-wn-list" style={{ margin: 0, color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
               )}
             </div>
           ))}
@@ -2169,10 +2175,12 @@ function WhatsNewDialog() {
                   <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
                   {read && <span className="pc-tag">{t('readTag')}</span>}
                 </div>
-                {u.changelog.length > 0 && (
+                {u.changelog.length > 0 ? (
                   <ul className="pc-wn-list">
                     {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
                   </ul>
+                ) : (
+                  <div className="pc-wn-list" style={{ color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
                 )}
               </div>
             )

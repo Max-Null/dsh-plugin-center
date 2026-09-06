@@ -696,6 +696,7 @@ var STRINGS = {
     whatsNewTitle: "\u63D2\u4EF6\u66F4\u65B0",
     whatsNewSub: "{n} \u4E2A\u6709\u65B0\u7248\u672C\uFF0C\u5176\u4E2D {m} \u4E2A\u672A\u8BFB",
     readTag: "\u5DF2\u8BFB",
+    changelogNone: "\u6682\u65E0\u53D8\u66F4\u8BF4\u660E\uFF08GitHub \u9650\u6D41\u6216\u4ED3\u5E93\u65E0\u8BB0\u5F55\uFF0C\u7A0D\u540E\u81EA\u52A8\u91CD\u8BD5\uFF09",
     later: "\u7A0D\u540E",
     markAllRead: "\u5168\u90E8\u6807\u8BB0\u5DF2\u8BFB",
     updateNow: "\u7ACB\u5373\u66F4\u65B0",
@@ -817,6 +818,7 @@ var STRINGS = {
     whatsNewTitle: "Plugin updates",
     whatsNewSub: "{n} with new versions, {m} unread",
     readTag: "Read",
+    changelogNone: "No changelog available (GitHub rate limit or no repo history; retried automatically)",
     later: "Later",
     markAllRead: "Mark all read",
     updateNow: "Update now",
@@ -1157,7 +1159,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           llmPrepare(u.name);
         }, children: t("llmUpdate") })
       ] }),
-      u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
+      u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") })
     ] }, u.name)),
     doneOnly.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: d.name }),
@@ -1464,7 +1466,7 @@ function LlmConfirmDialog() {
         p.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: "var(--dsw-alias-label-secondary, #67748a)" }, children: p.runtimeLabel === "SSID" ? t("llmScopeSsid") : t("llmScopeWeb") }),
-      p.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", style: { margin: 0 }, children: p.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
+      p.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", style: { margin: 0 }, children: p.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { margin: 0, color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") })
     ] }, p.name))
   ] });
   const canRun = state.preparing === false && state.pkgs.length > 0;
@@ -2025,7 +2027,7 @@ function WhatsNewDialog() {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
           read && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("readTag") })
         ] }),
-        u.changelog.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) })
+        u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") })
       ] }, u.name);
     }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [

@@ -166,6 +166,50 @@ export async function fetchCommitChangelog(repoUrl: string | null, sinceIso: str
   }
 }
 
+// ---- changelog 缓存（2026-09-07）：GitHub commits API 匿名限流 60 次/时/IP——
+// 检出高峰期该接口 403，弹窗/更新列表的"介绍"整片消失。成功时写入缓存，拉空
+// 时回退 24h 内的同版本缓存——限流期仍有上次的介绍可看。
+const CHANGELOG_CACHE_PATH = join(homedir(), '.dsh', 'plugin-center-changelog-cache.json')
+const CHANGELOG_CACHE_TTL = 24 * 3600_000
+const CHANGELOG_CACHE_MAX_ENTRIES = 200
+
+type ChangelogCache = Record<string, { version: string; lines: string[]; at: number }>
+
+function readChangelogCache(): ChangelogCache {
+  try {
+    const parsed = JSON.parse(readFileSync(CHANGELOG_CACHE_PATH, 'utf8')) as unknown
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const out: ChangelogCache = {}
+    for (const [name, entry] of Object.entries(parsed as Record<string, unknown>)) {
+      const e = entry as Partial<{ version: string; lines: string[]; at: number }> | null
+      if (e !== null && typeof e.version === 'string' && Array.isArray(e.lines) && typeof e.at === 'number') {
+        out[name] = { version: e.version, lines: e.lines.filter(l => typeof l === 'string'), at: e.at }
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function writeChangelogCacheEntry(name: string, version: string, lines: string[]): void {
+  try {
+    const cache = readChangelogCache()
+    cache[name] = { version, lines, at: Date.now() }
+    const trimmed = Object.fromEntries(Object.entries(cache).slice(-CHANGELOG_CACHE_MAX_ENTRIES))
+    mkdirSync(dirname(CHANGELOG_CACHE_PATH), { recursive: true })
+    writeFileSync(CHANGELOG_CACHE_PATH, JSON.stringify(trimmed, null, 2) + '\n', 'utf8')
+  } catch { /* best-effort */ }
+}
+
+/** 限流回退：24h 内同目标版本的缓存 changelog（跨会话/跨重启保留）。 */
+function cachedChangelogOf(name: string, latest: string): string[] | null {
+  const entry = readChangelogCache()[name]
+  if (entry === undefined || entry.version !== latest) return null
+  if (Date.now() - entry.at > CHANGELOG_CACHE_TTL) return null
+  return entry.lines.length > 0 ? entry.lines : null
+}
+
 /**
  * Detect one plugin's update: compare local vs remote version, pull commit
  * changelog since `sinceIso`, and check DSH compatibility against the local
@@ -191,11 +235,18 @@ export async function detectUpdate(
   if (compat !== 'incompatible' && process.env.SSID_PENDING_CONSUMER === '1') {
     if (await targetClientUsesRemote(name, latest)) compat = 'incompatible'
   }
+  // changelog：commits API 优先，限流/失败回退 24h 同版本缓存（2026-09-07）。
+  let changelog = await fetchCommitChangelog(repoUrl, sinceIso)
+  if (changelog.length === 0) {
+    changelog = cachedChangelogOf(name, latest) ?? []
+  } else {
+    writeChangelogCacheEntry(name, latest, changelog)
+  }
   return {
     name,
     fromVersion: localVersion,
     toVersion: latest,
-    changelog: await fetchCommitChangelog(repoUrl, sinceIso),
+    changelog,
     compat,
     compatRange,
     repoUrl,
