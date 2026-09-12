@@ -31,6 +31,8 @@ export declare function normalizeRepoUrl(url: string): string;
 export declare function isSameUpstream(localRepoUrl: string | null, packageName: string): Promise<boolean | null>;
 /** Commit-message changelog: the reliable source for repos without release notes. */
 export declare function fetchCommitChangelog(repoUrl: string | null, sinceIso: string): Promise<string[]>;
+/** readme 预览：跳过标题/徽章/HTML 行，取正文前 3 个非空行，单行截 100 字符。 */
+export declare function readmePreviewOf(readme: string): string[] | null;
 /**
  * Detect one plugin's update: compare local vs remote version, pull commit
  * changelog since `sinceIso`, and check DSH compatibility against the local

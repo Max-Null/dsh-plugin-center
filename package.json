@@ -22,7 +22,7 @@
     "dist",
     "client.js",
     "cordis.patch.yml",
-    "assets",
+    "docs/shots",
     "skills"
   ],
   "dsh": {

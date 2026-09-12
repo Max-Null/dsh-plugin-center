@@ -21,9 +21,17 @@ Plugin center for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 
 ## Screenshots / 截图
 
-| Installed / 已安装 | Market / 市场 | Updates / 更新 |
+装完后在设置里多出「插件中心」一项；也可从顶栏右上按钮直接打开。
+
+**入口 / Entry：** 设置 → 插件中心（或顶栏右上按钮）
+
+| 设置入口与面板 | 已安装 / Installed | 社区市场 / Market |
 | :---: | :---: | :---: |
-| ![已安装插件](assets/screenshot-installed.png) | ![社区市场](assets/screenshot-market.png) | ![更新检测](assets/screenshot-updates.png) |
+| ![设置入口](docs/shots/plugin-center-1.png) | ![已安装插件](docs/shots/panel-installed-1.png) | ![社区市场](docs/shots/market-1.png) |
+
+| 更新检测 / Updates |
+| :---: |
+| ![更新检测](docs/shots/updates-1.png) |
 
 ## Install / 安装
 
