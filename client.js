@@ -139,7 +139,15 @@ body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,
 .pc-grid.single { grid-template-columns: 1fr; }
 
 .pc-overlay { position: fixed; inset: 0; background: var(--dsw-alias-bg-mask-1); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.pc-panel { width: 760px; max-width: 94vw; max-height: 86vh; background: var(--dsw-alias-bg-base); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.24); display: flex; flex-direction: column; overflow: hidden; }
+/* \u5F39\u7A97\u5E95\u8272\u53EA\u7531\u300C\u5F39\u7A97\u4E0D\u900F\u660E\u5EA6\u300D\u51B3\u5B9A\uFF082026-09-14 \u7528\u6237\u62A5\u544A\u7684\u53D6\u503C\u9519\u4F4D\uFF09\uFF1A
+   \u76AE\u80A4\u63D2\u4EF6 dsh-dream-skin \u7684 shadeTokens2 \u628A --dsw-alias-bg-base \u7684 alpha \u7ED1\u5728
+   \u300C\u58C1\u7EB8\u900F\u660E\u5EA6\u300D\u6ED1\u6746\u4E0A\uFF0C\u76F4\u63A5\u53D6\u5B83\u4F1A\u8BA9\u5F39\u7A97\u8DDF\u7740\u58C1\u7EB8\u53D8\u900F\u3001\u800C\u5F39\u7A97\u81EA\u5DF1\u7684\u6ED1\u6746\u5931\u6548\u3002
+   \u5B83\u53E6\u63D0\u4F9B\u4E24\u4E2A\u53D8\u91CF\uFF1A--dsh-dream-skin-modal-fill\uFF08\u5F39\u7A97\u586B\u5145\u6743\u91CD %\uFF09\u4E0E
+   --dsh-dream-skin-composer-base\uFF08\u76AE\u80A4\u57FA\u8272\uFF0C\u4E0D\u5E26 alpha\uFF09\u3002\u6709\u76AE\u80A4\u65F6\u6309
+   \u300C\u57FA\u8272 \xD7 \u5F39\u7A97\u6743\u91CD\u300D\u53D6\u8272\u2014\u2014\u7528\u4E0D\u5E26 alpha \u7684\u57FA\u8272\u624D\u4E0D\u4F1A\u628A\u4E24\u4E2A alpha \u590D\u5408\u8D77\u6765\uFF0C
+   \u4E0E\u5B98\u65B9\u5B83\u81EA\u5DF1\u4FEE composer \u65F6\u7684\u53D6\u820D\u4E00\u81F4\uFF1B\u65E0\u76AE\u80A4\u65F6\u53D8\u91CF\u7F3A\u7701\uFF0C\u516C\u5F0F\u9000\u5316\u4E3A
+   bg-base \xD7 100% = \u539F\u503C\uFF0C\u884C\u4E3A\u4E0D\u53D8\u3002\u7B2C\u4E00\u884C\u662F\u4E0D\u652F\u6301 color-mix \u7684\u5F15\u64CE\u7684\u964D\u7EA7\u3002 */
+.pc-panel { width: 760px; max-width: 94vw; max-height: 86vh; background: var(--dsw-alias-bg-base); background: color-mix(in srgb, var(--dsh-dream-skin-composer-base, var(--dsw-alias-bg-base)) var(--dsh-dream-skin-modal-fill, 100%), transparent); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.24); display: flex; flex-direction: column; overflow: hidden; }
 .pc-panel-head { flex: none; display: flex; align-items: center; padding: 20px 28px 0; }
 .pc-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 28px 20px; }
 .pc-panel-footer { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--dsw-alias-border-l2); }

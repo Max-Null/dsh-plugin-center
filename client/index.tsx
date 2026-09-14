@@ -90,7 +90,15 @@ body[data-ds-dark-theme] .pc-select { background-image: url("data:image/svg+xml,
 .pc-grid.single { grid-template-columns: 1fr; }
 
 .pc-overlay { position: fixed; inset: 0; background: var(--dsw-alias-bg-mask-1); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.pc-panel { width: 760px; max-width: 94vw; max-height: 86vh; background: var(--dsw-alias-bg-base); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.24); display: flex; flex-direction: column; overflow: hidden; }
+/* 弹窗底色只由「弹窗不透明度」决定（2026-09-14 用户报告的取值错位）：
+   皮肤插件 dsh-dream-skin 的 shadeTokens2 把 --dsw-alias-bg-base 的 alpha 绑在
+   「壁纸透明度」滑杆上，直接取它会让弹窗跟着壁纸变透、而弹窗自己的滑杆失效。
+   它另提供两个变量：--dsh-dream-skin-modal-fill（弹窗填充权重 %）与
+   --dsh-dream-skin-composer-base（皮肤基色，不带 alpha）。有皮肤时按
+   「基色 × 弹窗权重」取色——用不带 alpha 的基色才不会把两个 alpha 复合起来，
+   与官方它自己修 composer 时的取舍一致；无皮肤时变量缺省，公式退化为
+   bg-base × 100% = 原值，行为不变。第一行是不支持 color-mix 的引擎的降级。 */
+.pc-panel { width: 760px; max-width: 94vw; max-height: 86vh; background: var(--dsw-alias-bg-base); background: color-mix(in srgb, var(--dsh-dream-skin-composer-base, var(--dsw-alias-bg-base)) var(--dsh-dream-skin-modal-fill, 100%), transparent); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.24); display: flex; flex-direction: column; overflow: hidden; }
 .pc-panel-head { flex: none; display: flex; align-items: center; padding: 20px 28px 0; }
 .pc-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 28px 20px; }
 .pc-panel-footer { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--dsw-alias-border-l2); }
