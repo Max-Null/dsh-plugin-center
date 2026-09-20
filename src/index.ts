@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { PluginCenterEngine } from './engine.ts'
 import { PluginCenterRpc } from './rpc.ts'
+import { registerSkillProvider } from './skill-provider.ts'
 
 export { PluginCenterEngine } from './engine.ts'
 export type { InstalledPlugin, PluginSource } from './meta.ts'
@@ -21,4 +22,7 @@ export const inject = ['loader']
 export async function apply(ctx: Context): Promise<void> {
   await ctx.plugin(PluginCenterEngine)
   await ctx.plugin(PluginCenterRpc)
+  // 把包内 skills/ 供进技能注册表：更新流程要求 Agent 按 dsh-plugin-upgrade 决策，
+  // 而技能加载器不扫 node_modules（详见 skill-provider.ts）。
+  registerSkillProvider(ctx)
 }

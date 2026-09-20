@@ -16,6 +16,7 @@ Plugin center for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 - **What's New / 更新提示** — startup dialog listing plugins with new versions since you last looked.
 - **DSH compatibility / 兼容性检查** — flags plugins whose peer range does not match the running DSH.
 - **Skin-compatible / 皮肤兼容** — every color uses `var(--dsw-*)` tokens, so skin plugins restyle this UI too.
+- **Packaged upgrade skill / 自带升级技能** — the `dsh-plugin-upgrade` skill ships inside this package and is served by a packaged `SkillProvider` (rank 550), so the LLM update flow can load it on a clean machine — no manual copy into `~/.dsh/skills`.
 
 ## Part of the SSID family / SSID 系列成员
 

@@ -11,17 +11,96 @@ import type { RpcResult } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 const CHANNEL = '/plugin-center'
 
+/** Exact Fetch route serving this plugin's endpoints under the shared channel. */
+const ROUTE = '/api/plugin-center'
+
+/**
+ * Connection host surface needed here. Declared locally because the published
+ * peer types (`^0.1.1-rc.1`) predate `fetch`; every member is feature-detected.
+ */
+interface ConnectionHostSurface {
+  readonly fetch?: {
+    register(route: {
+      readonly path: string
+      readonly methods: readonly ('GET' | 'HEAD' | 'POST')[]
+      readonly requestBody: 'buffered' | 'streaming'
+      readonly fetch: (request: Request) => Promise<Response>
+    }): () => Promise<void>
+  }
+  readonly rpc: {
+    handle(
+      channel: string,
+      handler: (endpoint: string, payload: unknown) => Promise<RpcResult<unknown>>,
+    ): () => Promise<void>
+  }
+}
+
+/**
+ * Wrap one endpoint result as a JSON response.
+ * @param value - RPC result envelope.
+ * @returns response carrying the envelope.
+ */
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } })
+}
+
+/**
+ * Publish the endpoint handler on whichever transport this host supports.
+ *
+ * `fetch.register` is preferred because `rpc.handle` ends at
+ * `owner.webServer.register()` inside Connection, and in the web (source)
+ * composition of DSH 0.1.5-rc.2 the owning fiber declares no `webServer`
+ * injection — that throws `cannot get property "webServer" without inject` and
+ * leaves the browser with `HTTP 405`. Hosts without `fetch` (older packaged
+ * kernels) keep the logical-channel path.
+ *
+ * @param ctx - plugin context used to await the connection service.
+ * @param handler - decoded endpoint handler.
+ */
+function publishTransport(
+  ctx: Context,
+  handler: (endpoint: string, payload: unknown) => Promise<RpcResult<unknown>>,
+): void {
+  ctx.inject(['connection'], (connectionCtx) => {
+    const surface = connectionCtx as unknown as {
+      connection?: ConnectionHostSurface
+      get?: (name: string) => unknown
+    }
+    const connection = surface.connection ?? (surface.get?.('connection') as ConnectionHostSurface | undefined)
+    if (connection === undefined) return
+    if (typeof connection.fetch?.register === 'function') {
+      connection.fetch.register({
+        path: ROUTE,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request: Request): Promise<Response> => {
+          let body: { endpoint?: unknown; payload?: unknown }
+          try {
+            body = await request.json() as { endpoint?: unknown; payload?: unknown }
+          } catch {
+            return jsonResponse(internal('request body must be JSON'))
+          }
+          if (typeof body.endpoint !== 'string') return jsonResponse(internal('endpoint is required'))
+          return jsonResponse(await handler(body.endpoint, body.payload))
+        },
+      })
+      return
+    }
+    connection.rpc.handle(CHANNEL, handler)
+  })
+}
+
 /** Fold a thrown value into the RpcResult error branch (closed `internal` code). */
 function internal(message: string): RpcResult<unknown> {
   return { ok: false, error: { code: 'internal', message, details: {} } }
 }
 
 export class PluginCenterRpc extends Service {
-  static inject = ['pluginCenter', 'connection']
+  static inject = ['pluginCenter']
 
   constructor(ctx: Context) {
     super(ctx, 'pluginCenterRpc')
-    ctx.connection.rpc.handle(CHANNEL, async (endpoint: string, payload: unknown): Promise<RpcResult<unknown>> => {
+    const handler = async (endpoint: string, payload: unknown): Promise<RpcResult<unknown>> => {
       try {
         switch (endpoint) {
           case 'listInstalled':
@@ -132,7 +211,8 @@ export class PluginCenterRpc extends Service {
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }
-    }, { authority: 'loopback' })
+    }
+    publishTransport(ctx, handler)
   }
 }
 
