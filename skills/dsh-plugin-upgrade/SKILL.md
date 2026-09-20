@@ -19,7 +19,7 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 | `isVendorModified` | 本地是否定制（vendor/tarball/local-file 为 true） |
 | `compat` / `compatRange` | DSH peer 兼容性（compatible / incompatible / unknown） |
 | `changelog` | GitHub commit 摘要（用于判断版本差异大小与作者改名） |
-| `profileDir` | **插件所在 profile 目录（唯一允许操作目录）**——DSH web / SSiD dev / SSiD 安装版各自 profile 不同，严禁按本会话工作目录（cwd）或任何其他 profile 操作 |
+| `profileDir` | **插件所在 profile 目录（唯一允许操作目录）**。怎么认：**DSH web 是 `~/.dsh/profiles/web`；SSiD dev 与 SSiD 安装版共用 `~/.dsh/profiles/ssid`**——dev 裸跑默认不设 `DSH_HOME`，安装版的 `deployRuntime` 也部署到同一个 profile 根，所以对这一个目录动手，两边的插件都跟着变（隔离实例才走自己的 `DSH_HOME`）。严禁按本会话工作目录（cwd）或任何其他 profile 操作 |
 
 ## 操作域校验（开始前必做）
 
@@ -60,6 +60,11 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
      a. 更新 profile dependency 声明（pnpm add/update or 改 package.json + pnpm install）
      b. 安装后校验实体版本（见 §pnpm 假执行）
      c. 若目标版本要求 DSH 高于当前 → 提示用户, 不硬升
+        (怎么查: 读 npm 上该版本的 peerDependencies，找 `@deepseek-ai/dsh-*` 条目里
+        写死的下限，与当前内核版本比。例：2026-09-21 的 ds-harness-remote 0.4.16
+        要求 @deepseek-ai/dsh-client-ui-plugin-manager / -settings-general /
+        -settings-plugin-inventory >= 0.1.6-alpha.1，而当时 SSiD 跟的是 npm
+        `latest` 通道的 0.1.5-rc.2（0.1.6 只在 `alpha` 通道）→ 保持不升)
 
 5. Windows EPERM 锁（两段式）:
    条件: 安装报 EPERM/EBUSY（文件被正在运行的 DSH 占用）
@@ -108,9 +113,14 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 
 ## 常见陷阱
 
-- **版本比较**用数值逐段比较（0.9.10 > 0.9.9），不要用字符串或只比主版本。
-- **服务级依赖(致命,2026-08-29 二次血泪)**：升级前必须核对目标版本的 `client inject`/host 服务依赖是否为当前内核所提供——**SSiD 内核 0.1.1-rc.2 没有 `remote.session` Remote BFF 服务**（SSiD 走 `/plugin-center` 式 RPC channel）。dsh-sidebar-qa 0.4.1/0.4.2 的客户端依赖 `remote.session` → 装上升级后内核启动即「Failed to load plugins (pending waiting for service: remote.session)」。**peer 满足 ≠ 服务满足**:0.4.2 的 peer 全部满足,但服务缺失。判定:反编译/读目标版本 client.js 的 inject 列表,有 `remote.*` 且当前 profile 无 `@deepseek-ai/dsh-*remotes*` 对应服务 → 不兼容保持现状。
-- **npm 范围漂移**：profile 声明常为 `^0.4.0`，pnpm 会把 `^0.4.0` 浮到 `0.4.2`；升级后核对实体版本，必要时把声明钉死到精确版本并在 detail 说明钉死原因。
+- **版本比较**用数值逐段比较（0.9.10 > 0.9.9），不要用字符串或只比主版本。**带后缀的版本要单独走一路**：形如 `0.6.2-master-<sha>` 的 master 构建，逐段 `Number()` 会在后缀处得到 NaN、比较结果不可信——这类只存在于本地、npm 上没有对应版本的包，直接归入「本地超前 → 保持」。
+- **服务级依赖（致命类，2026-08-29 二次血泪）**：**peer 满足 ≠ 服务满足**——那次 dsh-sidebar-qa 0.4.2 的 peer 全满足，但客户端依赖 `remote.session`，而当时的内核不提供该服务，装上后内核启动即「Failed to load plugins (pending waiting for service: remote.session)」。所以升级前要核对目标版本的 client/host 服务依赖是否为**当前内核**所提供。
+  **判据分两种写法，别一刀切**：
+  - **`inject([...])` 式**——服务缺失会让 fiber 停在 pending，**拖垮整个 boot**；缺服务就是不能升。
+  - **`ctx.get()` 探测式**——作者自己处理了降级（拿不到就少注册一块功能，不拦启动）；可以升，但要接受功能降级。dsh-sidebar-qa 1.0.0 即此写法（其注释写明：inject 会让 fiber 停在没有原生侧栏的宿主上，而 parked fiber 会让整个 web boot 失败而不是降级）。
+  查法：读目标版本 client.js 的 inject 列表，再确认当前内核有没有对应服务的包（`Test-Path "$profileDir\node_modules\@deepseek-ai\<服务所属包>"`）。
+  **服务清单随内核演进，不要照抄历史结论**：2026-09-21 复查时 `remote.session` 在 0.1.5-rc.2 上**已可用**——`dsh-context` 0.53.3 与 `dsh-sidebar-qa` 0.5.0 当时都在用它且工作正常。照抄旧内核「没有某服务」的结论，会误杀本来能升的包。
+- **声明形态先看清，别假设它是范围还是 pin**：若声明是范围（`^0.4.0`），pnpm 会把它浮到该范围内的最新（`^0.4.0` → `0.4.2`），于是「装上的」不等于「声明的」；若是精确 pin，`pnpm install` 只满足这个 pin、不会自动跟到 latest。**2026-09-21 复查：SSiD profile 的 66 条依赖声明全部是精确 pin，无一带范围符**——但这不适用于其他 profile 或其他插件，动手前读一眼实际声明。无论哪种形态，升级后都要回读实体版本；必要时把声明钉死到精确版本，并在 detail 说明钉死原因。
 - **SSiD 预置插件**：升级后需同步归档（profile-template / vendor 目录），否则打包时被旧版覆盖——在 detail 中注明「需归档同步」。
 - **hot 通道**：纯前端插件更新可能已热生效，升级成功后仍建议重启一次确认加载无错。
 
