@@ -40,6 +40,71 @@
 - 真实运行时（`思灵.exe` 的 Node 模式，asar 可读）：`resolvePackage(profile, '@deepseek-ai/dsh')`
   → `0.1.7-rc.2`；上述三个插件按新口径重判全部为 `compatible`。
 
+## 0.4.3 (2026-09-28)
+
+本版把插件中心对内核的两处调用改到 0.1.7 的契约上，并纠正 0.4.2 对 no-session-face 的误判。
+
+### 修复
+
+- **no-session-face —— 0.4.2 的修法方向错了**。0.4.2 在 `connectWorkspace` 之后加了轮询等
+  会话面就绪（`SESSION_FACE_TIMEOUT_MS`），默认「绑定是异步建立的，等一下就好」。真根因是
+  **引用根本没建立**：`sessions.binding()` 的契约是「只借用已建立的引用，未 retain 则返回
+  undefined」，而 `connectWorkspace` 只创建/复用会话、`open` 只打开视图，**两者都不产生
+  retain** —— 第三方必须自己来（先例：ui-subagent 的 `sidebarChat`）。本版改为
+  `retain(id, { source: 'pluginCenterLlmUpdate' })`，引用由模块级 `llmRetains` 持有到插件卸载
+  （提示词交给会话后它要在后台跑完，期间必须保持被引用）；轮询保留作兜底。
+- **会话导航走到已不存在的 `sessions.open`**。新契约的 `ISessions` 没有 `open`，导航归
+  `UiWorkspaceService`。三处跳转（发起后 / 复用已有会话 / 查看会话）改走
+  `uiWorkspaceSvc.openSession`。
+- **市场 AI 推荐的一次性输入带上了不该带的字段**。此前按 `Message` 写，带 `id` 与 `source`；
+  新契约里这条走 `RequestUserInput`（`packages/llm/llm/src/types.ts:486-495`），它的 `id` 与
+  `source` 都是 `?: never` —— 不许带。要求 id 与 producer-owned source 的是 `MessageBase`，
+  不是它。
+
+### 关于 git tag
+
+`0.4.2` 与 `0.4.3` 的代码改动**合并在同一个提交**里（`087ac8b`），无法分离，因此仓库里没有
+`v0.4.2` tag —— 与 `0.3.0` 的缺口同类。`v0.4.3` 指向该提交。
+
+## 0.4.2 (2026-09-28)
+
+### 修复
+
+- **兼容的插件被标成「不兼容当前 DSH」**。`resolvePackage` 的解析链够不到 SSiD fork 版的
+  内核位置（插件集按设计不带内核包），`@deepseek-ai/dsh` 解析为 null，而 `dshVersion()`
+  此时回退 `0.0.0` —— 它不满足任何 `^0.1.x`，于是所有声明 dsh peer 的插件都被判成不兼容。
+  补 DSH 安装锚点（`<dshHome>/dsh-runtimes/<runtime>/node_modules`），并修掉「走到盘根就
+  `return null`」——它让紧随其后的锚点层永远执行不到。
+- **LLM 更新发起后报 no-session-face**。`connectWorkspace` 返回后绑定由 client 侧异步建立，
+  立刻取值会拿到 undefined；加轮询等待（上限 5 s）。（真根因见 0.4.3 —— 不是「没等够」，
+  是引用根本没建立。）
+
+### 测试
+
+- 新增 `tests/meta-resolve.test.ts`（3 条）：dsh-runtimes 锚点命中、profile 链直连、
+  两处都找不到时返回 null。
+
+## 0.4.1 (2026-09-21)
+
+### 变更
+
+- **`skills/dsh-plugin-upgrade/SKILL.md` 修订**（代码未动，仅技能正文随包更新）。四处
+  「照抄会误判」的结论改掉，另两处判据可操作化：
+  1. `profileDir` 一栏原写「DSH web / SSiD dev / SSiD 安装版各自 profile 不同」——实际 dev
+     与安装版**共用** `~/.dsh/profiles/ssid`（dev 裸跑默认不设 `DSH_HOME`，安装版也部署到
+     同一个 profile 根）。改成写清怎么认，并点明「对这一个目录动手，两边插件都跟着变」，
+     隔离实例才走自己的 `DSH_HOME`。
+  2. 「SSiD 内核 0.1.1-rc.2 没有 `remote.session`」已过时（0.1.5-rc.2 上该服务可用且已有
+     插件在用）——把「某内核没有某服务」这类必然过期的结论换成「怎么查」。
+  3. 补上判据分野：`inject([...])` 式缺服务会让 fiber 停在 pending、拖垮整个 boot，而
+     `ctx.get()` 探测式已由作者处理降级、可以升、只是功能降一档 —— 不区分会把本来能升的
+     包误杀。
+  4. 「profile 声明常为 `^0.4.0`」与实测不符（当时 66 条依赖全是精确 pin，无一带范围符），
+     改成「先看清声明形态」。
+  另外给决策树补了「目标版本要求 DSH 高于当前」的查法，以及带后缀版本
+  （`0.6.2-master-<sha>`）的比较处理：逐段 `Number()` 会在后缀处得到 NaN，这类只走
+  「本地超前 → 保持」。
+
 ## 0.4.0 (2026-09-21)
 
 本版把包内的 `dsh-plugin-upgrade` 技能正式注册进 DSH 的技能注册表——此前它只以文件形式
