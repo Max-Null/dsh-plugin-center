@@ -269,7 +269,10 @@ export async function detectUpdate(
   const latest = await npmLatest(name)
   if (latest === null || compareVersions(latest, localVersion) <= 0) return null
   let compat: UpdateDigest['compat'] = 'unknown'
-  if (compatRange !== null) {
+  // 内核版本不可知（空串）时不判不兼容：误报「不兼容当前 DSH」会让用户放弃一个其实能升
+  // 的版本，代价远大于少显示一个标记（2026-09-28 实机：SSiD 内核在随包 asar 里，
+  // 版本探测一度回退成 0.0.0，于是三个本来兼容的插件全挂上了这个标记）。
+  if (compatRange !== null && localDshVersion !== '') {
     compat = satisfies(localDshVersion, compatRange) ? 'compatible' : 'incompatible'
   }
   // 服务面校验(SSiD 专用):目标版本客户端依赖 Remote BFF(ctx.remote.*)而
@@ -816,7 +819,8 @@ export async function buildLlmPackage(
     ? (await isSameUpstream(repoUrl, name)) === false
     : false
   let compat: LlmUpdatePackage['compat'] = 'unknown'
-  if (compatRange !== null) {
+  // 与 detectUpdate 同一条守卫：内核版本不可知时不判不兼容（见那里的说明）。
+  if (compatRange !== null && localDshVersion !== '') {
     compat = satisfies(localDshVersion, compatRange) ? 'compatible' : 'incompatible'
   }
   // 服务面校验(SSiD 专用):目标版本依赖 Remote BFF 服务 → 不兼容(LLM 直接 keep)。

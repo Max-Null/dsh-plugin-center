@@ -48,6 +48,9 @@ function decideLlmRestore(input) {
   if (rec.status !== "running" && rec.status !== "pending") return "none";
   return sessionRunning === false ? "ended" : "continue";
 }
+function shouldRestoreLlmResult(rec, now, ttlMs) {
+  return typeof rec.at === "number" && Number.isFinite(rec.at) && now - rec.at < ttlMs;
+}
 function llmResultLabelKey(status, action) {
   if (status === "failed") return "llmRes_failed";
   if (status === "ended") return "llmRes_ended";
@@ -422,6 +425,7 @@ function startLlmPolling(name) {
 async function restoreLlmStates(names) {
   const list = sessionsSvc?.list?.getSnapshot?.();
   const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
+  const now = Date.now();
   for (const name of names) {
     if (llmUpdating.has(name) || llmResults.has(name)) continue;
     try {
@@ -441,7 +445,7 @@ async function restoreLlmStates(names) {
           if (sess?.id !== void 0) llmSessionByPlugin.set(name, sess.id);
           setLlmResult(name, { at: rec.at, action: "ended", detail: "", status: "ended" });
         }
-      } else {
+      } else if (shouldRestoreLlmResult(rec, now, LLM_RESULT_TTL_MS)) {
         setLlmResult(name, rec);
       }
     } catch {
@@ -452,6 +456,7 @@ var llmSessionByPlugin = /* @__PURE__ */ new Map();
 var llmStartedAt = /* @__PURE__ */ new Map();
 var llmRestartHinted = false;
 var LLM_GRACE_MS = 3e4;
+var LLM_RESULT_TTL_MS = 30 * 6e4;
 var pendingToggles = /* @__PURE__ */ new Map();
 var pendingListeners = /* @__PURE__ */ new Set();
 function setPendingToggle(id, action) {
@@ -1152,7 +1157,21 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: titleOf(u.name, u.repoUrl, null, u.name) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion })
+      ] }),
+      u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { marginTop: 8 }, children: [
+        githubLinkOf(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "a",
+          {
+            href: githubLinkOf(u.repoUrl),
+            target: "_blank",
+            rel: "noreferrer",
+            style: { fontSize: 12, color: "var(--dsw-alias-state-business-primary)", textDecoration: "none", whiteSpace: "nowrap" },
+            children: t("githubChanges")
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
         u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") }),
         pendingInstall.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("pendingRestart") }),
         llmUpdating.has(u.name) && llmResults.get(u.name) === void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("llmBusy") }),
@@ -1161,7 +1180,6 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           const cls = r.status === "success" ? "" : r.status === "failed" ? "danger" : "warn";
           return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-tag ${cls}`, title: r.detail, children: t(llmResultLabelKey(r.status, r.action)) });
         })(),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
         llmSessionByPlugin.has(u.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: () => {
           const id = llmSessionByPlugin.get(u.name);
           if (id === void 0) return;
@@ -1176,19 +1194,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name) && llmResults.get(u.name) === void 0, onClick: () => {
           llmPrepare(u.name);
         }, children: t("llmUpdate") })
-      ] }),
-      u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") }),
-      githubLinkOf(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "a",
-        {
-          className: "pc-wn-list",
-          href: githubLinkOf(u.repoUrl),
-          target: "_blank",
-          rel: "noreferrer",
-          style: { display: "inline-block", fontSize: 12, color: "var(--dsw-alias-state-business-primary)", textDecoration: "none" },
-          children: t("githubChanges")
-        }
-      )
+      ] })
     ] }, u.name)),
     doneOnly.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: d.name }),

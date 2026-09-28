@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideLlmState, decideLlmRestore, llmResultLabelKey, pickLlmArchives } from '../client/llm-decision.ts'
+import { decideLlmState, decideLlmRestore, llmResultLabelKey, pickLlmArchives, shouldRestoreLlmResult } from '../client/llm-decision.ts'
 
 describe('decideLlmState(轮询收敛:LLM 更新状态机的核心)', () => {
   it('JSONL 无记录 → continue', () => {
@@ -63,6 +63,26 @@ describe('decideLlmRestore(重挂/刷新恢复)', () => {
 
   it('running 但会话已停/不存在 → ended(回归:恢复后不再卡执行中)', () => {
     expect(decideLlmRestore({ rec: { status: 'running' }, sessionRunning: false })).toBe('ended')
+  })
+})
+
+describe('shouldRestoreLlmResult(历史终态只在有效期内算「本次操作的回执」)', () => {
+  const TTL = 30 * 60_000
+  const now = 1_800_000_000_000
+
+  it('有效期内的终态 → 恢复', () => {
+    expect(shouldRestoreLlmResult({ at: now - 60_000 }, now, TTL)).toBe(true)
+    expect(shouldRestoreLlmResult({ at: now - TTL + 1 }, now, TTL)).toBe(true)
+  })
+
+  it('过期记录 → 不恢复（回归：卡片上永久挂着几周前的「LLM 已更新」，与「有新版本可升」自相矛盾）', () => {
+    expect(shouldRestoreLlmResult({ at: now - 12 * 24 * 3600_000 }, now, TTL)).toBe(false)
+    expect(shouldRestoreLlmResult({ at: now - TTL }, now, TTL)).toBe(false)
+  })
+
+  it('缺 at / 非法 at → 不恢复（宁可少显示一个标记，不可假报一次更新）', () => {
+    expect(shouldRestoreLlmResult({}, now, TTL)).toBe(false)
+    expect(shouldRestoreLlmResult({ at: Number.NaN }, now, TTL)).toBe(false)
   })
 })
 

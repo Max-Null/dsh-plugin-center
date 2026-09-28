@@ -1,5 +1,45 @@
 # Release Notes — @max-null/dsh-plugin-center
 
+## 0.4.4 (2026-09-28)
+
+本版修掉「更新」列表里两条**互相矛盾却同时出现**的错误信息，并把状态与操作移出标题行。
+
+### 修复
+
+- **兼容的插件被成片标成「不兼容当前 DSH」**。根因在内核版本探测：SSiD 1.0.0 把内核
+  随包放进 `resources/app.asar/dsh`，而解析链只查 profile 向上链与 `dsh-runtimes` 锚点，
+  两处都到不了 → `@deepseek-ai/dsh` 解析为 null → `dshVersion()` 回退 `0.0.0` → 而
+  `0.0.0` 不满足任何 `^0.1.x`，于是**所有**声明了 dsh peer 的插件都被判成不兼容。
+  实机（内核 0.1.7-rc.2）三个插件全部误报：`dsh-better-sidebar`、`@changfenhuang/dsh-genui`、
+  `ds-harness-remote`。两处修：
+  - `resolvePackage` 增**内核锚点**：从宿主入口（`process.argv[1]`，即
+    `dsh-desktop-host/lib/index.js`）与 `process.resourcesPath` 下的 `app.asar/dsh`、
+    `app.asar.unpacked/dsh` 逐级上溯。实测解析重回 `0.1.7-rc.2`。
+  - `dshVersion()` 解析不到时返回**空串**，不再返回 `0.0.0`；`detectUpdate` 与
+    `buildLlmPackage` 对空串给 `compat: 'unknown'`（不显示标记），而不是给出一个错误的
+    「不兼容」。误报会让用户放弃一个其实能升的版本，代价远大于少一个标记。
+- **卡片永久挂着几周前的「LLM 已更新」**。host JSONL 是只增日志，`llm-update.result`
+  读到的是该插件**最后一条**记录，此前无条件恢复成卡片状态 —— 于是「有新版本可升」与
+  「LLM 已更新」并存（实机：三个插件挂着 09-16 / 09-28 的旧记录）。终态是**某次操作的
+  回执，不是插件属性**：现在只在 30 分钟内恢复（`shouldRestoreLlmResult`）。
+
+### 变更
+
+- 「更新」卡片分两行：标题行只留插件名与版本变化；`不兼容当前 DSH` / `LLM 已更新` /
+  `LLM 更新` 按钮与 `GitHub 变更` 同处底部一行。此前它们全挤在标题行，把 `pc-name`
+  压成省略号，插件名显示不全。
+
+### 测试
+
+- 新增 10 条：`meta-resolve.test.ts` 增内核锚点解析与起点构造（3 条，含进程级状态的
+  确定性隔离）；`update.test.ts` 增兼容性判定四态（4 条）；`llm-decision.test.ts` 增终态
+  时效判据（3 条）。全量 **77 条通过**；`npm run typecheck` 无错。
+
+### 验证
+
+- 真实运行时（`思灵.exe` 的 Node 模式，asar 可读）：`resolvePackage(profile, '@deepseek-ai/dsh')`
+  → `0.1.7-rc.2`；上述三个插件按新口径重判全部为 `compatible`。
+
 ## 0.4.0 (2026-09-21)
 
 本版把包内的 `dsh-plugin-upgrade` 技能正式注册进 DSH 的技能注册表——此前它只以文件形式

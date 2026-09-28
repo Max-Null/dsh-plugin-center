@@ -9,7 +9,7 @@
 // 2026-08-22 slot crash). react-dom is bundled by build-client.mjs.
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decideLlmState, decideLlmRestore, llmResultLabelKey, pickLlmArchives } from './llm-decision.ts'
+import { decideLlmState, decideLlmRestore, llmResultLabelKey, pickLlmArchives, shouldRestoreLlmResult } from './llm-decision.ts'
 
 // ---- injected stylesheet (single sheet, :hover/:focus live here) ----
 const CSS = `
@@ -533,10 +533,13 @@ function startLlmPolling(name: string): void {
 }
 /** 重挂/刷新后从 host 恢复:JSONL running → 结合对应「插件更新」会话活动状态
  *  决策(会话还在跑 → 继续执行中+轮询;会话已结束 → ended)。
+ *  终态(success/failed)只在 {@link LLM_RESULT_TTL_MS} 内恢复 —— 更早的记录是历史,
+ *  贴到今天这张卡片上会变成「有更新可升」与「LLM 已更新」并存的自相矛盾(见判据函数)。
  *  会话按标题精确匹配:单插件「插件更新: <name>」/ 批量「插件更新(批量)」。 */
 async function restoreLlmStates(names: string[]): Promise<void> {
   const list = sessionsSvc?.list?.getSnapshot?.()
   const rows = list?.byId === undefined ? [] : Object.values(list.byId)
+  const now = Date.now()
   for (const name of names) {
     if (llmUpdating.has(name) || llmResults.has(name)) continue
     try {
@@ -558,7 +561,7 @@ async function restoreLlmStates(names: string[]): Promise<void> {
           if (sess?.id !== undefined) llmSessionByPlugin.set(name, sess.id)
           setLlmResult(name, { at: rec.at, action: 'ended', detail: '', status: 'ended' })
         }
-      } else {
+      } else if (shouldRestoreLlmResult(rec, now, LLM_RESULT_TTL_MS)) {
         setLlmResult(name, rec)
       }
     } catch { /* 单条失败不阻塞整体恢复 */ }
@@ -571,6 +574,10 @@ const llmStartedAt = new Map<string, number>()
 /** 「LLM 更新完成后请重启」提示只弹一次(多个插件收敛 success 时去重)。 */
 let llmRestartHinted = false
 const LLM_GRACE_MS = 30_000
+/** host JSONL 里的终态记录算「本次操作回执」的有效期。超期不再恢复成卡片状态:
+ *  那份日志只增不改,记录到的是该插件最后一次更新——可能是几周前那次(判据见
+ *  `shouldRestoreLlmResult`)。取 30 分钟:够覆盖「更新完 → 重启 → 回来看一眼」的整段。 */
+const LLM_RESULT_TTL_MS = 30 * 60_000
 
 // ---- pending-toggle state: a disable/enable written to the patch layer but
 // not yet applied by a restart (SSiD has no HMR). The card shows a
@@ -1224,23 +1231,39 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
     <div>
       {updates.map(u => (
         <div key={u.name} className="pc-card">
+          {/* 标题行只留身份与版本变化。状态标记与操作按钮移到底部行 —— 原先它们全挤在这
+              一行里，「不兼容当前 DSH」这类长标记 + 两个按钮会把 `pc-name` 压成省略号，
+              插件名显示不全（2026-09-28 用户实测）。 */}
           <div className="pc-row" style={{ flexWrap: 'nowrap' }}>
             <span className="pc-name">{titleOf(u.name, u.repoUrl, null, u.name)}</span>
             <span className="pc-ver">{u.fromVersion}</span>
             <span className="pc-ver">→</span>
             <span style={{ color: 'var(--dsw-alias-state-business-primary)', fontWeight: 500 }}>{u.toVersion}</span>
+          </div>
+          {u.changelog.length > 0 ? (
+            <ul className="pc-wn-list">
+              {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
+            </ul>
+          ) : (
+            <div className="pc-wn-list" style={{ color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
+          )}
+          {/* 底部行：变更入口在左，状态标记与操作在右，同占一行（2026-09-28 用户要求）。
+              终态优先：LLM 结果存在时不再显示「执行中」tag（互斥，2026-08-29）；
+              执行中状态由 tag 表达、按钮固定「LLM 更新」文案（禁用），避免重复与长文案挤行。 */}
+          <div className="pc-row" style={{ marginTop: 8 }}>
+            {githubLinkOf(u.repoUrl) !== null && (
+              <a href={githubLinkOf(u.repoUrl) as string} target="_blank" rel="noreferrer"
+                style={{ fontSize: 12, color: 'var(--dsw-alias-state-business-primary)', textDecoration: 'none', whiteSpace: 'nowrap' }}>{t('githubChanges')}</a>
+            )}
+            <span className="pc-spacer" />
             {u.compat === 'incompatible' && <span className="pc-tag danger">{t('incompat')}</span>}
             {pendingInstall.has(u.name) && <span className="pc-tag">{t('pendingRestart')}</span>}
-            {/* 终态优先:LLM 结果存在时不再显示「执行中」tag(互斥,2026-08-29)。
-                执行中状态只由 tag 表达,按钮固定「LLM 更新」文案(禁用),
-                避免与 tag 重复 + 长文案挤行。 */}
             {llmUpdating.has(u.name) && llmResults.get(u.name) === undefined && <span className="pc-tag">{t('llmBusy')}</span>}
             {llmResults.get(u.name) !== undefined && (() => {
               const r = llmResults.get(u.name)!
               const cls = r.status === 'success' ? '' : r.status === 'failed' ? 'danger' : 'warn'
               return <span className={`pc-tag ${cls}`} title={r.detail}>{t(llmResultLabelKey(r.status, r.action))}</span>
             })()}
-            <span className="pc-spacer" />
             {llmSessionByPlugin.has(u.name) && <button className="pc-btn" onClick={() => {
               const id = llmSessionByPlugin.get(u.name)
               if (id === undefined) return
@@ -1260,17 +1283,6 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
                 updateOne 保留未删,后续需要恢复时取消注释即可。 */}
             {/* <button className="pc-btn" disabled={busy !== null || pendingInstall.has(u.name) || llmUpdating.has(u.name)} onClick={() => { updateOne(u.name, u.toVersion) }}>{busy === u.name || busy === '__all__' || updatingPlugins.has(u.name) ? t('updating') : t('update')}</button> */}
           </div>
-          {u.changelog.length > 0 ? (
-            <ul className="pc-wn-list">
-              {u.changelog.slice(0, 5).map((line, i) => <li key={i}>{line}</li>)}
-            </ul>
-          ) : (
-            <div className="pc-wn-list" style={{ color: 'var(--dsw-alias-label-tertiary)', fontStyle: 'italic' }}>{t('changelogNone')}</div>
-          )}
-          {githubLinkOf(u.repoUrl) !== null && (
-            <a className="pc-wn-list" href={githubLinkOf(u.repoUrl) as string} target="_blank" rel="noreferrer"
-              style={{ display: 'inline-block', fontSize: 12, color: 'var(--dsw-alias-state-business-primary)', textDecoration: 'none' }}>{t('githubChanges')}</a>
-          )}
         </div>
       ))}
       {doneOnly.map(d => (

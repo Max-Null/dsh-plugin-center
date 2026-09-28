@@ -39,6 +39,22 @@ export function decideLlmRestore(input: { rec: { status: string } | null, sessio
   return sessionRunning === false ? 'ended' : 'continue'
 }
 
+/** 历史终态是否值得恢复成卡片上的回执。
+ *
+ * 为什么需要一条时效判据：host JSONL 是**只增日志**，`llm-update.result` 读到的是该
+ * 插件**最后一条**记录——可能是几周前那次升级。无条件恢复会让「有更新可升」的卡片上
+ * 永久挂着「LLM 已更新」，与卡片自己列的落后版本互相矛盾（2026-09-28 实机：三个插件
+ * 挂着 09-16 / 09-28 的旧记录，而它们各自都还有新版本可升）。终态是**某次操作的回执**，
+ * 不是插件属性，所以只在有效期内恢复。
+ * @param rec - JSONL 终态记录；缺 `at`（或非有限数）视为过期。
+ * @param now - 当前时间戳（毫秒）。
+ * @param ttlMs - 有效期（毫秒）。
+ * @returns 是否恢复为卡片状态。
+ */
+export function shouldRestoreLlmResult(rec: { at?: number }, now: number, ttlMs: number): boolean {
+  return typeof rec.at === 'number' && Number.isFinite(rec.at) && now - rec.at < ttlMs
+}
+
 /** 结果 badge/toast 文案键:按 status + action 细分。
  *  keep(保持不动)绝不可渲染成「已更新」——2026-08-29 Agent 回传 keep、
  *  UI 显示「LLM 已更新」的事实性错误回归。 */

@@ -81,7 +81,13 @@ export declare class PluginCenterEngine extends Service {
     private get whatsNewDailyPath();
     whatsNewDaily(): Promise<string>;
     markWhatsNewDaily(day: string): Promise<void>;
-    /** Current DSH version, read from the installed @deepseek-ai/dsh package. */
+    /** 当前 DSH 内核版本，读自已安装的 `@deepseek-ai/dsh`。
+     *
+     *  **解析不到时返回空串，不返回 `0.0.0`。** `0.0.0` 会被当成真实版本参与 peer 匹配，
+     *  而它不满足任何 `^0.1.x` —— 于是兼容的插件全被标成「不兼容当前 DSH」（2026-09-28
+     *  实机：SSiD 1.0.0 的内核在随包 asar 里，profile 链解析不到）。空串让调用方走
+     *  「版本不可知」分支（compat = unknown），而不是给出一个错误的结论。
+     * @returns 内核版本号；不可知时为空串。 */
     dshVersion(): Promise<string>;
     /** Non-group Loader entries, cross-matched with market categories. */
     listInstalled(): Promise<InstalledPlugin[]>;

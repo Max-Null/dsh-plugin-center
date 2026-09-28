@@ -112,6 +112,83 @@ export function resolvePackage(
   return pending
 }
 
+/**
+ * 从 `start` 逐级向上找 `node_modules/<specifier>`（绕开 require 的 exports 门控）。
+ *
+ * 返回 null 只说明**这一条链**没有 —— 调用方必须继续试下一个锚点。早先这段逻辑
+ * 内联在上溯循环里、走到盘根就 `return null`，于是排在它后面的 dsh-runtimes 锚点
+ * 永远执行不到（2026-09-28 由 meta-resolve.test.ts 抓出）。
+ * @param start - 起点目录。
+ * @param specifier - 模块说明符（包名）。
+ * @param maxLevels - 最多上溯层数。
+ * @returns 解析到的 package.json 与其所在目录，或 null。
+ */
+async function walkUpNodeModules(
+  start: string,
+  specifier: string,
+  maxLevels: number,
+): Promise<{ pkg: PackageJson; dir: string } | null> {
+  let dir = start
+  for (let i = 0; i < maxLevels; i++) {
+    const cand = join(dir, 'node_modules', specifier)
+    const pkgPath = join(cand, 'package.json')
+    if (existsSync(pkgPath)) {
+      try {
+        return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')) as PackageJson, dir: cand }
+      } catch {
+        return null // 清单损坏：同名包不会另有第二份，换锚点再试
+      }
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
+
+/**
+ * 宿主内核的安装锚点起点。
+ *
+ * ## 为什么需要
+ *
+ * 打包版内核不在 profile 的解析链上：SSiD 1.0.0 把内核随包放进
+ * `resources/app.asar/dsh`（asar 路径对运行时进程是可读的），profile 向上链与
+ * `dsh-runtimes` 都到不了它。实测 2026-09-28：`@deepseek-ai/dsh` 解析为 null →
+ * `dshVersion()` 回退 `0.0.0` → `0.0.0` 不满足任何 `^0.1.x` → 插件中心把**兼容的
+ * 插件全标成「不兼容当前 DSH」**。
+ *
+ * ## 起点怎么选
+ *
+ * 内核宿主是官方 `dsh-desktop-host`，入口为
+ * `<内核根>/node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js` —— 从它的目录
+ * 向上两三级就落到内核根的 `node_modules`，`@deepseek-ai/*` 全在那里。另取 Electron
+ * 打包资源下的内核目录作兜底（入口路径形态变化时仍可用）。
+ *
+ * 开发期与 web 版命中不到这两处，退回前两层即可 —— 多两个起点只是多几次 `existsSync`。
+ * @param argv1 - 宿主入口路径（生产传 `process.argv[1]`；测试可注入）。
+ * @param resourcesPath - Electron 的 `process.resourcesPath`（同上）。
+ * @returns 起点目录列表（可能为空）。
+ */
+export function kernelAnchorRoots(argv1?: string, resourcesPath?: string): string[] {
+  const roots: string[] = []
+  if (typeof argv1 === 'string' && argv1 !== '') roots.push(dirname(argv1))
+  if (typeof resourcesPath === 'string' && resourcesPath !== '') {
+    roots.push(join(resourcesPath, 'app.asar', 'dsh'))
+    roots.push(join(resourcesPath, 'app.asar.unpacked', 'dsh'))
+  }
+  return roots
+}
+
+/** 测试用：钉住内核锚点起点。生产恒为 null（正常从 `process` 读）。
+ *  与 `clearPackageCache` / `clearNpmRepoCache` 同款用途——宿主入口路径在测试里
+ *  造不出来，而「锚点能否解析到内核」正是这条链最需要回归保护的行为。 */
+let kernelRootsForTest: string[] | null = null
+
+/** 覆盖内核锚点起点。@param roots - 起点列表；null 恢复读 `process`。 */
+export function setKernelAnchorRootsForTest(roots: string[] | null): void {
+  kernelRootsForTest = roots
+}
+
 async function resolveUncached(
   baseUrl: string,
   specifier: string,
@@ -152,19 +229,8 @@ async function resolveUncached(
   } catch {
     // 2) 回退：逐级 node_modules 链路探测（不经过 require 的 exports 门控）——
     //    从 profile 根向上找 node_modules/<specifier>/package.json。
-    let dir = baseUrl
-    for (let i = 0; i < 16; i++) {
-      const cand = join(dir, 'node_modules', specifier)
-      const pkgPath = join(cand, 'package.json')
-      if (existsSync(pkgPath)) {
-        return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')) as PackageJson, dir: cand }
-      }
-      const parent = dirname(dir)
-      // 走到盘根就收手，但**不能在这里 return** —— 下面还有 DSH 安装锚点那一层要看，
-      // 提前返回会让它永远执行不到（2026-09-28 由 meta-resolve.test.ts 抓出）。
-      if (parent === dir) break
-      dir = parent
-    }
+    const fromProfile = await walkUpNodeModules(baseUrl, specifier, 16)
+    if (fromProfile !== null) return fromProfile
     // 3) DSH 安装锚点：SSiD fork 版把内核放在 `<dshHome>/dsh-runtimes/<runtime>/node_modules`
     //    下，**不在 profile 的向上链上**（插件集按设计不带内核包）。实测 2026-09-28：1.0.0 上
     //    前两层都解析不到 `@deepseek-ai/dsh`，`dshVersion()` 于是回退成 `0.0.0`，而 `0.0.0`
@@ -173,16 +239,20 @@ async function resolveUncached(
       const runtimes = join(anchor, 'dsh-runtimes')
       if (existsSync(runtimes)) {
         for (const runtime of readdirSync(runtimes)) {
-          const cand = join(runtimes, runtime, 'node_modules', specifier)
-          const pkgPath = join(cand, 'package.json')
-          if (existsSync(pkgPath)) {
-            return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')) as PackageJson, dir: cand }
-          }
+          const hit = await walkUpNodeModules(join(runtimes, runtime), specifier, 1)
+          if (hit !== null) return hit
         }
       }
       const parent = dirname(anchor)
       if (parent === anchor) break
       anchor = parent
+    }
+    // 4) 宿主内核锚点：打包版的内核在随包 asar 内，前三层都到不了（见 kernelAnchorRoots）。
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+    const kernelRoots = kernelRootsForTest ?? kernelAnchorRoots(process.argv[1], resourcesPath)
+    for (const root of kernelRoots) {
+      const hit = await walkUpNodeModules(root, specifier, 24)
+      if (hit !== null) return hit
     }
     return null
   }

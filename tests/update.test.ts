@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import {
   sourceOf, dependencySpecifierOf, buildLlmPrompt, tarballNameOf, normalizeRepoUrl, isSameUpstream, clearNpmRepoCache, clientBundleUsesRemote,
+  detectUpdate,
   type LlmUpdatePackage,
 } from '../src/update.ts'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -147,6 +148,52 @@ describe('clientBundleUsesRemote(服务面校验:SSiD 无 remote BFF)', () => {
   it('不含 remote 调用 → false', () => {
     expect(clientBundleUsesRemote('const r = await ctx.connection.rpc.call("/x", "y", {});')).toBe(false)
     expect(clientBundleUsesRemote('registry.remote = 1')).toBe(false) // 字符串命名不误伤
+  })
+})
+
+describe('detectUpdate 兼容性判定', () => {
+  const savedPendingConsumer = process.env.SSID_PENDING_CONSUMER
+  const since = '2026-09-01T00:00:00Z'
+
+  /** `/latest` 与 packument 共用一份响应：两边要的字段（version / time / readme）都给上。 */
+  function stubRegistry(version: string): void {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ version, time: {}, readme: '' }) })))
+  }
+
+  beforeEach(() => {
+    // 留着它会触发目标 tgz 下载探测（网络 + tar），与这里要测的判定无关。
+    delete process.env.SSID_PENDING_CONSUMER
+  })
+
+  afterEach(() => {
+    if (savedPendingConsumer === undefined) delete process.env.SSID_PENDING_CONSUMER
+    else process.env.SSID_PENDING_CONSUMER = savedPendingConsumer
+  })
+
+  it('内核版本满足 peer → compatible', async () => {
+    stubRegistry('0.2.0')
+    const d = await detectUpdate('pc-test-compat-ok', '0.1.0', null, null, '^0.1.7-rc.1', '0.1.7-rc.2', since)
+    expect(d?.compat).toBe('compatible')
+  })
+
+  it('内核版本确实不满足 peer → incompatible（真不兼容仍要报出来）', async () => {
+    stubRegistry('0.2.0')
+    const d = await detectUpdate('pc-test-compat-bad', '0.1.0', null, null, '^0.2.0', '0.1.7-rc.2', since)
+    expect(d?.compat).toBe('incompatible')
+  })
+
+  it('内核版本不可知（空串）→ unknown，不误报不兼容', async () => {
+    // 回归：`dshVersion()` 曾回退 `0.0.0`，而 0.0.0 不满足任何 ^0.1.x ——
+    // 兼容的插件被成片标成「不兼容当前 DSH」(2026-09-28 实机)。
+    stubRegistry('0.2.0')
+    const d = await detectUpdate('pc-test-compat-unknown', '0.1.0', null, null, '^0.1.7-rc.1', '', since)
+    expect(d?.compat).toBe('unknown')
+  })
+
+  it('未声明 peer 范围 → unknown（无从判定，不臆断）', async () => {
+    stubRegistry('0.2.0')
+    const d = await detectUpdate('pc-test-compat-nopeer', '0.1.0', null, null, null, '0.1.7-rc.2', since)
+    expect(d?.compat).toBe('unknown')
   })
 })
 
