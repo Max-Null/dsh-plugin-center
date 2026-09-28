@@ -1,6 +1,6 @@
 {
   "name": "@max-null/dsh-plugin-center",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Plugin center for DeepSeek Harness — installed metadata, community market, update detection, and What's New",
   "license": "MIT",
   "publishConfig": {
@@ -70,14 +70,14 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/cordis-plugin-loader": "^1.0.2",
-    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.1",
-    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.1"
+    "@deepseek-ai/dsh-client-connection": ">=0.1.1-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-host-apiproxy": ">=0.1.1-rc.1 <0.3.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/cordis-plugin-loader": "^1.0.2",
-    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.1",
-    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.1",
+    "@deepseek-ai/dsh-client-connection": ">=0.1.1-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-host-apiproxy": ">=0.1.1-rc.1 <0.3.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.2.0",
     "@types/react": "~18.3.1",
