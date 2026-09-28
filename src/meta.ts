@@ -5,7 +5,7 @@
  */
 import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -160,8 +160,29 @@ async function resolveUncached(
         return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')) as PackageJson, dir: cand }
       }
       const parent = dirname(dir)
-      if (parent === dir) return null
+      // 走到盘根就收手，但**不能在这里 return** —— 下面还有 DSH 安装锚点那一层要看，
+      // 提前返回会让它永远执行不到（2026-09-28 由 meta-resolve.test.ts 抓出）。
+      if (parent === dir) break
       dir = parent
+    }
+    // 3) DSH 安装锚点：SSiD fork 版把内核放在 `<dshHome>/dsh-runtimes/<runtime>/node_modules`
+    //    下，**不在 profile 的向上链上**（插件集按设计不带内核包）。实测 2026-09-28：1.0.0 上
+    //    前两层都解析不到 `@deepseek-ai/dsh`，`dshVersion()` 于是回退成 `0.0.0`，而 `0.0.0`
+    //    不满足任何 `^0.1.x`，插件中心据此把兼容的插件全判成「不兼容当前 DSH」。
+    for (let anchor = baseUrl, i = 0; i < 6; i++) {
+      const runtimes = join(anchor, 'dsh-runtimes')
+      if (existsSync(runtimes)) {
+        for (const runtime of readdirSync(runtimes)) {
+          const cand = join(runtimes, runtime, 'node_modules', specifier)
+          const pkgPath = join(cand, 'package.json')
+          if (existsSync(pkgPath)) {
+            return { pkg: JSON.parse(await readFile(pkgPath, 'utf8')) as PackageJson, dir: cand }
+          }
+        }
+      }
+      const parent = dirname(anchor)
+      if (parent === anchor) break
+      anchor = parent
     }
     return null
   }

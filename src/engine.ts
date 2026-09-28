@@ -651,15 +651,15 @@ export class PluginCenterEngine extends Service {
     if (scored.length === 0) return []
     const list = scored.map(({ p }) => `- ${p.name} | ${p.stars ?? 0}★ | ${p.description.zh.slice(0, 60)}`).join('\n')
     const system = '你是 DeepSeek Harness 插件市场的推荐助手。根据用户需求从候选插件中选择 3-5 个最合适的，只输出一个 JSON 数组（不要 markdown 代码块、不要任何多余文字）：[{"name":"插件名","reason":"一句话中文推荐理由（20 字以内）"}]。名称必须从候选列表原样复制，禁止改写、拼接或编造'
-    // Message 契约：content 是 ContentBlock 数组（非字符串），且需要 id/source。
+    // 一次性输入走 `RequestUserInput`（`packages/llm/llm/src/types.ts:486-495`）：它的
+    // `id` 与 `source` 都是 `?: never` —— 不许带。旧版按 `Message` 写才需要那两个字段，
+    // 而 `MessageBase`（`message.ts:139-148`）才要求 id + producer-owned source。
     const chunks = llm.stream({
       provider: 'deepseek-official',
       model: 'deepseek-v4-flash',
       messages: [{
-        id: 'plugin-center-suggest',
         role: 'user',
         content: [{ type: 'text', text: `用户需求：${q}\n\n候选插件列表（名称 | 星标 | 简介）：\n${list}` }],
-        source: { kind: 'plugin', plugin: 'dsh-plugin-center' },
       }],
       system,
       // 800 会把 3-5 条中文推荐截断成不完整 JSON（2026-08-22 实测

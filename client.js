@@ -347,6 +347,8 @@ function useLlmFallback() {
 var sessionsSvc = null;
 var workspacesSvc = null;
 var uiWorkspaceSvc = null;
+var LLM_RETAIN_SOURCE = "pluginCenterLlmUpdate";
+var llmRetains = /* @__PURE__ */ new Map();
 var llmResults = /* @__PURE__ */ new Map();
 var llmResultListeners = /* @__PURE__ */ new Set();
 function setLlmResult(name, rec) {
@@ -1166,7 +1168,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
           if (sessionsSvc?.list?.getSnapshot?.()?.byId?.[id] !== void 0) {
             settingsClose?.();
             closeOverlay();
-            sessionsSvc?.open?.(id);
+            uiWorkspaceSvc?.openSession?.(id);
           } else {
             showToast(STRINGS[localeId].llmSessionMissing, "error", 5e3);
           }
@@ -1379,7 +1381,7 @@ async function ensureLlmUpdateSession(isBatch, profileDir) {
   if (isBatch) {
     const existing = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)"));
     if (existing?.id !== void 0 && existing.running !== false) {
-      sessionsSvc?.open?.(existing.id);
+      uiWorkspaceSvc?.openSession?.(existing.id);
       return existing.id;
     }
   }
@@ -1416,7 +1418,7 @@ async function ensureLlmUpdateSession(isBatch, profileDir) {
     console.error("[dsh-plugin-center] connectWorkspace \u672A\u8FD4\u56DE\u4F1A\u8BDD id", { finalWsId, fallback: listWsId, createError: String(createError ?? "") });
     return null;
   }
-  sessionsSvc?.open?.(id);
+  uiWorkspaceSvc?.openSession?.(id);
   return id;
 }
 async function connectLlmWorkspace(workspaceId) {
@@ -1428,6 +1430,7 @@ async function connectLlmWorkspace(workspaceId) {
     return void 0;
   }
 }
+var SESSION_FACE_TIMEOUT_MS = 5e3;
 async function llmExecute(pkgs, name) {
   const S = STRINGS[localeId];
   setLlmConfirm(null);
@@ -1445,8 +1448,22 @@ async function llmExecute(pkgs, name) {
     const isBatch = name === "__all__" || pkgs.length > 1;
     const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir);
     if (id === null) throw new Error("no-session-target: \u65E0\u6CD5\u627E\u5230\u53EF\u590D\u7528\u7684\u63D2\u4EF6\u66F4\u65B0\u4F1A\u8BDD/\u5DE5\u4F5C\u533A\uFF08\u8BE6\u89C1\u6D4F\u89C8\u5668 console \u7684 [dsh-plugin-center] \u8BCA\u65AD\uFF09");
-    const session = sessionsSvc?.binding?.(id)?.session;
-    if (session?.prompt === void 0) throw new Error("no-session-face");
+    const retained = sessionsSvc?.retain?.(id, { source: LLM_RETAIN_SOURCE });
+    const previous = llmRetains.get(id);
+    if (previous !== void 0 && previous !== retained) previous.release?.();
+    if (retained !== void 0) llmRetains.set(id, retained);
+    let bound = retained?.binding?.session ?? sessionsSvc?.binding?.(id)?.session;
+    for (let waited = 0; bound?.prompt === void 0 && waited < SESSION_FACE_TIMEOUT_MS; waited += 100) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+      bound = sessionsSvc?.binding?.(id)?.session;
+    }
+    const session = bound;
+    if (session?.prompt === void 0) {
+      const rows2 = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {});
+      throw new Error(`no-session-face: \u4F1A\u8BDD ${id} \u5728 ${SESSION_FACE_TIMEOUT_MS}ms \u5185\u672A\u7ED1\u5B9A\u53EF\u7528\u7684 prompt \u9762\uFF08sessionsSvc=${sessionsSvc === void 0 ? "null" : "ok"}\uFF0C\u5DF2\u77E5\u4F1A\u8BDD ${String(rows2.length)} \u4E2A\uFF0Cretain=${retained === void 0 ? "unavailable" : "ok"}\uFF0Cbinding=${bound === void 0 ? "undefined" : "object-without-prompt"}\uFF09`);
+    }
     const res = await session.prompt([{ type: "text", text: prompt }], "queue");
     if (res?.ok !== true) {
       throw new Error(res?.error?.message ?? "prompt rejected");
@@ -1468,8 +1485,12 @@ async function llmExecute(pkgs, name) {
     if (isBatch) closeWhatsNew();
   } catch (e) {
     for (const p of pkgs) setLlmUpdating(p.name, false);
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("[dsh-plugin-center] LLM \u66F4\u65B0\u53D1\u8D77\u5931\u8D25:", e);
+    void rpc("llm-update.log", { name, action: "failed", detail, status: "failed" }).catch(() => {
+    });
     setLlmFallback(prompt);
-    showToast(`${e instanceof Error ? e.message : String(e)}`, "error", 6e3);
+    showToast(detail, "error", 6e3);
   }
 }
 function LlmConfirmDialog() {
@@ -2097,6 +2118,10 @@ function apply(ctx) {
   workspacesSvc = ctx.workspaces ?? null;
   uiWorkspaceSvc = ctx.uiWorkspace ?? null;
   ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), "dsh-plugin-center: settings navigation icon");
+  ctx.effect?.(() => () => {
+    for (const retained of llmRetains.values()) retained.release?.();
+    llmRetains.clear();
+  }, "dsh-plugin-center: LLM update session retains");
   if (window.__pluginCenterGlobalsInstalled !== true) {
     installGlobals();
     window.addEventListener("unload", cleanupGlobals);

@@ -385,13 +385,24 @@ function useLlmFallback(): string | null {
 
 // ---- client 半端会话/工作区服务(apply 时按 inject 注入;结构类型与
 // dsh-sidebar-preview-select/src/context-types.ts 同思路,只声明用到的字段) ----
+/** 会话的 prompt 面(LLM 更新用它注入提示词)。 */
+interface LlmSessionBinding {
+  session?: {
+    prompt?: (content: Array<{ type: 'text', text: string }>, mode: 'queue' | 'steer') => Promise<{ ok: boolean, error?: { message?: string } }>
+    rename?: (title: string) => Promise<unknown>
+  }
+}
 interface LlmSessionsSvc {
   list?: { getSnapshot?: () => { byId?: Record<string, { id?: string, title?: string, displayTitle?: string, running?: boolean }> } }
   open?: (id: string) => void
-  binding?: (id: string) => { session?: {
-    prompt?: (content: Array<{ type: 'text', text: string }>, mode: 'queue' | 'steer') => Promise<{ ok: boolean, error?: { message?: string } }>
-    rename?: (title: string) => Promise<unknown>
-  } } | undefined
+  /** 只**借用**已建立的引用:未 retain 过的会话必返回 undefined。原文见 session-controller 的
+   *  `sessions/service.ts` 里 `binding()` 的 JSDoc —— "Borrow an already-retained binding
+   *  without extending its lifetime" / "undefined without a retained generation"。 */
+  binding?: (id: string) => LlmSessionBinding | undefined
+  /** 为会话建立一次引用并返回它。第三方自定 source 有先例(ui-subagent 的 'sidebarChat')。
+   *  注意返回结构：`SessionReference.binding` 才是 `SessionBinding`，`session` 挂在它下面
+   *  （session-controller 的 `contract/sessions.ts:25-33`）—— **不是** reference 直挂 session。 */
+  retain?: (id: string, options: { source: string }) => ({ binding?: LlmSessionBinding, release?: () => void }) | undefined
 }
 // ctx.workspaces 实际 = IWorkspaces(list/list.getSnapshot/create/rename/archiveSession 等)。
 // Snapshot 结构(核对 workspace-controller): { items: WorkspaceView[], archivedSessionIds }。
@@ -409,14 +420,26 @@ interface LlmWorkspacesSvc {
 // connectWorkspace 是它专有——不在 ctx.workspaces(IWorkspaces) 上!
 // 之前误用 workspacesSvc.connectWorkspace → 恒 undefined → 返回空 → no-session-target。
 interface LlmUiWorkspaceSvc {
-  /** 复用该 workspace 的可复用/新建 blank 会话,返回已可寻址的 SessionId。
-   *  对 list 中不存在的 workspace 会 reject(unknown workspace)。 */
+  /** 会话导航。**不是** `sessions.open` —— 新内核的 `ISessions` 没有 open（契约成员见
+   *  session-controller 的 `contract/sessions.ts:49-157`），导航归 UiWorkspaceService。 */
+  openSession?: (sessionId: string) => void
   connectWorkspace?: (workspaceId: string) => Promise<string>
 }
 let sessionsSvc: LlmSessionsSvc | null = null
 let workspacesSvc: LlmWorkspacesSvc | null = null
 // 会话动作服务(connectWorkspace):UiWorkspaceService,与 workspaces(IWorkspaces) 分开取。
 let uiWorkspaceSvc: LlmUiWorkspaceSvc | null = null
+
+/** 建立引用时自报的来源名。内核的 retainedBy 按它计数，出问题时能一眼看出是谁持有的。 */
+const LLM_RETAIN_SOURCE = 'pluginCenterLlmUpdate'
+/**
+ * 已建立引用的会话：id → reference。
+ *
+ * 生命周期刻意**不**随函数作用域释放（不用 `using`）：提示词交给会话之后，会话要在后台跑完，
+ * 期间必须保持被引用。「插件更新」会话数量有限（每次更新一个），且本就是为这个用途长期存在的，
+ * 所以持有到插件卸载即可。
+ */
+const llmRetains = new Map<string, LlmSessionBinding & { release?: () => void }>()
 
 // ---- LLM 更新终态与轮询 (2026-08-29,模块级:执行中/成功/失败三态跨面板持久) ----
 // 事实源 = host JSONL(~/.dsh/plugin-center/llm-update-log.jsonl):
@@ -1227,7 +1250,7 @@ function UpdatesView({ updates, refresh, updateOne, busy, doneUpdates, onDoneCli
                 // 关闭插件中心浮层,再切换会话——用户直接看到会话内容。
                 settingsClose?.()
                 closeOverlay()
-                sessionsSvc?.open?.(id)
+                uiWorkspaceSvc?.openSession?.(id)
               } else {
                 showToast(STRINGS[localeId].llmSessionMissing, 'error', 5000)
               }
@@ -1447,7 +1470,7 @@ async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | und
   if (isBatch) {
     const existing = rows.find(r => ((r.displayTitle ?? '') + (r.title ?? '')).includes('插件更新(批量)'))
     if (existing?.id !== undefined && existing.running !== false) {
-      sessionsSvc?.open?.(existing.id)
+      uiWorkspaceSvc?.openSession?.(existing.id)
       return existing.id
     }
   }
@@ -1499,7 +1522,7 @@ async function ensureLlmUpdateSession(isBatch: boolean, profileDir: string | und
     console.error('[dsh-plugin-center] connectWorkspace 未返回会话 id', { finalWsId, fallback: listWsId, createError: String(createError ?? '') })
     return null
   }
-  sessionsSvc?.open?.(id)
+  uiWorkspaceSvc?.openSession?.(id)
   return id
 }
 
@@ -1513,6 +1536,10 @@ async function connectLlmWorkspace(workspaceId: string): Promise<string | undefi
     return undefined
   }
 }
+
+/** 会话面就绪的等待上限(ms)：`connectWorkspace` 返回后，绑定由 client 侧异步建立。
+ *  之前立刻取值 → undefined → 报 no-session-face(2026-09-28 实机)。 */
+const SESSION_FACE_TIMEOUT_MS = 5000
 
 /** 确认后:复用/创建「插件更新」会话并注入 prompt(LLM 按 skill 决策执行)。
  *  自动发起失败时降级为复制 prompt 模态,不阻塞用户。 */
@@ -1536,8 +1563,35 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
     const isBatch = name === '__all__' || pkgs.length > 1
     const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir)
     if (id === null) throw new Error('no-session-target: 无法找到可复用的插件更新会话/工作区（详见浏览器 console 的 [dsh-plugin-center] 诊断）')
-    const session = sessionsSvc?.binding?.(id)?.session
-    if (session?.prompt === undefined) throw new Error('no-session-face')
+    // 会话面要靠 **retain** 才拿得到：`binding()` 的契约是「只借用已建立的引用，未 retain 则
+    // undefined」（session-controller 的 `sessions/service.ts` 里 binding 的 JSDoc 原文），
+    // 而 connectWorkspace 只创建/复用会话、open 只打开视图，**两者都不产生 retain** ——
+    // 第三方必须自己来。先例：ui-subagent 的 sidebarChat、ui-sidebar-right 的 sidebarView。
+    // 2026-09-28 实机：这正是 no-session-face 的根因（此前误判成「绑定还没建立，等一下就好」）。
+    const retained = sessionsSvc?.retain?.(id, { source: LLM_RETAIN_SOURCE })
+    // 同一会话再次 retain 之前先放掉旧的：内核每次 retain 只做计数 +1，归零才 retireScope
+    // （`sessions/service.ts:531-548`）——直接覆盖 Map 会让旧引用永不释放，该会话的 Client
+    // generation 与 scope 也就永不回收。
+    const previous = llmRetains.get(id)
+    if (previous !== undefined && previous !== retained) previous.release?.()
+    if (retained !== undefined) llmRetains.set(id, retained)
+    // 会话面在 `reference.binding.session` 下（SessionReference.binding → SessionBinding.session），
+    // **不是** reference 直挂 session。写错不会报错，只会静默退化成「等满 5 秒后报 no-session-face」。
+    let bound = retained?.binding?.session ?? sessionsSvc?.binding?.(id)?.session
+    for (let waited = 0; bound?.prompt === undefined && waited < SESSION_FACE_TIMEOUT_MS; waited += 100) {
+      await new Promise(resolve => { setTimeout(resolve, 100) })
+      bound = sessionsSvc?.binding?.(id)?.session
+    }
+    const session = bound
+    if (session?.prompt === undefined) {
+      // 诊断分四态：服务缺失 / 会话不在可绑定集合 / retain 不可用 / 有对象但无 prompt 面。
+      // 四者的修法完全不同，而此前只报一句 no-session-face，拿到现场也分不出是哪一种。
+      const rows = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {})
+      throw new Error(`no-session-face: 会话 ${id} 在 ${SESSION_FACE_TIMEOUT_MS}ms 内未绑定可用的 prompt 面`
+        + `（sessionsSvc=${sessionsSvc === undefined ? 'null' : 'ok'}，已知会话 ${String(rows.length)} 个，`
+        + `retain=${retained === undefined ? 'unavailable' : 'ok'}，`
+        + `binding=${bound === undefined ? 'undefined' : 'object-without-prompt'}）`)
+    }
     const res = await session.prompt([{ type: 'text', text: prompt }], 'queue')
     if (res?.ok !== true) {
       throw new Error(res?.error?.message ?? 'prompt rejected')
@@ -1561,9 +1615,15 @@ async function llmExecute(pkgs: LlmUpdatePackage[], name: string): Promise<void>
     if (isBatch) closeWhatsNew()
   } catch (e) {
     for (const p of pkgs) setLlmUpdating(p.name, false)
+    const detail = e instanceof Error ? e.message : String(e)
+    // 失败必须留痕。此前这里只弹 toast，日志里只剩进门那条 `prompt-sent`，事后无法判断
+    // 死在「拿不到会话」「会话面未就绪」还是「prompt 被拒」——每次都只能回头问用户屏幕上写了什么
+    // （2026-09-28 实机排查为此多花了一轮）。
+    console.error('[dsh-plugin-center] LLM 更新发起失败:', e)
+    void rpc('llm-update.log', { name, action: 'failed', detail, status: 'failed' }).catch(() => {})
     // 降级:提示词给用户自行粘贴(模态带复制)。
     setLlmFallback(prompt)
-    showToast(`${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
+    showToast(detail, 'error', 6000)
   }
 }
 
@@ -2255,6 +2315,11 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
   uiWorkspaceSvc = ctx.uiWorkspace ?? null
   // 设置导航图标：标记本插件行后由 CSS 把默认齿轮替换为拼图（HMR-safe）。
   ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), 'dsh-plugin-center: settings navigation icon')
+  // LLM 更新建立的会话引用在插件卸载时统一释放，避免留下无主的 retainedBy 计数。
+  ctx.effect?.(() => () => {
+    for (const retained of llmRetains.values()) retained.release?.()
+    llmRetains.clear()
+  }, 'dsh-plugin-center: LLM update session retains')
   // 0.1.7：暴露全局控制器（防重复安装：已安装则不重复挂监听）。
   if ((window as unknown as Record<string, unknown>).__pluginCenterGlobalsInstalled !== true) {
     installGlobals()
