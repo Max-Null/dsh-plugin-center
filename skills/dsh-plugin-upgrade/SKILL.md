@@ -16,16 +16,17 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 | `toVersion` | npm latest（null = 未发布或 npm 不可达，转 GitHub tag/commit 路径） |
 | `source` | `npm` / `official` / `vendor` / `tarball` / `local-file` |
 | `specifier` | 依赖声明形态（`file:./vendor/...`、`github:...`、`^0.4.0` 等） |
-| `isVendorModified` | 本地是否定制（vendor/tarball/local-file 为 true） |
+| `isVendorModified` | 本地是否定制。**`local-file` 不必然是定制**——`link:` 形态会被机械分类成它，先看发版基准（见 §常见陷阱） |
 | `compat` / `compatRange` | DSH peer 兼容性（compatible / incompatible / unknown） |
 | `changelog` | GitHub commit 摘要（用于判断版本差异大小与作者改名） |
-| `profileDir` | **插件所在 profile 目录（唯一允许操作目录）**。怎么认：**DSH web 是 `~/.dsh/profiles/web`；SSiD dev 与 SSiD 安装版共用 `~/.dsh/profiles/ssid`**——dev 裸跑默认不设 `DSH_HOME`，安装版的 `deployRuntime` 也部署到同一个 profile 根，所以对这一个目录动手，两边的插件都跟着变（隔离实例才走自己的 `DSH_HOME`）。严禁按本会话工作目录（cwd）或任何其他 profile 操作 |
+| `profileDir` | **插件所在 profile 目录（唯一允许操作目录）**。怎么认（2026-09-29 校正，**两套机制并存**）：<br>**① 精确 pin 形态**——`~/.dsh/profiles/web`（DSH web）等：声明是版本号，`pnpm install` 按该 pin 解析，改声明的效果可预期。<br>**② `link:` 形态**——`~/.dsh/profiles/ssid`（SSiD 安装版）：声明形如 `link:C:/…/ssid-shell/resources/ssid-plugins/node_modules/<pkg>`，**插件实体在安装目录的随包插件集里**，profile 侧只是 junction。这种形态**禁止 `pnpm add/update`**（见 §操作域校验 3）。<br>fork dev（`.ssid-build/dev-home/profiles/ssid`）与隔离实例（`.ssid-iso-test/profiles/ssid-dev`）各走自己的目录，**不再与安装版共用**。严禁按本会话工作目录（cwd）或任何其他 profile 操作 |
 
 ## 操作域校验（开始前必做）
 
 1. `Test-Path "$profileDir\node_modules\<name>\package.json"` —— 信息包声明的安装位置必须真实存在；
 2. 若该路径与实际不一致（安装位置错误/环境串扰），**立即停止**并回传 `action: failed, detail: 安装位置不符: <声明路径> vs <实际路径>`；
 3. 所有 pnpm / npm / git / 读写操作一律以 `$profileDir` 为 cwd 执行；**禁止**对会话工作目录（如 H:\MaxNull\WorkStation）或其他 profile（~/.dsh/profiles/web、.dsh/profiles/headless 等）执行任何更新/安装。
+   **但动手前先分清形态**：若 `$profileDir\package.json` 里该包声明是 `link:`，**不要用 `pnpm add` / `pnpm update`**——它们会改写依赖声明，把这个包从「指向安装目录实体的 junction」变成「profile 自己的独立副本」，于是同一插件出现两份实体、版本分叉；而 `declared` 与 `installed` 两边都对得上，只有重装时才暴露。插件中心对这类插件的既有做法是：**在 `.plugin-upgrade-tmp/` staging 里 pnpm 装出新版 → 在实体侧原地替换（先删后拷 + 逐文件哈希零差异）→ `node --check` → 待重启生效 → 注明需同步 `shell/profile-template`**。要执行升级就复用这条路径，不要自己发明。
 4. 更新前记录 `$profileDir\package.json` 的依赖声明原值；完成后回传「实际修改的目录 = <profileDir>」。
 
 ## 决策树（按优先级，自上而下——第一条命中即执行）
@@ -37,12 +38,17 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
    (这是 vendor 魔改第一优先: 本地定制且未发布到 npm 的版本永远以本地为准)
 
 2. vendor/定制来源 → 核对作者是否已采纳
-   条件: source ∈ {vendor, tarball, local-file} 或 isVendorModified=true
+   条件: source ∈ {vendor, tarball}，或**已确认**的 isVendorModified=true
+   ⚠️ source=local-file 先别当成有定制：`link:` 形态会被插件中心机械分类为它，
+      而发版基准里同一个包可能只是 npm 版本号。判据——去发版基准
+      （shell/profile-template/package.json）看该包是版本号还是 `file:./vendor/…`：
+      是版本号 → 无定制，按第 4 条走；是 file: → 真 vendor，继续下面。
    动作: 
      a. 读 npm 上该包 latest（info 包 toVersion 已给）
      b. 比对 npm 版本新特性是否已包含本地定制（读本地 vendor 的 package.json/CHANGELOG
         与 npm 版本 changelog 对比; 定制点通常能在 npm release 中看到对应 commit 说明）
-     c. 已采纳 → action=switch-npm: 改 profile 依赖声明为 npm 版本并安装
+     c. 已采纳 → action=switch-npm: **改发版基准**（`shell/profile-template/package.json`）的声明
+        为 npm 版本；`link:` 形态的运行时 profile 不要手改（见 §操作域校验 3），改完等下次打包生效
      d. 未采纳/不确定 → action=keep: 保持 vendor, 明确告知用户"上游未采纳, 建议上游提交"
    (机械更新会直接覆盖定制文件——这就是本技能存在的意义)
 
@@ -84,7 +90,7 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 
 **允许：**
 - 读: `pnpm view` / `npm view` / `git log` / 读 profile 内 package.json、node_modules、vendor
-- 写: 仅限 **信息包 `profileDir` 声明的那一个 profile** 的依赖声明与 node_modules（`pnpm add` / `pnpm update` / `pnpm install`,一律以该目录为 cwd）
+- 写: 仅限 **信息包 `profileDir` 声明的那一个 profile**（`pnpm install` 一律以该目录为 cwd）。**`link:` 形态的包不在此列**——那种包走插件中心的 staging 替换路径，不由本会话直接 `pnpm add/update`（见 §操作域校验 3）
 - 报告: 写 `~/.dsh/plugin-center/llm-update-log.jsonl`（见回传格式）
 
 **禁止：**
@@ -123,6 +129,20 @@ description: DSH 插件更新决策与执行规则——LLM 更新会话的核�
 - **声明形态先看清，别假设它是范围还是 pin**：若声明是范围（`^0.4.0`），pnpm 会把它浮到该范围内的最新（`^0.4.0` → `0.4.2`），于是「装上的」不等于「声明的」；若是精确 pin，`pnpm install` 只满足这个 pin、不会自动跟到 latest。**2026-09-21 复查：SSiD profile 的 66 条依赖声明全部是精确 pin，无一带范围符**——但这不适用于其他 profile 或其他插件，动手前读一眼实际声明。无论哪种形态，升级后都要回读实体版本；必要时把声明钉死到精确版本，并在 detail 说明钉死原因。
 - **SSiD 预置插件**：升级后需同步归档（profile-template / vendor 目录），否则打包时被旧版覆盖——在 detail 中注明「需归档同步」。
 - **hot 通道**：纯前端插件更新可能已热生效，升级成功后仍建议重启一次确认加载无错。
+
+## 环境与内核版本（2026-09-29 实测）
+
+| 环境 | profile | 内核 | 插件装载形态 |
+|---|---|---|---|
+| SSiD 安装版 | `~/.dsh/profiles/ssid` | 随包进 asar（`resources/app.asar/dsh/`） | `link:` → 安装目录 `resources/ssid-plugins/` |
+| DSH web | `~/.dsh/profiles/web` | `0.1.5-rc.2`（独立副本 `dsh-web-runtime/`） | 精确 pin |
+| fork dev | `.ssid-build/dev-home/profiles/ssid` | `0.2.0-rc.1`（`.ssid-build/checkout`，分支 `ssid-desktop-fork`） | 由 `link-ssid-plugins.mjs` 接线 |
+| 隔离实例 | `.ssid-iso-test/profiles/ssid-dev` | 跟随其 `DSH_HOME` | junction 共用实体 |
+| （上游基准） | — | `0.1.7-rc.2`（`deepseek-harness/`，**只读**） | — |
+
+**判断兼容性前先确认「当前内核」指哪一个**——四个环境可以同时停在三个不同版本上（实测 `0.2.0-rc.1` / `0.1.7-rc.2` / `0.1.5-rc.2`）。拿 dev 的版本去判 web 上能不能升，或者反过来，都会得出错误结论。
+
+`dsh-runtime.tar.gz` 那套归档流程属自建壳时代（≤ SSiD 0.4.0），**fork 形态不再产出该归档**；插件集改由 `ssid-plugins.json`（安装目录内，含 `schemaVersion` / `bundles` / `packages`）+ `shell/profile-template/package.json` 共同决定。
 
 ## 与插件中心 UI 的关系
 
