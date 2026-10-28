@@ -23,6 +23,7 @@ import {
   type LlmUpdatePackage, type PnpmResult, type UpdateDigest,
 } from './update.ts'
 import { reconcileInstalled, readDependencyKeys } from './reconcile.ts'
+import { mergeEntries } from './entries.ts'
 import { readDisabledState, setDisabled, escapeRegExp, effectiveDisabledStance } from './toggle.ts'
 import { appendLlmLog, readLlmLogLatest, type LlmLogRecord } from './llm-log.ts'
 
@@ -221,7 +222,12 @@ export class PluginCenterEngine extends Service {
     return resolved?.pkg.version ?? ''
   }
 
-  /** Non-group Loader entries, cross-matched with market categories. */
+  /** Non-group Loader entries, cross-matched with market categories.
+   *
+   *  Entries that load the same package collapse into one row (see
+   *  `mergeEntries`): a bundle may insert several same-named children, and
+   *  listing them separately showed identical duplicate rows whose switches
+   *  could target each other. */
   async listInstalled(): Promise<InstalledPlugin[]> {
     const views: { id: string; name: string; disabled: boolean; fiberPhase: string | null }[] = []
     for (const entry of this.ctx.loader.entries()) {
@@ -281,7 +287,7 @@ export class PluginCenterEngine extends Service {
       if (b !== undefined && b.owners.size === 1) return { cats: b.cats, marketName: b.name }
       return { cats: [], marketName: null }
     }
-    const plugins = await Promise.all(views.map(v => buildInstalledPlugin(this.baseUrl, v)))
+    const plugins = await Promise.all(mergeEntries(views).map(v => buildInstalledPlugin(this.baseUrl, v)))
     // Sort local dev first, then third-party installs, then official, then builtin.
     const SOURCE_ORDER: Record<PluginSource, number> = { local: 0, installed: 1, official: 2, builtin: 3 }
     return plugins

@@ -1,5 +1,30 @@
 # Release Notes — @max-null/dsh-plugin-center
 
+## 0.4.7 (2026-10-28)
+
+修「同一个包在已安装列表里出现两次，而点第二条的开关会关掉第一条」。
+
+### 变更
+
+- **已安装列表按包归并**：同一个包被 Loader 加载多条 entry 时合并成一行。
+  `ds-harness-remote` 0.5.18 的 bundle patch 插了两条 `name` 相同的子条目
+  （常规宿主 + dsh-TUI 专用，`disabled` 表达式互斥），此前显示两行文字、版本、
+  兼容区间完全相同的卡片，无法分辨哪条在跑。
+- **开关按 entryId 精确寻址**：`bundleEntryId()` 不再把「bundle 里第一个声明的
+  id」当成这个包的 id。此前点第二条的开关，写进 profile patch 的是第一条的 id——
+  关掉的是真正在跑的那条，被点的那条本来就停用。
+- **不猜**：同名多条且无法按 entryId 精确匹配时拒绝写入（`nowDisabled` 为
+  null），不再挑一个 id 去改别的行。
+
+### 为什么
+
+- 起因是「已安装」里 `liguobao/ds-harness-remote` 出现两次，版本、描述、需求
+  区间完全一致。取证：包里 `dsh.bundle.patch` 声明两条同名 entry，
+  `listInstalled()` 按 Loader entry 逐条列、不按包名归并；而 `bundleEntryId()`
+  只取第一个 `- id:`，于是两行读同一个开关位、写同一个 id。
+- 影响面：已安装插件里目前只有 `ds-harness-remote` 是多 entry 包，但机制通用
+  ——任何以后这么设计的插件都会踩。
+
 ## 0.4.6 (2026-10-02)
 
 本版只动文档：把安装段改成「先选对 profile」的形式，并补上卸载与自查。

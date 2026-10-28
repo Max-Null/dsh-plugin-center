@@ -175,6 +175,8 @@ type FiberPhase = 'pending' | 'loading' | 'active' | 'failed' | 'unloading' | nu
 
 interface InstalledPlugin {
   entryId: string
+  /** 同一包的全部 loader entry id：bundle 可能插多条同名子条目，宿主侧已归并。 */
+  entryIds: string[]
   name: string
   displayName: string
   version: string | null

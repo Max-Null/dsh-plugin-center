@@ -15,6 +15,9 @@ export type PluginSource = 'official' | 'installed' | 'local' | 'builtin'
 /** One resolved installed plugin, ready for the Remote surface. */
 export interface InstalledPlugin {
   entryId: string
+  /** Every Loader entry id that loaded this package; `entryId` is the
+   *  representative (the enabled one when a bundle declares several). */
+  entryIds: string[]
   name: string
   displayName: string
   version: string | null
@@ -265,6 +268,8 @@ export interface LoaderEntryView {
   disabled: boolean
   group?: boolean
   fiberPhase: string | null
+  /** Every id that loaded this package, when the caller merged entries. */
+  entryIds?: string[]
 }
 
 /** Build the Remote-ready metadata for one Loader entry. */
@@ -276,6 +281,7 @@ export async function buildInstalledPlugin(
   const source = classifySource(entry.name)
   return {
     entryId: entry.id,
+    entryIds: entry.entryIds ?? [entry.id],
     name: entry.name,
     displayName: displayName(entry.name),
     version: resolved?.pkg.version ?? null,

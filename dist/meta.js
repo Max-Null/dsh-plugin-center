@@ -224,6 +224,7 @@ export async function buildInstalledPlugin(baseUrl, entry) {
     const source = classifySource(entry.name);
     return {
         entryId: entry.id,
+        entryIds: entry.entryIds ?? [entry.id],
         name: entry.name,
         displayName: displayName(entry.name),
         version: resolved?.pkg.version ?? null,

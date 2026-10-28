@@ -138,31 +138,114 @@ function patchInsertChildByName(lines, name, disabled) {
     lines.push(`${tail}- id: ${name}\n  disabled: ${String(disabled)}`);
     return true;
 }
+/** Strip one layer of YAML scalar quotes. */
+function unquote(text) {
+    const trimmed = text.trim();
+    if (trimmed.length >= 2) {
+        const first = trimmed[0];
+        if ((first === "'" || first === '"') && trimmed[trimmed.length - 1] === first)
+            return trimmed.slice(1, -1);
+    }
+    return trimmed;
+}
 /**
- * Resolve a profile-bundle plugin's loader entry id.
+ * Parse the insert children declared by one bundle patch.
+ *
+ * Only `- id:` children can be toggled (an id-less child gets a random
+ * runtime id on every boot, see `patchInsertChildByName`), so those are the
+ * only ones collected. A child owns every following line indented deeper
+ * than its own `- id:`; the first `name:` inside that block is its specifier.
+ * @param text - the bundle's `cordis.patch.yml` contents.
+ * @returns children in declaration order.
+ */
+export function parseInsertEntries(text) {
+    const entries = [];
+    let current = null;
+    const flush = () => {
+        if (current !== null)
+            entries.push({ id: current.id, name: current.name });
+        current = null;
+    };
+    for (const raw of text.split('\n')) {
+        const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+        const trimmed = line.trim();
+        if (trimmed === '' || trimmed.startsWith('#'))
+            continue;
+        const indent = line.length - line.trimStart().length;
+        const idMatch = /^- id:\s*(\S+)\s*$/u.exec(trimmed);
+        if (idMatch !== null && indent > 0) {
+            flush();
+            current = { id: idMatch[1], indent, name: null };
+            continue;
+        }
+        if (current === null)
+            continue;
+        if (indent <= current.indent) {
+            flush();
+            continue;
+        }
+        const nameMatch = /^name:\s*(.+)$/u.exec(trimmed);
+        if (nameMatch !== null && current.name === null)
+            current.name = unquote(nameMatch[1]);
+    }
+    flush();
+    return entries;
+}
+/**
+ * Read the insert children a profile bundle declares in its own patch.
+ * @param profileDir - profile directory (holds `package.json` and `node_modules`).
+ * @param name - the package name, as listed in `dsh.profile.bundles`.
+ * @returns children in declaration order; empty when the package is not a
+ *   profile bundle or the patch cannot be read.
+ */
+export function bundleEntries(profileDir, name) {
+    let bundles;
+    try {
+        const manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'));
+        bundles = manifest.dsh?.profile?.bundles;
+    }
+    catch {
+        return [];
+    }
+    if (!Array.isArray(bundles) || !bundles.includes(name))
+        return [];
+    try {
+        const patchPath = join(profileDir, 'node_modules', ...name.split('/'), 'cordis.patch.yml');
+        return parseInsertEntries(readFileSync(patchPath, 'utf8'));
+    }
+    catch {
+        return [];
+    }
+}
+/**
+ * Resolve the patch-row id a toggle must write for one Loader entry.
  *
  * Profile bundles (`dsh.profile.bundles`) are composed by applying each
  * bundle's own `cordis.patch.yml` over the root; the entry id a toggle must
- * target lives in THAT file, not in the profile patch layer. Returns the
- * insert child id whose `name` matches the package name, or null when the
- * package is not a profile bundle (or its patch cannot be read/parsed).
+ * target lives in THAT file, not in the profile patch layer.
+ *
+ * A bundle may declare several children loading the same package
+ * (`ds-harness-remote` 0.5.18: a Desktop entry plus a dsh-TUI-only one, with
+ * mutually exclusive `disabled` expressions). Taking the first declared id
+ * as "the package's id" then pointed every row at the first child — the
+ * installed list showed two identical rows and the second row's switch wrote
+ * the first row's id, disabling what was actually running. So: prefer the
+ * exact entry id when this bundle declares it; otherwise accept only a
+ * unique child loading `name`. Anything ambiguous returns null — this module
+ * never guesses (a wrong id silently toggles a different plugin's row).
+ * @param profileDir - profile directory.
+ * @param name - the entry's package name.
+ * @param entryId - the Loader entry id, with any `include:` prefix stripped.
+ * @returns the id to address, or null when it cannot be resolved safely.
  */
-function bundleEntryId(profileDir, name) {
-    try {
-        const manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'));
-        const bundles = manifest.dsh?.profile?.bundles;
-        if (!Array.isArray(bundles) || !bundles.includes(name))
-            return null;
-        // A bundle's patch declares the insert child that carries the entry id.
-        const patchPath = join(profileDir, 'node_modules', ...name.split('/'), 'cordis.patch.yml');
-        const text = readFileSync(patchPath, 'utf8');
-        const idPattern = /^ {4}- id: (\S+)\s*$/gmu;
-        const idLines = [...text.matchAll(idPattern)].map(match => match[1]);
-        return idLines.length > 0 ? idLines[0] : null;
-    }
-    catch {
+export function bundleEntryId(profileDir, name, entryId = '') {
+    const entries = bundleEntries(profileDir, name);
+    if (entries.length === 0)
         return null;
-    }
+    if (entryId !== '' && entries.some(entry => entry.id === entryId))
+        return entryId;
+    const byName = entries.filter(entry => entry.name === name);
+    return byName.length === 1 ? byName[0].id : null;
 }
 /** Serialize toggles so concurrent writes cannot interleave. */
 let toggleChain = Promise.resolve();
@@ -172,12 +255,15 @@ let toggleChain = Promise.resolve();
  * the Loader's own `entry.disabled` is unreliable for profile-bundle
  * plugins (they report disabled even when the bundle enables them).
  * Order: patch row by entry id (include: stripped) → patch row by the
- * bundle-declared id → enabled by default.
+ * bundle-declared id for THIS entry → enabled by default. A bundle that
+ * declares several same-named children therefore reads its own row instead
+ * of whichever child is declared first.
  */
 export function effectiveDisabledStance(profileDir, entryId, name) {
     const stance = readDisabledState(join(profileDir, 'cordis.patch.yml'));
-    return stance.get(patchRowId(entryId))
-        ?? stance.get(bundleEntryId(profileDir, name) ?? '')
+    const rowId = patchRowId(entryId);
+    return stance.get(rowId)
+        ?? stance.get(bundleEntryId(profileDir, name, rowId) ?? '')
         ?? false;
 }
 /**
@@ -258,7 +344,7 @@ export function setDisabled(profileDir, entryId, name, disabled) {
                 // patch 里没有 `- id:` 行（entry id 声明在各个 bundle 自己的
                 // cordis.patch.yml 里）。按 bundle 声明 id 追加 disabled 行即可
                 // 覆盖；默认启用态（disabled=false）无需写文件。
-                const bundleId = bundleEntryId(profileDir, name);
+                const bundleId = bundleEntryId(profileDir, name, id);
                 if (bundleId !== null) {
                     if (!disabled) {
                         return { ok: true, detail: `"${name}" is enabled by profile bundle`, nowDisabled: false };

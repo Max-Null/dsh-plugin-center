@@ -89,7 +89,12 @@ export declare class PluginCenterEngine extends Service {
      *  「版本不可知」分支（compat = unknown），而不是给出一个错误的结论。
      * @returns 内核版本号；不可知时为空串。 */
     dshVersion(): Promise<string>;
-    /** Non-group Loader entries, cross-matched with market categories. */
+    /** Non-group Loader entries, cross-matched with market categories.
+     *
+     *  Entries that load the same package collapse into one row (see
+     *  `mergeEntries`): a bundle may insert several same-named children, and
+     *  listing them separately showed identical duplicate rows whose switches
+     *  could target each other. */
     listInstalled(): Promise<InstalledPlugin[]>;
     /** Start the awesome catalog fetch (with failed-retry cooldown). */
     private prefetchAwesome;
