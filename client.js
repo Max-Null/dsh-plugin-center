@@ -629,6 +629,11 @@ var STRINGS = {
     tabInstalled: "\u5DF2\u5B89\u88C5",
     tabMarket: "\u5E02\u573A",
     tabUpdates: "\u66F4\u65B0",
+    tabUpdateHint: "\u8FD9\u4E9B\u63D2\u4EF6\u6709\u66F4\u65B0\u7248\u672C\uFF1B\u70B9\u300C\u66F4\u65B0\u300D\u4F1A\u6253\u5F00\u5B98\u65B9\u5B89\u88C5\u5BF9\u8BDD\u6846\u3002",
+    tabUpdateEmpty: "\u5168\u90E8\u662F\u6700\u65B0\u7248\u672C\u3002",
+    tabUpdateRecheck: "\u91CD\u65B0\u68C0\u67E5",
+    tabUpdateDo: "\u66F4\u65B0",
+    tabUpdateIncompat: "\u4E0E\u5F53\u524D\u5185\u6838\u4E0D\u517C\u5BB9",
     headSummary: "\u5DF2\u5B89\u88C5 {a} \xB7 \u6709\u66F4\u65B0 {b} \xB7 \u5931\u6548 {c}",
     check: "\u68C0\u67E5\u66F4\u65B0",
     checking: "\u68C0\u67E5\u4E2D\u2026",
@@ -752,6 +757,11 @@ var STRINGS = {
     tabInstalled: "Installed",
     tabMarket: "Market",
     tabUpdates: "Updates",
+    tabUpdateHint: "These plugins have newer versions; Update opens the official install dialog.",
+    tabUpdateEmpty: "Everything is up to date.",
+    tabUpdateRecheck: "Check again",
+    tabUpdateDo: "Update",
+    tabUpdateIncompat: "Incompatible with this kernel",
     headSummary: "{a} installed \xB7 {b} updates \xB7 {c} failed",
     check: "Check updates",
     checking: "Checking\u2026",
@@ -894,6 +904,82 @@ function useT() {
     };
   }, []);
   return (0, import_react.useCallback)((key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars), [id]);
+}
+function UpdateTab({ install, openPackage }) {
+  const t = useT();
+  const [items, setItems] = (0, import_react.useState)(updatesCache);
+  const [error, setError] = (0, import_react.useState)(null);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const load = (0, import_react.useCallback)(() => {
+    setBusy(true);
+    setError(null);
+    void rpc("checkUpdates", {}).then(
+      (v) => {
+        const list = v;
+        updatesCache = list;
+        setItems(list);
+        setBusy(false);
+      },
+      (e) => {
+        setError(e instanceof Error ? e.message : String(e));
+        setBusy(false);
+      }
+    );
+  }, []);
+  (0, import_react.useEffect)(() => {
+    if (updatesCache === null) load();
+  }, [load]);
+  if (error !== null) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", onClick: load, children: t("tabUpdateRecheck") })
+    ] });
+  }
+  if (busy || items === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("checking") });
+  if (items.length === 0) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("tabUpdateEmpty") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", onClick: load, children: t("tabUpdateRecheck") })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("tabUpdateHint") }),
+    items.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "pc-name",
+            style: { background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit" },
+            onClick: () => {
+              openPackage(u.name);
+            },
+            children: u.name
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "pc-ver", children: [
+          u.fromVersion,
+          " \u2192 ",
+          u.toVersion
+        ] }),
+        u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", children: t("tabUpdateIncompat") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "pc-btn",
+            disabled: u.compat === "incompatible",
+            onClick: () => {
+              install({ spec: `${u.name}@${u.toVersion}`, title: u.name, version: u.toVersion });
+            },
+            children: t("tabUpdateDo")
+          }
+        ) })
+      ] }),
+      u.changelog.slice(0, 3).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-sub", children: line }, i))
+    ] }, u.name))
+  ] });
 }
 function InstalledView({ search, category, source, onToggle, togglingId }) {
   const t = useT();
@@ -2154,6 +2240,12 @@ function apply(ctx) {
   ctx.on?.("locale/change", (snap) => {
     adoptLocale(snap?.active);
   });
+  ctx.slots.inject("plugins.tab", () => ctx.slots.register({
+    name: "plugins.tab",
+    id: "plugin-center-updates",
+    order: 10,
+    label: () => STRINGS[localeId].tabUpdates
+  }, UpdateTab));
   ctx.slots.inject("settings.section", () => ctx.slots.register({
     name: "settings.section",
     id: "plugin-center",

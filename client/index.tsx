@@ -799,6 +799,11 @@ type LocaleId = 'zh' | 'en'
 const STRINGS = {
   zh: {
     title: '插件中心', tabInstalled: '已安装', tabMarket: '市场', tabUpdates: '更新',
+    tabUpdateHint: '这些插件有更新版本；点「更新」会打开官方安装对话框。',
+    tabUpdateEmpty: '全部是最新版本。',
+    tabUpdateRecheck: '重新检查',
+    tabUpdateDo: '更新',
+    tabUpdateIncompat: '与当前内核不兼容',
     headSummary: '已安装 {a} · 有更新 {b} · 失效 {c}',
     check: '检查更新', checking: '检查中…', updateAll: '更新全部（{n}）',
     searchInstalled: '搜索已安装插件', allSources: '全部来源',
@@ -868,6 +873,11 @@ const STRINGS = {
   },
   en: {
     title: 'Plugin Center', tabInstalled: 'Installed', tabMarket: 'Market', tabUpdates: 'Updates',
+    tabUpdateHint: 'These plugins have newer versions; Update opens the official install dialog.',
+    tabUpdateEmpty: 'Everything is up to date.',
+    tabUpdateRecheck: 'Check again',
+    tabUpdateDo: 'Update',
+    tabUpdateIncompat: 'Incompatible with this kernel',
     headSummary: '{a} installed · {b} updates · {c} failed',
     check: 'Check updates', checking: 'Checking…', updateAll: 'Update all（{n}）',
     searchInstalled: 'Search installed plugins', allSources: 'All sources',
@@ -959,6 +969,80 @@ function useT(): (key: StringKey, vars?: Record<string, unknown>) => string {
     return () => { localeListeners.delete(l) }
   }, [])
   return useCallback((key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars), [id])
+}
+
+// ---- 更新 tab：挂在官方插件页的 `plugins.tab` 上 ----
+// 只做「检测 + 触发」：安装交给 owner 的 `install()`，走官方安装对话框（含构建批准、
+// 回滚、bundle 校验），本插件不再自己调 pnpm。结果复用模块级的 `updatesCache`，
+// 与设置面板那张更新列表共享同一份快照。
+
+function UpdateTab({ install, openPackage }: {
+  install: (target: { spec: string; title: string; version: string }) => void
+  openPackage: (packageName: string) => void
+}) {
+  const t = useT()
+  const [items, setItems] = useState<UpdateDigest[] | null>(updatesCache)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    setBusy(true)
+    setError(null)
+    void rpc('checkUpdates', {}).then(
+      v => { const list = v as UpdateDigest[]; updatesCache = list; setItems(list); setBusy(false) },
+      e => { setError(e instanceof Error ? e.message : String(e)); setBusy(false) },
+    )
+  }, [])
+
+  useEffect(() => {
+    if (updatesCache === null) load()
+  }, [load])
+
+  if (error !== null) {
+    return (
+      <div>
+        <p className="pc-sub">{t('loadFailed', { e: error })}</p>
+        <button type="button" className="pc-btn" onClick={load}>{t('tabUpdateRecheck')}</button>
+      </div>
+    )
+  }
+  if (busy || items === null) return <p className="pc-sub">{t('checking')}</p>
+  if (items.length === 0) {
+    return (
+      <div>
+        <p className="pc-sub">{t('tabUpdateEmpty')}</p>
+        <button type="button" className="pc-btn" onClick={load}>{t('tabUpdateRecheck')}</button>
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <p className="pc-sub">{t('tabUpdateHint')}</p>
+      {items.map(u => (
+        <div key={u.name} className="pc-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              className="pc-name"
+              style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
+              onClick={() => { openPackage(u.name) }}
+            >{u.name}</button>
+            <span className="pc-ver">{u.fromVersion} → {u.toVersion}</span>
+            {u.compat === 'incompatible' && <span className="pc-tag warn">{t('tabUpdateIncompat')}</span>}
+            <span style={{ marginLeft: 'auto' }}>
+              <button
+                type="button"
+                className="pc-btn"
+                disabled={u.compat === 'incompatible'}
+                onClick={() => { install({ spec: `${u.name}@${u.toVersion}`, title: u.name, version: u.toVersion }) }}
+              >{t('tabUpdateDo')}</button>
+            </span>
+          </div>
+          {u.changelog.slice(0, 3).map((line, i) => <div key={i} className="pc-sub">{line}</div>)}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ---- views ----
@@ -2372,6 +2456,14 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
   const initial = locale?.getLocale?.()?.active
   if (typeof initial === 'string') adoptLocale(initial)
   ctx.on?.('locale/change', (snap: { active?: string } | undefined) => { adoptLocale(snap?.active) })
+
+  // 官方「插件」页的第三个 tab。`plugins.tab` 由 ui-plugin-manager 声明（官方自己的
+  // Discover 走同一个 slot），本插件只 `import type` 合并 SlotMap、运行时绝不 import
+  // 那个包。order 10 排在 Discover（缺省）之后。
+  ctx.slots.inject('plugins.tab', () => ctx.slots.register({
+    name: 'plugins.tab', id: 'plugin-center-updates', order: 10,
+    label: () => STRINGS[localeId].tabUpdates,
+  }, UpdateTab))
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'plugin-center', order: 50, label: () => STRINGS[localeId].title,
