@@ -12,10 +12,11 @@ Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 ## Features / 功能
 
-- **Updates tab / 更新 tab** — 内置「插件」页的第三个 tab（排在「已安装 / 发现」之后），列出每个有上游新版本的已安装插件、它的 changelog 行，以及逐行一个**更新**按钮。
-- **Official install path / 走官方安装** — 按钮把精确的 `name@version` 交给页面自己的安装对话框（`plugin_manager.installBundle`），构建批准、失败回滚、bundle 校验都留在官方那条链上；本插件不再自己调 pnpm。
-- **DSH compatibility / 兼容性** — peer 范围与当前内核不符的条目标记号并禁用按钮，不让人点进一次注定失败的安装。
-- **LLM update RPC / LLM 更新端点** — `llm-update.prepare` / `.log` / `.result` 仍留在 host 侧供 agent 流程使用；它们的 Web UI 随旧面板一起下线。
+- **Updates tab / 更新 tab** — 内置「插件」页的第三个 tab（排在「已安装 / 发现」之后），列出每个有上游新版本的已安装插件、它的 changelog 行，以及逐行一个**更新**按钮；顶部另有「更新全部」。
+- **In-place upgrade / 原地升级** — 更新走本插件自己的 `update`（`pnpm add name@version`）。官方 `installBundle` 对已安装的包直接以 `already-installed` 拒绝，只能装新包。
+- **LLM update / LLM 更新** — 每行一个「LLM 更新」，顶部一个「LLM 更新全部」：确认后发起一个「插件更新」会话，由 agent 按 `dsh-plugin-upgrade` skill 决策。机械更新看不到 peer/依赖风险，也会把 vendor 魔改覆盖回官方版——见 `docs/设计/LLM驱动插件更新-设计方案.md`。
+- **Startup reminder / 启动提醒** — 有新版时启动弹一次（每天一次节流）。
+- **DSH compatibility / 兼容性** — peer 范围与当前内核不符的条目标记号并禁用按钮。
 - **Skin-compatible / 皮肤兼容** — 每个颜色都用 `var(--dsw-*)` token，皮肤插件同样能改这套 UI。
 - **Packaged upgrade skill / 自带升级技能** — `dsh-plugin-upgrade` 技能随包内置（`SkillProvider`，rank 550），干净机器上 LLM 更新流程也能直接加载。
 

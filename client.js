@@ -32,6 +32,22 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 var import_react_dom = require("react-dom");
 var import_react = require("react");
+
+// client/llm-decision.ts
+function decideLlmState(input) {
+  const { rec, sessionRunning, graceActive } = input;
+  if (rec !== null && rec.status !== "running" && rec.status !== "pending") {
+    return rec.status === "success" ? "success" : rec.status === "failed" ? "failed" : "ended";
+  }
+  if (sessionRunning === false && graceActive !== true) return "ended";
+  return "continue";
+}
+function pickLlmArchives(rows, name, isBatch, keepId) {
+  const marker = isBatch ? "\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)" : `\u63D2\u4EF6\u66F4\u65B0: ${name}`;
+  return rows.filter((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes(marker) && r.id !== void 0 && r.id !== keepId && r.running !== true).map((r) => r.id);
+}
+
+// client/index.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
 var CSS = `
 .pc-title { font-size: 18px; font-weight: 600; line-height: 26px; color: var(--dsw-alias-label-primary); }
@@ -163,19 +179,227 @@ function injectCss() {
 var rpc = async () => {
   throw new Error("plugin-center: rpc not wired");
 };
+var whatsNewOpen = false;
+var whatsNewDigests = [];
+var whatsNewListeners = /* @__PURE__ */ new Set();
+function closeWhatsNew() {
+  whatsNewOpen = false;
+  for (const d of whatsNewDigests) readCache[d.name] = d.toVersion;
+  void rpc("markRead", { versions: readCache });
+  whatsNewListeners.forEach((l) => l());
+}
+function useWhatsNewOpen() {
+  const [open, setOpen] = (0, import_react.useState)(whatsNewOpen);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setOpen(whatsNewOpen);
+    };
+    whatsNewListeners.add(l);
+    return () => {
+      whatsNewListeners.delete(l);
+    };
+  }, []);
+  return open;
+}
+var readCache = {};
 var updatesCache = null;
+var llmUpdating = /* @__PURE__ */ new Set();
+var llmUpdatingListeners = /* @__PURE__ */ new Set();
+function setLlmUpdating(name, on) {
+  if (on) llmUpdating.add(name);
+  else llmUpdating.delete(name);
+  llmUpdatingListeners.forEach((l) => l());
+}
+function useLlmUpdatingVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    llmUpdatingListeners.add(l);
+    return () => {
+      llmUpdatingListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+var llmConfirm = null;
+var llmConfirmListeners = /* @__PURE__ */ new Set();
+function setLlmConfirm(state) {
+  llmConfirm = state;
+  llmConfirmListeners.forEach((l) => l());
+}
+function useLlmConfirm() {
+  const [state, setState] = (0, import_react.useState)(llmConfirm);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setState(llmConfirm);
+    };
+    llmConfirmListeners.add(l);
+    return () => {
+      llmConfirmListeners.delete(l);
+    };
+  }, []);
+  return state;
+}
+var llmSessionId = null;
+function setLlmSessionId(id) {
+  llmSessionId = id;
+}
+var llmFallbackPrompt = null;
+var llmFallbackListeners = /* @__PURE__ */ new Set();
+function setLlmFallback(prompt) {
+  llmFallbackPrompt = prompt;
+  llmFallbackListeners.forEach((l) => l());
+}
+function useLlmFallback() {
+  const [p, setP] = (0, import_react.useState)(llmFallbackPrompt);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setP(llmFallbackPrompt);
+    };
+    llmFallbackListeners.add(l);
+    return () => {
+      llmFallbackListeners.delete(l);
+    };
+  }, []);
+  return p;
+}
 var sessionsSvc = null;
 var workspacesSvc = null;
 var uiWorkspaceSvc = null;
+var LLM_RETAIN_SOURCE = "pluginCenterLlmUpdate";
 var llmRetains = /* @__PURE__ */ new Map();
+var llmResults = /* @__PURE__ */ new Map();
+var llmResultListeners = /* @__PURE__ */ new Set();
+function setLlmResult(name, rec) {
+  if (rec === null) llmResults.delete(name);
+  else llmResults.set(name, rec);
+  llmResultListeners.forEach((l) => l());
+}
+function useLlmResultVersion() {
+  const [v, setV] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    const l = () => {
+      setV((x) => x + 1);
+    };
+    llmResultListeners.add(l);
+    return () => {
+      llmResultListeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+var llmPollTimers = /* @__PURE__ */ new Map();
+var LLM_POLL_MS = 5e3;
+var LLM_POLL_MAX = 240;
+function stopLlmPolling(name) {
+  const t = llmPollTimers.get(name);
+  if (t !== void 0) {
+    window.clearInterval(t);
+    llmPollTimers.delete(name);
+  }
+}
+async function convergeLlmState(name) {
+  const rec = await rpc("llm-update.result", { name }).catch(() => null);
+  const sid = llmSessionByPlugin.get(name);
+  const sessionRunning = sid === void 0 ? void 0 : sessionsSvc?.list?.getSnapshot?.()?.byId?.[sid]?.running ?? false;
+  const graceActive = Date.now() - (llmStartedAt.get(name) ?? 0) < LLM_GRACE_MS;
+  const decision = decideLlmState({ rec, sessionRunning, graceActive });
+  if (decision === "continue") return false;
+  stopLlmPolling(name);
+  setLlmUpdating(name, false);
+  if (decision === "success" || decision === "failed") {
+    setLlmResult(name, rec);
+    const S = STRINGS[localeId];
+    const brief = (rec?.detail ?? "").length > 120 ? `${(rec?.detail ?? "").slice(0, 120)}\u2026` : rec?.detail ?? "";
+    const msg = decision === "failed" ? S.llmFailed.replace("{name}", name).replace("{d}", brief) : rec?.action === "keep" ? S.llmKept.replace("{name}", name).replace("{d}", brief) : S.llmDone.replace("{name}", name).replace("{d}", brief);
+    showToast(msg, decision === "success" ? "ok" : "error", 12e3);
+    if (decision === "success" && rec?.action !== "keep") {
+      void rpc("llm-update.invalidate").catch(() => {
+      });
+      if (!llmRestartHinted) {
+        llmRestartHinted = true;
+        showToast(S.llmPromptRestart, "ok", 12e3);
+      }
+    }
+  } else {
+    setLlmResult(name, { at: Date.now(), action: "ended", detail: "", status: "ended" });
+    showToast(STRINGS[localeId].llmEnded.replace("{name}", name), "error", 1e4);
+  }
+  return true;
+}
+function startLlmPolling(name) {
+  if (llmPollTimers.has(name)) return;
+  let count = 0;
+  const timer = window.setInterval(() => {
+    count++;
+    void convergeLlmState(name).then((done) => {
+      if (!done && count >= LLM_POLL_MAX) stopLlmPolling(name);
+    });
+  }, LLM_POLL_MS);
+  llmPollTimers.set(name, timer);
+}
+var llmSessionByPlugin = /* @__PURE__ */ new Map();
+var llmStartedAt = /* @__PURE__ */ new Map();
+var llmRestartHinted = false;
+var LLM_GRACE_MS = 3e4;
 var LLM_RESULT_TTL_MS = 30 * 6e4;
+var doneUpdatesStore = [];
+var doneUpdatesVersion = 0;
+var doneUpdatesListeners = /* @__PURE__ */ new Set();
+function markDoneUpdate(entry) {
+  if (doneUpdatesStore.some((d) => d.name === entry.name)) return;
+  doneUpdatesStore.push(entry);
+  doneUpdatesVersion++;
+  doneUpdatesListeners.forEach((l) => l());
+}
+var toastState = null;
+var toastListeners = /* @__PURE__ */ new Set();
+function showToast(message, kind = "ok", duration = 3200) {
+  toastState = { message, kind, until: Date.now() + duration };
+  toastListeners.forEach((l) => l());
+}
+var pendingInstall = /* @__PURE__ */ new Set();
+var wnToday = () => {
+  const d = /* @__PURE__ */ new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+var wnShownTodayCache = null;
+function wnShownToday() {
+  if (wnShownTodayCache === null) {
+    wnShownTodayCache = rpc("whatsNewDaily").then((v) => String(v?.day ?? "") === wnToday()).catch(() => false);
+  }
+  return wnShownTodayCache;
+}
+async function checkWhatNew() {
+  try {
+    const since = new Date(Date.now() - 30 * 864e5).toISOString();
+    const digests = await rpc("checkUpdates", { since });
+    readCache = await rpc("readVersions");
+    const fresh = digests.filter((d) => readCache[d.name] !== d.toVersion);
+    if (fresh.length > 0 && !await wnShownToday()) {
+      whatsNewDigests = digests;
+      whatsNewOpen = true;
+      void rpc("markWhatsNewDaily", { day: wnToday() });
+      whatsNewListeners.forEach((l) => l());
+    }
+  } catch {
+  }
+}
+function githubLinkOf(repoUrl) {
+  if (typeof repoUrl !== "string" || repoUrl === "") return null;
+  const m = /github\.com[/:]([^/]+)\/([^/.#]+)/.exec(repoUrl);
+  if (m === null) return null;
+  return `https://github.com/${m[1]}/${m[2]}`;
+}
 var STRINGS = {
   zh: {
     title: "\u63D2\u4EF6\u4E2D\u5FC3",
     tabInstalled: "\u5DF2\u5B89\u88C5",
     tabMarket: "\u5E02\u573A",
     tabUpdates: "\u66F4\u65B0",
-    tabUpdateHint: "\u8FD9\u4E9B\u63D2\u4EF6\u6709\u66F4\u65B0\u7248\u672C\uFF1B\u70B9\u300C\u66F4\u65B0\u300D\u4F1A\u6253\u5F00\u5B98\u65B9\u5B89\u88C5\u5BF9\u8BDD\u6846\u3002",
+    tabUpdateHint: "\u8FD9\u4E9B\u63D2\u4EF6\u6709\u66F4\u65B0\u7248\u672C\uFF1B\u300C\u66F4\u65B0\u300D\u539F\u5730\u5347\u7EA7\uFF0C\u4E0D\u5FC5\u5378\u8F7D\u91CD\u88C5\u3002",
     tabUpdateEmpty: "\u5168\u90E8\u662F\u6700\u65B0\u7248\u672C\u3002",
     tabUpdateRecheck: "\u91CD\u65B0\u68C0\u67E5",
     tabUpdateDo: "\u66F4\u65B0",
@@ -303,7 +527,7 @@ var STRINGS = {
     tabInstalled: "Installed",
     tabMarket: "Market",
     tabUpdates: "Updates",
-    tabUpdateHint: "These plugins have newer versions; Update opens the official install dialog.",
+    tabUpdateHint: "These plugins have newer versions; Update upgrades in place (no reinstall).",
     tabUpdateEmpty: "Everything is up to date.",
     tabUpdateRecheck: "Check again",
     tabUpdateDo: "Update",
@@ -451,11 +675,13 @@ function useT() {
   }, []);
   return (0, import_react.useCallback)((key, vars) => fmt(STRINGS[id][key] ?? STRINGS.zh[key], vars), [id]);
 }
-function UpdateTab({ install, openPackage }) {
+function UpdateTab({ openPackage }) {
   const t = useT();
   const [items, setItems] = (0, import_react.useState)(updatesCache);
   const [error, setError] = (0, import_react.useState)(null);
   const [busy, setBusy] = (0, import_react.useState)(false);
+  const [running, setRunning] = (0, import_react.useState)(null);
+  const [failed, setFailed] = (0, import_react.useState)({});
   const load = (0, import_react.useCallback)(() => {
     setBusy(true);
     setError(null);
@@ -475,6 +701,27 @@ function UpdateTab({ install, openPackage }) {
   (0, import_react.useEffect)(() => {
     if (updatesCache === null) load();
   }, [load]);
+  const runOne = (0, import_react.useCallback)(async (u) => {
+    setRunning(u.name);
+    setFailed((prev) => {
+      const next = { ...prev };
+      delete next[u.name];
+      return next;
+    });
+    try {
+      await rpc("update", { name: u.name, version: u.toVersion });
+      updatesCache = (updatesCache ?? []).filter((x) => x.name !== u.name);
+      setItems(updatesCache);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setFailed((prev) => ({ ...prev, [u.name]: message }));
+    } finally {
+      setRunning(null);
+    }
+  }, []);
+  const runAll = (0, import_react.useCallback)(async () => {
+    for (const u of [...items ?? []]) await runOne(u);
+  }, [items, runOne]);
   if (error !== null) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("loadFailed", { e: error }) }),
@@ -489,7 +736,17 @@ function UpdateTab({ install, openPackage }) {
     ] });
   }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", children: t("tabUpdateHint") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "pc-sub", style: { margin: 0 }, children: t("tabUpdateHint") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { marginLeft: "auto", display: "flex", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn primary", disabled: running !== null, onClick: () => {
+          llmPrepareAll(items.map((u) => u.name));
+        }, children: t("llmUpdateAll", { n: items.length }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", disabled: running !== null, onClick: () => {
+          void runAll();
+        }, children: running === null ? t("updateAll", { n: items.length }) : t("checking") })
+      ] })
+    ] }),
     items.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -510,22 +767,356 @@ function UpdateTab({ install, openPackage }) {
           u.toVersion
         ] }),
         u.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", children: t("tabUpdateIncompat") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { marginLeft: "auto", display: "flex", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "pc-btn",
+              disabled: running !== null,
+              onClick: () => {
+                llmPrepare(u.name);
+              },
+              children: t("llmUpdate")
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "pc-btn",
+              disabled: running !== null || u.compat === "incompatible",
+              onClick: () => {
+                void runOne(u);
+              },
+              children: running === u.name ? t("checking") : t("tabUpdateDo")
+            }
+          )
+        ] })
+      ] }),
+      u.changelog.slice(0, 3).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-sub", children: line }, i)),
+      failed[u.name] !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-tag danger", children: failed[u.name] })
+    ] }, u.name))
+  ] });
+}
+function llmPrepare(name) {
+  if (llmConfirm?.preparing === true) return;
+  setLlmConfirm({ name, pkgs: [], error: null, skipped: [], preparing: true });
+  void rpc("llm-update.prepare", { name }).then(
+    (v) => setLlmConfirm({ name, pkgs: [v], error: null, skipped: [], preparing: false }),
+    (e) => setLlmConfirm({ name, pkgs: [], error: e instanceof Error ? e.message : String(e), skipped: [], preparing: false })
+  );
+}
+function llmPrepareAll(names) {
+  setLlmConfirm({ name: "__all__", pkgs: [], error: null, skipped: [], preparing: true });
+  void (async () => {
+    const pkgs = [];
+    const skipped = [];
+    for (const n of names) {
+      try {
+        pkgs.push(await rpc("llm-update.prepare", { name: n }));
+      } catch (e) {
+        skipped.push(`${n}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    setLlmConfirm({ name: "__all__", pkgs, error: null, skipped, preparing: false });
+  })();
+}
+async function ensureLlmUpdateSession(isBatch, profileDir) {
+  const list = sessionsSvc?.list?.getSnapshot?.();
+  const rows = list?.byId === void 0 ? [] : Object.values(list.byId);
+  if (isBatch) {
+    const existing = rows.find((r) => ((r.displayTitle ?? "") + (r.title ?? "")).includes("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)"));
+    if (existing?.id !== void 0 && existing.running !== false) {
+      uiWorkspaceSvc?.openSession?.(existing.id);
+      return existing.id;
+    }
+  }
+  const ws = workspacesSvc?.list?.getSnapshot?.();
+  let wsId;
+  let createError = null;
+  if (profileDir !== void 0 && profileDir !== "") {
+    try {
+      const wsv = await workspacesSvc?.create?.({ path: profileDir });
+      wsId = typeof wsv === "string" ? wsv : wsv?.workspaceId;
+      if (wsId !== void 0) void workspacesSvc?.rename?.(wsId, "\u63D2\u4EF6\u66F4\u65B0").catch(() => {
+      });
+    } catch (e) {
+      createError = e;
+      console.warn("[dsh-plugin-center] create \u63D2\u4EF6\u66F4\u65B0 workspace \u5931\u8D25:", e, { profileDir });
+    }
+  }
+  const listWsId = ws?.items?.[0]?.workspaceId;
+  const finalWsId = wsId ?? listWsId;
+  if (finalWsId === void 0 || finalWsId === "") {
+    console.error("[dsh-plugin-center] \u65E0\u53EF\u7528 workspace \u76EE\u6807", {
+      createError: String(createError ?? ""),
+      profileDir,
+      snapshot: ws
+    });
+    return null;
+  }
+  let id = await connectLlmWorkspace(finalWsId);
+  if ((id === void 0 || id === "") && finalWsId !== listWsId && listWsId !== void 0) {
+    console.warn("[dsh-plugin-center] newly-created workspace \u5C1A\u4E0D\u53EF\u89C1,\u56DE\u9000\u5230\u65E2\u6709 workspace", { finalWsId, fallback: listWsId });
+    id = await connectLlmWorkspace(listWsId);
+  }
+  if (id === void 0 || id === "") {
+    console.error("[dsh-plugin-center] connectWorkspace \u672A\u8FD4\u56DE\u4F1A\u8BDD id", { finalWsId, fallback: listWsId, createError: String(createError ?? "") });
+    return null;
+  }
+  uiWorkspaceSvc?.openSession?.(id);
+  return id;
+}
+async function connectLlmWorkspace(workspaceId) {
+  try {
+    const id = await uiWorkspaceSvc?.connectWorkspace?.(workspaceId);
+    return typeof id === "string" && id !== "" ? id : void 0;
+  } catch (e) {
+    console.warn("[dsh-plugin-center] uiWorkspace.connectWorkspace \u62D2\u7EDD:", e, { workspaceId });
+    return void 0;
+  }
+}
+var SESSION_FACE_TIMEOUT_MS = 5e3;
+async function llmExecute(pkgs, name) {
+  const S = STRINGS[localeId];
+  setLlmConfirm(null);
+  for (const p of pkgs) {
+    setLlmResult(p.name, null);
+    setLlmUpdating(p.name, true);
+  }
+  const prompt = pkgs.length === 1 ? pkgs[0].prompt : [
+    `\u8BF7\u4F9D\u6B21\u5904\u7406\u4EE5\u4E0B ${pkgs.length} \u4E2A\u63D2\u4EF6\u7684\u66F4\u65B0(\u6BCF\u4E2A\u63D2\u4EF6\u72EC\u7ACB\u6309 dsh-plugin-upgrade skill \u51B3\u7B56):`,
+    "",
+    ...pkgs.flatMap((p, i) => [`===== \u63D2\u4EF6 ${i + 1}/${pkgs.length}: ${p.name} =====`, p.prompt])
+  ].join("\n");
+  void rpc("llm-update.log", { name, action: "prompt-sent", detail: prompt.split("\n").slice(0, 3).join(" "), status: "running" });
+  try {
+    const isBatch = name === "__all__" || pkgs.length > 1;
+    const id = await ensureLlmUpdateSession(isBatch, pkgs[0]?.profileDir);
+    if (id === null) throw new Error("no-session-target: \u65E0\u6CD5\u627E\u5230\u53EF\u590D\u7528\u7684\u63D2\u4EF6\u66F4\u65B0\u4F1A\u8BDD/\u5DE5\u4F5C\u533A\uFF08\u8BE6\u89C1\u6D4F\u89C8\u5668 console \u7684 [dsh-plugin-center] \u8BCA\u65AD\uFF09");
+    const retained = sessionsSvc?.retain?.(id, { source: LLM_RETAIN_SOURCE });
+    const previous = llmRetains.get(id);
+    if (previous !== void 0 && previous !== retained) previous.release?.();
+    if (retained !== void 0) llmRetains.set(id, retained);
+    let bound = retained?.binding?.session ?? sessionsSvc?.binding?.(id)?.session;
+    for (let waited = 0; bound?.prompt === void 0 && waited < SESSION_FACE_TIMEOUT_MS; waited += 100) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+      bound = sessionsSvc?.binding?.(id)?.session;
+    }
+    const session = bound;
+    if (session?.prompt === void 0) {
+      const rows2 = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {});
+      throw new Error(`no-session-face: \u4F1A\u8BDD ${id} \u5728 ${SESSION_FACE_TIMEOUT_MS}ms \u5185\u672A\u7ED1\u5B9A\u53EF\u7528\u7684 prompt \u9762\uFF08sessionsSvc=${sessionsSvc === void 0 ? "null" : "ok"}\uFF0C\u5DF2\u77E5\u4F1A\u8BDD ${String(rows2.length)} \u4E2A\uFF0Cretain=${retained === void 0 ? "unavailable" : "ok"}\uFF0Cbinding=${bound === void 0 ? "undefined" : "object-without-prompt"}\uFF09`);
+    }
+    const res = await session.prompt([{ type: "text", text: prompt }], "queue");
+    if (res?.ok !== true) {
+      throw new Error(res?.error?.message ?? "prompt rejected");
+    }
+    if (isBatch) session.rename?.("\u63D2\u4EF6\u66F4\u65B0(\u6279\u91CF)").catch(() => {
+    });
+    else session.rename?.(`\u63D2\u4EF6\u66F4\u65B0: ${pkgs[0].name}`).catch(() => {
+    });
+    for (const p of pkgs) llmStartedAt.set(p.name, Date.now());
+    const rows = Object.values(sessionsSvc?.list?.getSnapshot?.()?.byId ?? {});
+    for (const oldId of pickLlmArchives(rows, pkgs[0]?.name ?? "", isBatch, id)) {
+      void workspacesSvc?.archiveSession?.(oldId).catch(() => {
+      });
+    }
+    setLlmSessionId(id);
+    for (const p of pkgs) llmSessionByPlugin.set(p.name, id);
+    for (const p of pkgs) startLlmPolling(p.name);
+    showToast(S.llmPromptReady.replace("{name}", pkgs.length === 1 ? pkgs[0].name : `${pkgs.length} \u4E2A\u63D2\u4EF6`), "ok", 8e3);
+    if (isBatch) closeWhatsNew();
+  } catch (e) {
+    for (const p of pkgs) setLlmUpdating(p.name, false);
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("[dsh-plugin-center] LLM \u66F4\u65B0\u53D1\u8D77\u5931\u8D25:", e);
+    void rpc("llm-update.log", { name, action: "failed", detail, status: "failed" }).catch(() => {
+    });
+    setLlmFallback(prompt);
+    showToast(detail, "error", 6e3);
+  }
+}
+function LlmConfirmDialog() {
+  const t = useT();
+  const state = useLlmConfirm();
+  if (state === null) return null;
+  const skipText = state.skipped.length === 0 ? null : t("llmConfirmSkipped", { s: state.skipped.join("\uFF1B") });
+  const failText = state.error !== null && state.error !== "" ? state.error : state.skipped.length > 0 ? state.skipped.join("\uFF1B") : "(unknown)";
+  const body = state.preparing ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)" }, children: t("llmPreparing") }) : state.pkgs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-state-error-fill, #e5534b)", lineHeight: 1.5 }, children: t("llmPreparedError", { e: failText }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, maxHeight: "46vh", overflow: "auto" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)", lineHeight: 1.5 }, children: t("llmConfirmBody", { n: state.pkgs.length }) }),
+    skipText !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: "var(--dsw-alias-state-warning-fill, #d9a53f)" }, children: skipText }),
+    state.pkgs.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", style: { flexWrap: "nowrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: p.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: p.fromVersion }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: p.toVersion ?? "\u2014" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `pc-tag${p.source === "npm" || p.source === "official" ? "" : " warn"}`, children: t("llmSourceBadge", { s: p.source }) }),
+        p.isVendorModified && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", title: t("llmVendorWarn"), children: "vendor" }),
+        p.upstreamMismatch && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag warn", title: t("llmMismatchHint"), children: t("llmMismatch") }),
+        p.compat === "incompatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag danger", children: t("incompat") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: "var(--dsw-alias-label-secondary, #67748a)" }, children: p.runtimeLabel === "SSID" ? t("llmScopeSsid") : t("llmScopeWeb") }),
+      p.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", style: { margin: 0 }, children: p.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { margin: 0, color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") })
+    ] }, p.name))
+  ] });
+  const canRun = state.preparing === false && state.pkgs.length > 0;
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "min(560px, 92vw)", background: "var(--dsw-alias-bg-layer-3)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--dsw-alias-label-primary, #d8e0ea)" }, children: t("llmConfirmTitle") }),
+      body,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", disabled: state.preparing, onClick: () => {
+          setLlmConfirm(null);
+        }, children: t("llmCancel") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
             type: "button",
-            className: "pc-btn",
-            disabled: u.compat === "incompatible",
-            onClick: () => {
-              install({ spec: `${u.name}@${u.toVersion}`, title: u.name, version: u.toVersion });
+            style: {
+              padding: "3px 12px",
+              fontSize: 11.5,
+              border: "none",
+              borderRadius: 6,
+              cursor: canRun ? "pointer" : "not-allowed",
+              fontWeight: 600,
+              background: "var(--dsw-alias-button-primary-fill)",
+              color: "var(--dsw-alias-label-primary-foreground)",
+              opacity: canRun ? 1 : 0.55
             },
-            children: t("tabUpdateDo")
+            disabled: !canRun,
+            onClick: () => {
+              void llmExecute(state.pkgs, state.name);
+            },
+            children: t("llmConfirm")
           }
-        ) })
-      ] }),
-      u.changelog.slice(0, 3).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-sub", children: line }, i))
-    ] }, u.name))
-  ] });
+        )
+      ] })
+    ] }) }),
+    document.body
+  );
+}
+function LlmPromptFallbackDialog() {
+  const t = useT();
+  const prompt = useLlmFallback();
+  if (prompt === null) return null;
+  const [copied, setCopied] = (0, import_react.useState)(false);
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "min(680px, 92vw)", background: "var(--dsw-alias-bg-layer-3)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--dsw-alias-label-primary, #d8e0ea)" }, children: t("llmFallbackTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #67748a)", lineHeight: 1.5 }, children: t("llmFallbackHint") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          readOnly: true,
+          value: prompt,
+          rows: Math.min(10, prompt.split("\n").length + 1),
+          style: { width: "100%", boxSizing: "border-box", background: "var(--dsw-alias-bg-module-platform, rgba(128,148,168,.12))", color: "var(--dsw-alias-label-primary, #d8e0ea)", border: "1px solid var(--dsw-alias-border-l2, #1e2836)", borderRadius: 6, padding: "8px 10px", fontSize: 12, fontFamily: "monospace", resize: "vertical" }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn", onClick: () => {
+          void navigator.clipboard.writeText(prompt).then(() => setCopied(true)).catch(() => {
+          });
+        }, children: copied ? t("commandCopied") : t("commandCopy") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-btn primary", onClick: () => {
+          setLlmFallback(null);
+        }, children: t("close") })
+      ] })
+    ] }) }),
+    document.body
+  );
+}
+function WhatsNewDialog() {
+  const t = useT();
+  const open = useWhatsNewOpen();
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  useLlmUpdatingVersion();
+  useLlmResultVersion();
+  useLlmConfirm();
+  const activeLlmCount = [...llmUpdating].filter((n) => !llmResults.has(n)).length;
+  if (!open || whatsNewDigests.length === 0) return null;
+  const updateNow = async () => {
+    setBusy(true);
+    let okCount = 0;
+    let hotCount = 0;
+    const failures = [];
+    for (const u of whatsNewDigests) {
+      try {
+        const v = await rpc("update", { name: u.name, version: u.toVersion });
+        const value = typeof v === "object" && v !== null ? v : null;
+        if (value === null || value.durationMs === void 0 && value.command === void 0) throw new Error(t("updateNotApplied"));
+        if (value.command !== void 0 && value.command !== "") {
+          failures.push(`${u.name}\uFF1A${t("commandHint")}`);
+          continue;
+        }
+        okCount++;
+        if (value.hot === true) {
+          hotCount++;
+          continue;
+        }
+        if (value.pending === true || value.direct === true) {
+          pendingInstall.add(u.name);
+          markDoneUpdate({ name: u.name, fromVersion: u.fromVersion, toVersion: u.toVersion });
+        }
+      } catch (e) {
+        failures.push(`${u.name}\uFF1A${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    setBusy(false);
+    if (failures.length === 0) {
+      showToast(hotCount === okCount ? t("updatedManyHot", { n: okCount }) : t("updatedMany", { n: okCount }), "ok", 6e3);
+      closeWhatsNew();
+    } else {
+      showToast(t("updateSummary", { a: okCount, b: failures.length, c: failures.join("\uFF1B") }), "error", 8e3);
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-overlay", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel", style: { width: "540px" }, role: "dialog", "aria-modal": "true", "aria-label": t("whatsNewTitle"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-title", children: t("whatsNewTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-sub", style: { marginTop: 0 }, children: t("whatsNewSub", {
+        n: whatsNewDigests.length,
+        m: whatsNewDigests.filter((u) => readCache[u.name] !== u.toVersion).length
+      }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "pc-close", onClick: closeWhatsNew, "aria-label": t("close"), children: "\u2715" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-panel-body", style: { overflow: "auto" }, children: whatsNewDigests.map((u) => {
+      const read = readCache[u.name] === u.toVersion;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: `pc-wn-item${read ? " pc-wn-read" : ""}`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-name", children: u.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: u.fromVersion }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-ver", children: "\u2192" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-business-primary)", fontWeight: 500 }, children: u.toVersion }),
+          read && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pc-tag", children: t("readTag") })
+        ] }),
+        u.changelog.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "pc-wn-list", children: u.changelog.slice(0, 5).map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: line }, i)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "pc-wn-list", style: { color: "var(--dsw-alias-label-tertiary)", fontStyle: "italic" }, children: t("changelogNone") }),
+        githubLinkOf(u.repoUrl) !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "a",
+          {
+            className: "pc-wn-list",
+            href: githubLinkOf(u.repoUrl),
+            target: "_blank",
+            rel: "noreferrer",
+            style: { display: "inline-block", fontSize: 12, color: "var(--dsw-alias-state-business-primary)", textDecoration: "none" },
+            children: t("githubChanges")
+          }
+        )
+      ] }, u.name);
+    }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pc-panel-footer", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("later") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn", onClick: closeWhatsNew, children: t("markAllRead") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pc-btn primary", disabled: busy || activeLlmCount > 0 || llmConfirm !== null, onClick: () => {
+        llmPrepareAll(whatsNewDigests.map((u) => u.name));
+      }, children: activeLlmCount > 0 ? t("llmBusy") : t("llmUpdateAll", { n: whatsNewDigests.length }) })
+    ] })
+  ] }) });
 }
 var inject = ["slots", "connection", "sessions", "workspaces", "uiWorkspace"];
 function apply(ctx) {
@@ -583,6 +1174,22 @@ function apply(ctx) {
     order: 10,
     label: () => STRINGS[localeId].tabUpdates
   }, UpdateTab));
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "plugin-center-whats-new",
+    order: 51
+  }, WhatsNewDialog));
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "plugin-center-llm-confirm",
+    order: 53
+  }, LlmConfirmDialog));
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "plugin-center-llm-fallback",
+    order: 54
+  }, LlmPromptFallbackDialog));
+  void checkWhatNew();
 }
     return module.exports;
   },

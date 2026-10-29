@@ -799,7 +799,7 @@ type LocaleId = 'zh' | 'en'
 const STRINGS = {
   zh: {
     title: '插件中心', tabInstalled: '已安装', tabMarket: '市场', tabUpdates: '更新',
-    tabUpdateHint: '这些插件有更新版本；点「更新」会打开官方安装对话框。',
+    tabUpdateHint: '这些插件有更新版本；「更新」原地升级，不必卸载重装。',
     tabUpdateEmpty: '全部是最新版本。',
     tabUpdateRecheck: '重新检查',
     tabUpdateDo: '更新',
@@ -873,7 +873,7 @@ const STRINGS = {
   },
   en: {
     title: 'Plugin Center', tabInstalled: 'Installed', tabMarket: 'Market', tabUpdates: 'Updates',
-    tabUpdateHint: 'These plugins have newer versions; Update opens the official install dialog.',
+    tabUpdateHint: 'These plugins have newer versions; Update upgrades in place (no reinstall).',
     tabUpdateEmpty: 'Everything is up to date.',
     tabUpdateRecheck: 'Check again',
     tabUpdateDo: 'Update',
@@ -972,18 +972,20 @@ function useT(): (key: StringKey, vars?: Record<string, unknown>) => string {
 }
 
 // ---- 更新 tab：挂在官方插件页的 `plugins.tab` 上 ----
-// 只做「检测 + 触发」：安装交给 owner 的 `install()`，走官方安装对话框（含构建批准、
-// 回滚、bundle 校验），本插件不再自己调 pnpm。结果复用模块级的 `updatesCache`，
-// 与设置面板那张更新列表共享同一份快照。
+// 检测与执行都用本插件自己的通路：官方 `installBundle` 对已安装的包先查已装、
+// 直接以 `already-installed` 拒绝（dev 实测弹「该插件已安装，如需升级，请卸载后
+// 重新安装」），所以升级不能交给它；`update` 走 `pnpm add name@version` 才是能
+// 原地升级的那条路。结果复用模块级 `updatesCache`。
 
-function UpdateTab({ install, openPackage }: {
-  install: (target: { spec: string; title: string; version: string }) => void
+function UpdateTab({ openPackage }: {
   openPackage: (packageName: string) => void
 }) {
   const t = useT()
   const [items, setItems] = useState<UpdateDigest[] | null>(updatesCache)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [running, setRunning] = useState<string | null>(null)
+  const [failed, setFailed] = useState<Record<string, string>>({})
 
   const load = useCallback(() => {
     setBusy(true)
@@ -997,6 +999,26 @@ function UpdateTab({ install, openPackage }: {
   useEffect(() => {
     if (updatesCache === null) load()
   }, [load])
+
+  // 失败留在行内显示，不用 toast——toast 的 overlay 已随旧面板下线，没人渲染它。
+  const runOne = useCallback(async (u: UpdateDigest): Promise<void> => {
+    setRunning(u.name)
+    setFailed(prev => { const next = { ...prev }; delete next[u.name]; return next })
+    try {
+      await rpc('update', { name: u.name, version: u.toVersion })
+      updatesCache = (updatesCache ?? []).filter(x => x.name !== u.name)
+      setItems(updatesCache)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setFailed(prev => ({ ...prev, [u.name]: message }))
+    } finally {
+      setRunning(null)
+    }
+  }, [])
+
+  const runAll = useCallback(async () => {
+    for (const u of [...(items ?? [])]) await runOne(u)
+  }, [items, runOne])
 
   if (error !== null) {
     return (
@@ -1017,7 +1039,17 @@ function UpdateTab({ install, openPackage }: {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <p className="pc-sub">{t('tabUpdateHint')}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <p className="pc-sub" style={{ margin: 0 }}>{t('tabUpdateHint')}</p>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button type="button" className="pc-btn primary" disabled={running !== null} onClick={() => { llmPrepareAll(items.map(u => u.name)) }}>
+            {t('llmUpdateAll', { n: items.length })}
+          </button>
+          <button type="button" className="pc-btn" disabled={running !== null} onClick={() => { void runAll() }}>
+            {running === null ? t('updateAll', { n: items.length }) : t('checking')}
+          </button>
+        </span>
+      </div>
       {items.map(u => (
         <div key={u.name} className="pc-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1029,16 +1061,23 @@ function UpdateTab({ install, openPackage }: {
             >{u.name}</button>
             <span className="pc-ver">{u.fromVersion} → {u.toVersion}</span>
             {u.compat === 'incompatible' && <span className="pc-tag warn">{t('tabUpdateIncompat')}</span>}
-            <span style={{ marginLeft: 'auto' }}>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button
                 type="button"
                 className="pc-btn"
-                disabled={u.compat === 'incompatible'}
-                onClick={() => { install({ spec: `${u.name}@${u.toVersion}`, title: u.name, version: u.toVersion }) }}
-              >{t('tabUpdateDo')}</button>
+                disabled={running !== null}
+                onClick={() => { llmPrepare(u.name) }}
+              >{t('llmUpdate')}</button>
+              <button
+                type="button"
+                className="pc-btn"
+                disabled={running !== null || u.compat === 'incompatible'}
+                onClick={() => { void runOne(u) }}
+              >{running === u.name ? t('checking') : t('tabUpdateDo')}</button>
             </span>
           </div>
           {u.changelog.slice(0, 3).map((line, i) => <div key={i} className="pc-sub">{line}</div>)}
+          {failed[u.name] !== undefined && <div className="pc-tag danger">{failed[u.name]}</div>}
         </div>
       ))}
     </div>
@@ -2463,6 +2502,22 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
     name: 'plugins.tab', id: 'plugin-center-updates', order: 10,
     label: () => STRINGS[localeId].tabUpdates,
   }, UpdateTab))
+
+  // 启动时的「有新版」提醒：这是主动开口的那一半，和 tab 里的被动列表配套。
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'plugin-center-whats-new', order: 51,
+  }, WhatsNewDialog))
+
+  // LLM 更新的确认面板与降级提示。设计文档 §1.3 写明：机械更新降为兜底，LLM 更新
+  // 是主入口（机械更新看不到 peer/依赖风险、会把 vendor 魔改覆盖回官方版）。
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'plugin-center-llm-confirm', order: 53,
+  }, LlmConfirmDialog))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'plugin-center-llm-fallback', order: 54,
+  }, LlmPromptFallbackDialog))
+
+  void checkWhatNew()
 }
 
 export { inject, apply }
