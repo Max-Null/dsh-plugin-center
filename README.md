@@ -57,6 +57,19 @@ Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 - **三个地址是同一份文件**：title 都是「Awesome DSH Plugin 插件精选」，插件数都是 3917，首条都是 `@yolk_vat-y/dsh-project-memory`。**配一个就够**，配三个会在索引源列表里出现三条同名条目——官方按索引的 `title` 展示、不显示 URL，所以同名条目分不出来。这是展示限制，不是索引坏了。
 - 优先 jsdelivr 那个：DSH 给索引源的时间上限是 **15 秒**，原站在部分网络下会超时，超时等于市场页面空白。
 
+### 其他可用的索引源
+
+生态里不止 awesome 一家。下面四个都在 2026-10-30 逐个探测过、可用：
+
+| 索引源 | 名称 | 条数 |
+| :--- | :--- | ---: |
+| `https://www.dsh.so/market/index.json` | DSH.SO（自述「安装验证 + 安全审计」） | 9404 |
+| `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | Awesome DSH Plugin | 3917 |
+| `https://dshopen.org/index.json` | Open Plugin Market（自述「照顾小开发者」） | 944 |
+| `https://silentforfar.github.io/dsh-market-index/index.json` | Silentforfar 的个人插件 | 4 |
+
+没有按专业领域拆分的市场，都是全量索引。多个索引源可以同时配，发现页按源切换显示，不会合并成一张表。
+
 ## Install / 安装
 
 A `dsh` installation keeps one profile per surface, and **a plugin is visible only in the profile it was installed into**. Installing into the wrong one is the usual reason an install looks like it did nothing.
