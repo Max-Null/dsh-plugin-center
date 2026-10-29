@@ -2402,6 +2402,26 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
     for (const retained of llmRetains.values()) retained.release?.()
     llmRetains.clear()
   }, 'dsh-plugin-center: LLM update session retains')
+  // 标题栏「插件中心」按钮（quick-toolbar 的内置适配器）仍调 __pluginCenter*。
+  // 面板已下线，这里把落点改到官方「插件」页的「更新」tab。DOM 驱动——与
+  // quick-toolbar 驱动侧栏/底栏按钮同一套做法；找不到目标就停在上一级，不抛错。
+  const clickByText = (selector: string, texts: string[]): void => {
+    const nodes = [...document.querySelectorAll(selector)]
+    const hit = nodes.find(node => texts.includes((node.textContent ?? '').trim()))
+    if (hit instanceof HTMLElement) hit.click()
+  }
+  const openUpdatesTab = (): void => {
+    clickByText('button', ['插件', 'Plugins'])
+    // 面板是懒渲染：先给一帧，再补两次，覆盖慢机器上首帧还没挂载 tab 的情况。
+    const selectTab = (): void => { clickByText('[role="tab"]', ['更新', 'Updates']) }
+    setTimeout(selectTab, 120)
+    setTimeout(selectTab, 400)
+  }
+  const globals = window as unknown as Record<string, unknown>
+  globals.__pluginCenterOpen = openUpdatesTab
+  globals.__pluginCenterToggle = openUpdatesTab
+  globals.__pluginCenterClose = (): void => { /* 无面板可关；保留键名供 quick-toolbar 调用 */ }
+
   rpc = async (endpoint: string, payload: unknown = {}): Promise<unknown> => {
     // Transport: one exact POST route under the shared `/api` channel (the host
     // registers it through `connection.fetch.register`). The previous

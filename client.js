@@ -537,6 +537,24 @@ function apply(ctx) {
     for (const retained of llmRetains.values()) retained.release?.();
     llmRetains.clear();
   }, "dsh-plugin-center: LLM update session retains");
+  const clickByText = (selector, texts) => {
+    const nodes = [...document.querySelectorAll(selector)];
+    const hit = nodes.find((node) => texts.includes((node.textContent ?? "").trim()));
+    if (hit instanceof HTMLElement) hit.click();
+  };
+  const openUpdatesTab = () => {
+    clickByText("button", ["\u63D2\u4EF6", "Plugins"]);
+    const selectTab = () => {
+      clickByText('[role="tab"]', ["\u66F4\u65B0", "Updates"]);
+    };
+    setTimeout(selectTab, 120);
+    setTimeout(selectTab, 400);
+  };
+  const globals = window;
+  globals.__pluginCenterOpen = openUpdatesTab;
+  globals.__pluginCenterToggle = openUpdatesTab;
+  globals.__pluginCenterClose = () => {
+  };
   rpc = async (endpoint, payload = {}) => {
     const response = await fetch("/api/plugin-center", {
       method: "POST",
