@@ -32,15 +32,25 @@ Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 ## Market index sources / 插件市场索引源
 
-自 0.5 起本插件不再自带市场，但官方「发现」页可以直接吃现成的 format 1 索引——社区已经有发布，不需要自己生成：
+自 0.5 起本插件不再自带市场，官方「发现」页吃的是 format 1 索引。**目前只有 awesome-dsh-plugin 发布了这种索引**（下表三个地址都是它那一份的镜像），另外两个市场没有发布：
+
+| 市场 | 原始清单 | format 1 索引 |
+| :--- | :--- | :--- |
+| awesome-dsh-plugin | `plugins.json` 7557 条 | ✓ 过滤后 3917 条 |
+| Oh-My-DSH | `curated.json`（精选覆盖层：19 条 manual + 340 overrides） | ✗ 未发布 |
+| dsh-market | `plugins.json` 16090 条 | ✗ 未发布（`dshmarket.com/index.json` 是 awesome 那份的转发） |
+
+这意味着官方发现页目前看不到 Oh-My-DSH 与 dsh-market 的内容。要让它们也进发现页，只能由各市场自己在 CI 里生成 format 1——dsh-market 的数据其实够用（16090 条里 3704 条的首条安装命令是 npm 包名形态、5232 条带 `dshEngines`），缺的只是逐个查 registry 补精确版本与发布时间。
+
+### 添加方式
+
+**插件 → 发现 → 索引源**，粘贴下面任一地址（配一个就够）：
 
 | 索引源 | 说明 |
 | :--- | :--- |
-| `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | **推荐，只配这一个**。走 npm 分发（`dsh-plugin-catalog` 包） |
-| `https://awesome-dsh-plugin.com/index.json` | 同一份的原站镜像 |
-| `https://dshmarket.com/index.json` | 同一份的 dsh-market 镜像 |
-
-添加方式：**插件 → 发现 → 索引源**，粘贴上面的 URL。
+| `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | **推荐**，走 npm 分发（`dsh-plugin-catalog` 包） |
+| `https://awesome-dsh-plugin.com/index.json` | 原站镜像 |
+| `https://dshmarket.com/index.json` | dsh-market 域名下的同一份转发 |
 
 两点实测结论（2026-10-30 拉取核对）：
 
