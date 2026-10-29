@@ -63,10 +63,12 @@ Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 | 索引源 | 名称 | 条数 |
 | :--- | :--- | ---: |
-| `https://www.dsh.so/market/index.json` | DSH.SO（自述「安装验证 + 安全审计」） | 9404 |
+| `https://cdn.dsh.so/market/index.json` | DSH.SO（自述「安装验证 + 安全审计」） | 9404 |
 | `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | Awesome DSH Plugin | 3917 |
 | `https://dshopen.org/index.json` | Open Plugin Market（自述「照顾小开发者」） | 944 |
 | `https://silentforfar.github.io/dsh-market-index/index.json` | Silentforfar 的个人插件 | 4 |
+
+**填地址时必须用「终点地址」**：DSH 的读取器不接受重定向，遇到跳转直接报 `fetch failed: unexpected redirect`。DSH.SO 那条就是例子——`www.dsh.so/market/index.json` 会 307 到 `cdn.dsh.so`，`dsh.so` 又 308 跳回 `www`，两者都会失败，只有 `cdn.dsh.so` 那个是 200。
 
 没有按专业领域拆分的市场，都是全量索引。多个索引源可以同时配，发现页按源切换显示，不会合并成一张表。
 
