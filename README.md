@@ -4,33 +4,30 @@ This plugin belongs to the **`@max-null/*` family** — a set of plugins that to
 
 本插件属于 **`@max-null/*` 插件系列**——这一系列共同构成 **[SSID（思灵 · Seek Soul in Darkness）](https://github.com/Max-Null/seek-soul-in-darkness)** 桌面体验。SSID 是整合它们的盒：`dsh-capture` · `dsh-chat-rail` · `dsh-chinese-thinking` · `dsh-draft-polish` · `dsh-guardian` · `dsh-habit` · `dsh-memory` · `dsh-node-appearance` · `dsh-plugin-center` · `dsh-quick-toolbar` · `dsh-skill-mcp-center` · `dsh-ssid-panels` · `dsh-ssid-zh-ui` · `dsh-achievements` · `dsh-allostasis` · `dsh-skills` · `dsh-ssid-env` · `dsh-ssid-pwsh-retry` · `dsh-tone-layer`。
 
-Plugin center for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) — browse, install, and update community plugins from inside the Web UI.
+Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) — adds an **Updates** tab to the built-in Plugins page.
 
-插件管理中心：在 DSH Web 界面里管理已安装插件、浏览社区市场、一键安装与更新。
+给 DSH 内置的「插件」页加一个**更新** tab：列出已安装插件的上游新版本，一键交给官方安装流程执行。
+
+自 0.5.0 起不再自带市场、安装、启停与诊断面板——那些官方已经有了（`plugin-manager` + `plugin-market`，后者通过「索引源」提供可安装清单）。本插件只保留官方唯一没有的那件事：**更新检测**。
 
 ## Features / 功能
 
-- **Installed plugins / 已安装插件** — metadata with provenance (official / user-installed / local / builtin), categories, and DSH compatibility range.
-- **Community market / 社区市场** — browse [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin), [Oh-My-DSH](https://github.com/like-study1/Oh-My-DSH), and [dsh-market](https://github.com/2BingLing/dsh-market) by category, with stars and npm versions.
-- **One-click install & update / 一键安装与更新** — install from the market, detect updates, update one or all.
-- **What's New / 更新提示** — startup dialog listing plugins with new versions since you last looked.
-- **DSH compatibility / 兼容性检查** — flags plugins whose peer range does not match the running DSH.
-- **Skin-compatible / 皮肤兼容** — every color uses `var(--dsw-*)` tokens, so skin plugins restyle this UI too.
-- **Packaged upgrade skill / 自带升级技能** — the `dsh-plugin-upgrade` skill ships inside this package and is served by a packaged `SkillProvider` (rank 550), so the LLM update flow can load it on a clean machine — no manual copy into `~/.dsh/skills`.
+- **Updates tab / 更新 tab** — 内置「插件」页的第三个 tab（排在「已安装 / 发现」之后），列出每个有上游新版本的已安装插件、它的 changelog 行，以及逐行一个**更新**按钮。
+- **Official install path / 走官方安装** — 按钮把精确的 `name@version` 交给页面自己的安装对话框（`plugin_manager.installBundle`），构建批准、失败回滚、bundle 校验都留在官方那条链上；本插件不再自己调 pnpm。
+- **DSH compatibility / 兼容性** — peer 范围与当前内核不符的条目标记号并禁用按钮，不让人点进一次注定失败的安装。
+- **LLM update RPC / LLM 更新端点** — `llm-update.prepare` / `.log` / `.result` 仍留在 host 侧供 agent 流程使用；它们的 Web UI 随旧面板一起下线。
+- **Skin-compatible / 皮肤兼容** — 每个颜色都用 `var(--dsw-*)` token，皮肤插件同样能改这套 UI。
+- **Packaged upgrade skill / 自带升级技能** — `dsh-plugin-upgrade` 技能随包内置（`SkillProvider`，rank 550），干净机器上 LLM 更新流程也能直接加载。
 
 ## Screenshots / 截图
 
-装完后在设置里多出「插件中心」一项；也可从顶栏右上按钮直接打开。
+装完后没有独立入口——它长在内置「插件」页里，作为第三个 tab。
 
-**入口 / Entry：** 设置 → 插件中心（或顶栏右上按钮）
+**入口 / Entry：** 侧栏「插件」→「更新」tab
 
-| 设置入口与面板 | 已安装 / Installed | 社区市场 / Market |
-| :---: | :---: | :---: |
-| ![设置入口](docs/shots/plugin-center-1.png) | ![已安装插件](docs/shots/panel-installed-1.png) | ![社区市场](docs/shots/market-1.png) |
-
-| 更新检测 / Updates |
+| 更新 / Updates |
 | :---: |
-| ![更新检测](docs/shots/updates-1.png) |
+| ![更新 tab](docs/shots/update-tab-1.png) |
 
 ## Install / 安装
 
@@ -45,7 +42,7 @@ A `dsh` installation keeps one profile per surface, and **a plugin is visible on
 
 From the GitHub source, replace the package name with `github:Max-Null/dsh-plugin-center`。从 GitHub 源码安装时把包名换成 `github:Max-Null/dsh-plugin-center`。
 
-Restart DSH, then open the plugin center from the header button (top-right) or **Settings → 插件中心**. 重启 DSH 后，从顶栏右上按钮或 **设置 → 插件中心** 打开。
+Restart DSH, then open **插件** in the sidebar and switch to the **更新 / Updates** tab. 重启 DSH 后打开侧栏「插件」，切到「更新」tab。
 
 Requirements / 前置条件：DSH runtime within `>=0.1.1-rc.1 <0.3.0` (the `@deepseek-ai/dsh-*` peer range). A runtime outside it makes DSH skip this bundle **silently** — no error, no entry. 内核须落在 `>=0.1.1-rc.1 <0.3.0` 内；范围外 DSH 会**静默跳过**这个 bundle，不报错也不出现条目。
 
@@ -57,9 +54,9 @@ dsh plugin --profile <your profile> remove @max-null/dsh-plugin-center
 
 ### The built-in Plugins page / 官方自带的「插件」页
 
-If the sidebar **Plugins** page shows *本部署没有可管理的 profile，无法安装或启停插件。*, that message is the DSH kernel's own and does not come from this plugin. DSH renders it whenever the host has no `pluginManager` service (`packages/boot/plugin-inventory/src/index.ts`), and that service is gated in `packages/bundle/base/cordis.patch.yml` by a single `disabled: !!js "!ctx.get('profileContext')"` row. This plugin declares `inject: ['loader']` and contributes one entry row; it neither provides nor affects `pluginManager`.
+If the sidebar **Plugins** page shows *本部署没有可管理的 profile，无法安装或启停插件。*, that message is the DSH kernel's own and does not come from this plugin. DSH renders it whenever the host has no `pluginManager` service (`packages/boot/plugin-inventory/src/index.ts`), and that service is gated in `packages/bundle/base/cordis.patch.yml` by a single `disabled: !!js "!ctx.get('profileContext')"` row. This plugin contributes one **Updates** tab to that page and nothing else; it neither provides nor affects `pluginManager`.
 
-侧栏「插件」页出现 *本部署没有可管理的 profile* 时，那句话来自 DSH 内核，不是本插件。DSH 在宿主没有 `pluginManager` 服务时就会显示它，而该服务在 `packages/bundle/base/cordis.patch.yml` 里只由一行 `disabled: !!js "!ctx.get('profileContext')"` 决定。本插件声明的是 `inject: ['loader']`、只贡献一个条目行，既不提供也不影响 `pluginManager`。
+侧栏「插件」页出现 *本部署没有可管理的 profile* 时，那句话来自 DSH 内核，不是本插件。DSH 在宿主没有 `pluginManager` 服务时就会显示它，而该服务在 `packages/bundle/base/cordis.patch.yml` 里只由一行 `disabled: !!js "!ctx.get('profileContext')"` 决定。本插件只往那一页贡献一个**更新** tab，既不提供也不影响 `pluginManager`。
 
 Two checks / 两条自查：
 

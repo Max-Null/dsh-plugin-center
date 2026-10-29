@@ -1,5 +1,35 @@
 # Release Notes — @max-null/dsh-plugin-center
 
+## 0.5.0 (2026-10-29)
+
+**定位收缩**：不再自带插件市场、安装、启停与诊断面板，只做官方没有的那件事——更新检测。
+
+### Breaking
+
+- 删除设置里的「插件中心」面板、顶栏按钮、遮罩面板与 whats-new 弹窗（`settings.section` / `shell.overlay` / `conversation.session.header.utilities` 的注册全部下线）。
+- 删除社区市场、一键安装、逐项启停开关、诊断页。
+- `__pluginCenterOpen` / `__pluginCenterToggle` / `__pluginCenterClose` 三个全局控制器一并移除（已核对：本工作区内没有插件读取它们）。
+
+### Added
+
+- **官方「插件」页的第三个 tab「更新」**：挂在 `plugins.tab` slot 上（官方 Discover 走同一个），order 排在它之后。
+- 行内「更新」按钮把精确的 `name@version` 交给官方安装对话框，构建批准、失败回滚、bundle 校验都留在官方那条链上；兼容性不符的行标记并禁用按钮。
+- `dsh.client.inject` 补 `@deepseek-ai/dsh-client-ui-plugin-manager`（信息边，不决定加载顺序）。
+
+### 保留
+
+- host 侧全部 RPC 端点（`listInstalled` / `checkUpdates` / `update` / `llm-update.*` / `diagnostics` 等）不动，LLM 更新流程仍可由 agent 调用；只是它们的 Web UI 入口随旧面板下线。
+
+### 为什么
+
+- 官方 0.2.x 起内置了插件页（`plugin-manager` + 清单投影）与「索引源」市场机制，市场浏览/安装/启停全部重叠，且官方更贴近内核（profile 一致性由它保证）。
+- 官方 `plugin-manager` 只有 `installBundle` / `removeBundle`，没有 update；已安装清单是只读投影，不比较本地版本与上游。**更新检测是唯一没有替代品的部分。**
+- 旧 UI 与官方页并存时，whats-new 浮层会挡住官方页 tab 的点击（2026-10-29 在隔离 dev 实例里实测到），两套更新入口只会互相干扰。
+
+### 体积
+
+- `client.js` 126.9 KB → 37.5 KB：删掉注册后 esbuild 把整块旧 UI 摇掉了。
+
 ## 0.4.7 (2026-10-28)
 
 修「同一个包在已安装列表里出现两次，而点第二条的开关会关掉第一条」。

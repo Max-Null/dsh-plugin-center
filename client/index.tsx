@@ -2387,23 +2387,9 @@ function WhatsNewDialog() {
 // 注入 prompt(与 dsh-sidebar-preview-select 同款硬注入,DSH 内核必供)。
 const inject = ['slots', 'connection', 'sessions', 'workspaces', 'uiWorkspace']
 
-// ---- 0.1.7：SSiD 标题栏统一按钮组全局控制器 ----
-// SSiD 内置插件 dsh-header-unify 监听壳派发的 `ssid:titlebar` CustomEvent，
-// 经这三个全局函数驱动插件中心（优先 toggle——再点关闭；开侧栏/底栏前
-// 先 close 互斥）。页面卸载时清理，防页面重载/插件重载后残留旧引用。
-const GLOBAL_KEYS = ['__pluginCenterOpen', '__pluginCenterToggle', '__pluginCenterClose'] as const
-function installGlobals(): void {
-  const w = window as unknown as Record<string, unknown>
-  w.__pluginCenterOpen = openOverlay
-  w.__pluginCenterToggle = toggleOverlay
-  w.__pluginCenterClose = closeOverlay
-  w.__pluginCenterGlobalsInstalled = true
-}
-function cleanupGlobals(): void {
-  const w = window as unknown as Record<string, unknown>
-  for (const key of GLOBAL_KEYS) delete w[key]
-  delete w.__pluginCenterGlobalsInstalled
-}
+// 旧 UI（设置面板 / 遮罩面板 / 标题栏按钮 / whats-new）已随「收缩为官方页扩展」
+// 下线：注册点全部删除，组件函数暂留待单独清理。全局控制器一并移除——它只服务
+// 那套浮层，而外部没有插件读取 __pluginCenter*。
 
 function apply(ctx: { slots: any; connection: any; get?: (name: string) => unknown; on?: (event: string, handler: (payload: any) => void) => void; effect?: (fn: () => (() => void) | void, name?: string) => void; sessions?: LlmSessionsSvc; workspaces?: LlmWorkspacesSvc }): void {
   injectCss()
@@ -2411,18 +2397,11 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
   sessionsSvc = ctx.sessions ?? null
   workspacesSvc = ctx.workspaces ?? null
   uiWorkspaceSvc = ctx.uiWorkspace ?? null
-  // 设置导航图标：标记本插件行后由 CSS 把默认齿轮替换为拼图（HMR-safe）。
-  ctx.effect?.(() => registerSettingsNavIcon(() => STRINGS[localeId].title), 'dsh-plugin-center: settings navigation icon')
   // LLM 更新建立的会话引用在插件卸载时统一释放，避免留下无主的 retainedBy 计数。
   ctx.effect?.(() => () => {
     for (const retained of llmRetains.values()) retained.release?.()
     llmRetains.clear()
   }, 'dsh-plugin-center: LLM update session retains')
-  // 0.1.7：暴露全局控制器（防重复安装：已安装则不重复挂监听）。
-  if ((window as unknown as Record<string, unknown>).__pluginCenterGlobalsInstalled !== true) {
-    installGlobals()
-    window.addEventListener('unload', cleanupGlobals)
-  }
   rpc = async (endpoint: string, payload: unknown = {}): Promise<unknown> => {
     // Transport: one exact POST route under the shared `/api` channel (the host
     // registers it through `connection.fetch.register`). The previous
@@ -2464,36 +2443,6 @@ function apply(ctx: { slots: any; connection: any; get?: (name: string) => unkno
     name: 'plugins.tab', id: 'plugin-center-updates', order: 10,
     label: () => STRINGS[localeId].tabUpdates,
   }, UpdateTab))
-
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'plugin-center', order: 50, label: () => STRINGS[localeId].title,
-  }, CenterPanel))
-
-  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
-    name: 'conversation.session.header.utilities', id: 'plugin-center', order: 50,
-  }, HeaderButton))
-
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay', id: 'plugin-center-panel', order: 50,
-  }, OverlayPanel))
-
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay', id: 'plugin-center-whats-new', order: 51,
-  }, WhatsNewDialog))
-
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay', id: 'plugin-center-toast', order: 52,
-  }, Toast))
-
-  // LLM 更新确认/降级面板(独立插槽:插件中心与更新弹窗两个入口共用)。
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay', id: 'plugin-center-llm-confirm', order: 53,
-  }, LlmConfirmDialog))
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay', id: 'plugin-center-llm-fallback', order: 54,
-  }, LlmPromptFallbackDialog))
-
-  void checkWhatNew()
 }
 
 export { inject, apply }
