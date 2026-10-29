@@ -30,6 +30,20 @@ Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 | :---: |
 | ![更新 tab](docs/shots/update-tab-1.png) |
 
+## Market index sources / 插件市场索引源
+
+自 0.5 起本插件不再自带市场，但官方「发现」页可以直接吃现成的 format 1 索引——社区两个市场**各自已经发布**，不需要自己生成：
+
+| 索引源 | 说明 |
+| :--- | :--- |
+| `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | awesome-dsh-plugin 的列表，走 npm 分发。**推荐** |
+| `https://awesome-dsh-plugin.com/index.json` | 同一份的原站托底 |
+| `https://dshmarket.com/index.json` | dsh-market 的索引 |
+
+添加方式：**插件 → 发现 → 索引源**，粘贴上面的 URL。
+
+选择 jsdelivr 那个的理由：DSH 给索引源的时间上限是 **15 秒**，而原站在部分网络下会超过它——超时等于市场空白。这一点跟着 awesome-dsh-plugin 的说明走，不是我们的判断。
+
 ## Install / 安装
 
 A `dsh` installation keeps one profile per surface, and **a plugin is visible only in the profile it was installed into**. Installing into the wrong one is the usual reason an install looks like it did nothing.
