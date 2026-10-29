@@ -32,17 +32,20 @@ Update checker for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 ## Market index sources / 插件市场索引源
 
-自 0.5 起本插件不再自带市场，但官方「发现」页可以直接吃现成的 format 1 索引——社区两个市场**各自已经发布**，不需要自己生成：
+自 0.5 起本插件不再自带市场，但官方「发现」页可以直接吃现成的 format 1 索引——社区已经有发布，不需要自己生成：
 
 | 索引源 | 说明 |
 | :--- | :--- |
-| `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | awesome-dsh-plugin 的列表，走 npm 分发。**推荐** |
-| `https://awesome-dsh-plugin.com/index.json` | 同一份的原站托底 |
-| `https://dshmarket.com/index.json` | dsh-market 的索引 |
+| `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` | **推荐，只配这一个**。走 npm 分发（`dsh-plugin-catalog` 包） |
+| `https://awesome-dsh-plugin.com/index.json` | 同一份的原站镜像 |
+| `https://dshmarket.com/index.json` | 同一份的 dsh-market 镜像 |
 
 添加方式：**插件 → 发现 → 索引源**，粘贴上面的 URL。
 
-选择 jsdelivr 那个的理由：DSH 给索引源的时间上限是 **15 秒**，而原站在部分网络下会超过它——超时等于市场空白。这一点跟着 awesome-dsh-plugin 的说明走，不是我们的判断。
+两点实测结论（2026-10-30 拉取核对）：
+
+- **三个地址是同一份文件**：title 都是「Awesome DSH Plugin 插件精选」，插件数都是 3917，首条都是 `@yolk_vat-y/dsh-project-memory`。**配一个就够**，配三个会在索引源列表里出现三条同名条目——官方按索引的 `title` 展示、不显示 URL，所以同名条目分不出来。这是展示限制，不是索引坏了。
+- 优先 jsdelivr 那个：DSH 给索引源的时间上限是 **15 秒**，原站在部分网络下会超时，超时等于市场页面空白。
 
 ## Install / 安装
 
